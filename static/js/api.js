@@ -1,0 +1,123 @@
+/**
+ * API Client - Handles all API communication
+ */
+
+const API_BASE = window.location.origin;
+
+class APIError extends Error {
+  constructor(message, status, data) {
+    super(message);
+    this.name = 'APIError';
+    this.status = status;
+    this.data = data;
+  }
+}
+
+async function apiRequest(endpoint, options = {}) {
+  const url = `${API_BASE}${endpoint}`;
+  const config = {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  };
+
+  if (config.body && typeof config.body === 'object') {
+    config.body = JSON.stringify(config.body);
+  }
+
+  try {
+    const response = await fetch(url, config);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new APIError(
+        data.error || `HTTP ${response.status}`,
+        response.status,
+        data
+      );
+    }
+
+    return data;
+  } catch (error) {
+    if (error instanceof APIError) {
+      throw error;
+    }
+    throw new APIError(
+      error.message || 'Network error',
+      0,
+      null
+    );
+  }
+}
+
+// API Methods
+export const api = {
+  // Sites
+  async connectSite(wpBaseUrl, wpUsername, wpApplicationPassword) {
+    return apiRequest('/api/sites/connect', {
+      method: 'POST',
+      body: {
+        wpBaseUrl,
+        wpUsername,
+        wpApplicationPassword,
+      },
+    });
+  },
+
+  // Posts
+  async generatePost(payload) {
+    return apiRequest('/api/posts/generate', {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  async publishPost(payload) {
+    return apiRequest('/api/posts/publish', {
+      method: 'POST',
+      body: payload,
+    });
+  },
+
+  // Jobs
+  async getJob(jobId) {
+    return apiRequest(`/api/jobs/${jobId}`);
+  },
+
+  // Health
+  async health() {
+    return apiRequest('/health');
+  },
+};
+
+// Polling utility
+export function pollJob(jobId, onUpdate, onComplete, maxAttempts = 60) {
+  let attempts = 0;
+  const interval = 2000; // 2 seconds
+
+  const poll = async () => {
+    if (attempts >= maxAttempts) {
+      onComplete(null, new Error('Polling timeout'));
+      return;
+    }
+
+    try {
+      const job = await api.getJob(jobId);
+      onUpdate(job);
+
+      if (['success', 'partial_success', 'failed'].includes(job.status)) {
+        onComplete(job, null);
+        return;
+      }
+
+      attempts++;
+      setTimeout(poll, interval);
+    } catch (error) {
+      onComplete(null, error);
+    }
+  };
+
+  poll();
+}
