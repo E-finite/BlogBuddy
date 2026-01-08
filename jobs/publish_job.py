@@ -83,6 +83,8 @@ def _publish_single_draft(
     Returns:
         WordPress post ID or None on failure
     """
+    db.add_job_step(job_id, f"publish_draft_{lang}", "running")
+    
     try:
         # Step A: Generate featured image (optional)
         image_media_id = None
@@ -111,10 +113,15 @@ def _publish_single_draft(
         post_payload = {
             "title": draft["title"],
             "content": draft["contentHtml"],
-            "excerpt": draft.get("excerpt", ""),
-            "slug": draft.get("slug", ""),
             "status": status
         }
+        
+        # Add optional fields only if they have valid values
+        if draft.get("excerpt"):
+            post_payload["excerpt"] = draft["excerpt"]
+        
+        if draft.get("slug"):
+            post_payload["slug"] = draft["slug"]
         
         if schedule_date_gmt:
             post_payload["date_gmt"] = schedule_date_gmt
@@ -122,15 +129,19 @@ def _publish_single_draft(
         if image_media_id:
             post_payload["featured_media"] = image_media_id
         
-        # Add tags and categories if available
-        if draft.get("tags"):
-            # WordPress expects tag IDs or names - we'll use names
-            post_payload["tags"] = draft["tags"]
+        # Skip tags and categories for now
+        # WordPress API on this site expects tag/category IDs (integers), not names
+        # We would need to first query existing tags/categories and map names to IDs
+        # or create new ones via the API
         
-        if draft.get("categories"):
-            post_payload["categories"] = draft["categories"]
+        logger.info(f"Attempting to create WordPress post with payload keys: {list(post_payload.keys())}")
+        try:
+            post = wp_client.create_post(site, post_payload)
+        except Exception as e:
+            logger.error(f"Failed to create WordPress post. Draft keys: {list(draft.keys())}")
+            logger.error(f"Post payload: {post_payload}")
+            raise
         
-        post = wp_client.create_post(site, post_payload)
         post_id = post.get("id")
         
         if not post_id:
@@ -158,6 +169,7 @@ def _publish_single_draft(
                 logger.warning(f"Yoast meta setting failed: {e}")
                 db.add_job_step(job_id, f"set_yoast_{lang}", "failed", {"error": str(e)})
         
+        db.add_job_step(job_id, f"publish_draft_{lang}", "success", {"postId": post_id})
         return post_id
         
     except Exception as e:

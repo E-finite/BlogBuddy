@@ -50,9 +50,24 @@ def create_post(site: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, Any]
     url = f"{wp_base_url}/wp-json/wp/v2/posts"
     auth = HTTPBasicAuth(username, app_password)
     
-    response = _retry_request(lambda: requests.post(url, json=payload, auth=auth, timeout=30))
-    response.raise_for_status()
-    return response.json()
+    logger.info(f"Creating WordPress post with payload keys: {list(payload.keys())}")
+    
+    try:
+        response = _retry_request(lambda: requests.post(url, json=payload, auth=auth, timeout=30))
+        
+        if not response.ok:
+            error_body = response.text
+            logger.error(f"WordPress API error {response.status_code}: {error_body}")
+            logger.error(f"Request payload was: {payload}")
+            response.raise_for_status()
+        
+        return response.json()
+    except requests.exceptions.HTTPError:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error creating WordPress post: {e}")
+        logger.error(f"Payload was: {payload}")
+        raise
 
 
 def update_post(site: Dict[str, Any], post_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:

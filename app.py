@@ -89,10 +89,10 @@ def generate_post():
             # Multi-language
             drafts = build_multilang_drafts(
                 topic=req.topic,
-                audience=req.audience.dict(),
-                tone_of_voice=req.toneOfVoice.dict(),
-                seo=req.seo.dict(),
-                brand=req.brand.dict(),
+                audience=req.audience.model_dump(),
+                tone_of_voice=req.toneOfVoice.model_dump(),
+                seo=req.seo.model_dump(),
+                brand=req.brand.model_dump(),
                 languages=req.multilang.languages,
                 strategy=req.multilang.strategy
             )
@@ -108,10 +108,10 @@ def generate_post():
             # Single language
             draft = build_draft(
                 topic=req.topic,
-                audience=req.audience.dict(),
-                tone_of_voice=req.toneOfVoice.dict(),
-                seo=req.seo.dict(),
-                brand=req.brand.dict(),
+                audience=req.audience.model_dump(),
+                tone_of_voice=req.toneOfVoice.model_dump(),
+                seo=req.seo.model_dump(),
+                brand=req.brand.model_dump(),
                 language=req.language
             )
 

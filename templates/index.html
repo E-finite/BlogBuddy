@@ -1,257 +1,318 @@
 <!DOCTYPE html>
 <html lang="nl">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>WordPress Blog Generator</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-</head>
-<body>
-  <!-- Header -->
-  <header class="header">
-    <div class="container">
-      <div class="header-content">
-        <div class="logo">Blog Generator</div>
-        <nav class="nav">
-          <a href="#" class="nav-link active" data-page="connect">Verbinden</a>
-          <a href="#" class="nav-link" data-page="generate">Genereren</a>
-          <a href="#" class="nav-link" data-page="publish">Publiceren</a>
-          <a href="#" class="nav-link" data-page="jobs">Jobs</a>
-        </nav>
-      </div>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="main">
-    <div class="container">
-      <!-- Page Header -->
-      <div class="page-header">
-        <h1 class="page-title">WordPress Blog Generator</h1>
-        <p class="page-subtitle">Genereer en publiceer automatisch SEO-geoptimaliseerde blog posts naar WordPress</p>
-      </div>
-
-      <!-- Connect Site Section -->
-      <section id="connect" class="page-section">
-        <div class="section">
-          <h2 class="section-title">WordPress Site Verbinden</h2>
-          <div class="card">
-            <form id="connect-site-form">
-              <div class="form-group">
-                <label class="form-label" for="wpBaseUrl">WordPress Base URL</label>
-                <input 
-                  type="url" 
-                  id="wpBaseUrl" 
-                  name="wpBaseUrl" 
-                  class="form-input" 
-                  placeholder="https://example.com"
-                  required
-                >
-                <div class="form-help">Zonder trailing slash</div>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="wpUsername">WordPress Username</label>
-                <input 
-                  type="text" 
-                  id="wpUsername" 
-                  name="wpUsername" 
-                  class="form-input" 
-                  placeholder="botuser"
-                  required
-                >
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="wpApplicationPassword">Application Password</label>
-                <input 
-                  type="password" 
-                  id="wpApplicationPassword" 
-                  name="wpApplicationPassword" 
-                  class="form-input" 
-                  placeholder="xxxx xxxx xxxx xxxx"
-                  required
-                >
-                <div class="form-help">WordPress Application Password (Users → Profile → Application Passwords)</div>
-              </div>
-
-              <button type="submit" class="btn btn-primary">Verbinden</button>
-            </form>
-          </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WordPress Blog Generator</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/main.css') }}"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <!-- Header -->
+    <header class="header">
+      <div class="container">
+        <div class="header-content">
+          <div class="logo">Blog Generator</div>
+          <nav class="nav">
+            <a href="#" class="nav-link active" data-page="connect"
+              >Verbinden</a
+            >
+            <a href="#" class="nav-link" data-page="generate">Genereren</a>
+            <a href="#" class="nav-link" data-page="publish">Publiceren</a>
+            <a href="#" class="nav-link" data-page="jobs">Jobs</a>
+          </nav>
         </div>
-      </section>
+      </div>
+    </header>
 
-      <!-- Generate Post Section -->
-      <section id="generate" class="page-section hidden">
-        <div class="section">
-          <h2 class="section-title">Blog Post Genereren</h2>
-          <div class="card">
-            <form id="generate-post-form">
-              <div class="form-group">
-                <label class="form-label" for="siteId">Site ID (optioneel)</label>
-                <input 
-                  type="text" 
-                  id="siteId" 
-                  name="siteId" 
-                  class="form-input" 
-                  placeholder="Laat leeg om laatste verbonden site te gebruiken"
-                >
-              </div>
+    <!-- Main Content -->
+    <main class="main">
+      <div class="container">
+        <!-- Page Header -->
+        <div class="page-header">
+          <h1 class="page-title">WordPress Blog Generator</h1>
+          <p class="page-subtitle">
+            Genereer en publiceer automatisch SEO-geoptimaliseerde blog posts
+            naar WordPress
+          </p>
+        </div>
 
-              <div class="form-group">
-                <label class="form-label" for="topic">Onderwerp</label>
-                <input 
-                  type="text" 
-                  id="topic" 
-                  name="topic" 
-                  class="form-input" 
-                  placeholder="Hoe maak je een WordPress blog?"
-                  required
-                >
-              </div>
-
-              <div class="grid grid-2">
+        <!-- Connect Site Section -->
+        <section id="connect" class="page-section">
+          <div class="section">
+            <h2 class="section-title">WordPress Site Verbinden</h2>
+            <div class="card">
+              <form id="connect-site-form">
                 <div class="form-group">
-                  <label class="form-label" for="audienceMarket">Doelgroep Markt</label>
-                  <input 
-                    type="text" 
-                    id="audienceMarket" 
-                    name="audienceMarket" 
-                    class="form-input" 
-                    placeholder="kleine ondernemers"
+                  <label class="form-label" for="wpBaseUrl"
+                    >WordPress Base URL</label
+                  >
+                  <input
+                    type="url"
+                    id="wpBaseUrl"
+                    name="wpBaseUrl"
+                    class="form-input"
+                    placeholder="https://example.com"
+                    required
+                  />
+                  <div class="form-help">Zonder trailing slash</div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="wpUsername"
+                    >WordPress Username</label
+                  >
+                  <input
+                    type="text"
+                    id="wpUsername"
+                    name="wpUsername"
+                    class="form-input"
+                    placeholder="botuser"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="wpApplicationPassword"
+                    >Application Password</label
+                  >
+                  <input
+                    type="password"
+                    id="wpApplicationPassword"
+                    name="wpApplicationPassword"
+                    class="form-input"
+                    placeholder="xxxx xxxx xxxx xxxx"
+                    required
+                  />
+                  <div class="form-help">
+                    WordPress Application Password (Users → Profile →
+                    Application Passwords)
+                  </div>
+                </div>
+
+                <button type="submit" class="btn btn-primary">Verbinden</button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- Generate Post Section -->
+        <section id="generate" class="page-section hidden">
+          <div class="section">
+            <h2 class="section-title">Blog Post Genereren</h2>
+            <div class="card">
+              <form id="generate-post-form">
+                <div class="form-group">
+                  <label class="form-label" for="siteId"
+                    >Site ID (optioneel)</label
+                  >
+                  <input
+                    type="text"
+                    id="siteId"
+                    name="siteId"
+                    class="form-input"
+                    placeholder="Laat leeg om laatste verbonden site te gebruiken"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="topic">Onderwerp</label>
+                  <input
+                    type="text"
+                    id="topic"
+                    name="topic"
+                    class="form-input"
+                    placeholder="Hoe maak je een WordPress blog?"
+                    required
+                  />
+                </div>
+
+                <div class="grid grid-2">
+                  <div class="form-group">
+                    <label class="form-label" for="audienceMarket"
+                      >Doelgroep Markt</label
+                    >
+                    <input
+                      type="text"
+                      id="audienceMarket"
+                      name="audienceMarket"
+                      class="form-input"
+                      placeholder="kleine ondernemers"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label" for="audienceLevel">Niveau</label>
+                    <select
+                      id="audienceLevel"
+                      name="audienceLevel"
+                      class="form-select"
+                      required
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate" selected>
+                        Intermediate
+                      </option>
+                      <option value="expert">Expert</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="painPoints"
+                    >Pijnpunten (comma gescheiden)</label
+                  >
+                  <input
+                    type="text"
+                    id="painPoints"
+                    name="painPoints"
+                    class="form-input"
+                    placeholder="geen technische kennis, tijd tekort"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="focusKeyword"
+                    >SEO Focus Keyword</label
+                  >
+                  <input
+                    type="text"
+                    id="focusKeyword"
+                    name="focusKeyword"
+                    class="form-input"
+                    placeholder="wordpress blog maken"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="brandName">Brand Naam</label>
+                  <input
+                    type="text"
+                    id="brandName"
+                    name="brandName"
+                    class="form-input"
+                    placeholder="My Brand"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="toneStyle"
+                    >Tone of Voice Stijl (comma gescheiden)</label
+                  >
+                  <input
+                    type="text"
+                    id="toneStyle"
+                    name="toneStyle"
+                    class="form-input"
+                    placeholder="nuchter, direct"
+                    value="nuchter, direct"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="formality">Formaliteit</label>
+                  <select
+                    id="formality"
+                    name="formality"
+                    class="form-select"
                     required
                   >
+                    <option value="je" selected>Je</option>
+                    <option value="u">U</option>
+                  </select>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="audienceLevel">Niveau</label>
-                  <select id="audienceLevel" name="audienceLevel" class="form-select" required>
-                    <option value="beginner">Beginner</option>
-                    <option value="intermediate" selected>Intermediate</option>
-                    <option value="expert">Expert</option>
+                  <label class="form-label" for="status">Status</label>
+                  <select
+                    id="status"
+                    name="status"
+                    class="form-select"
+                    required
+                  >
+                    <option value="draft" selected>Draft</option>
+                    <option value="publish">Publish</option>
+                    <option value="future">Scheduled</option>
                   </select>
                 </div>
-              </div>
 
-              <div class="form-group">
-                <label class="form-label" for="painPoints">Pijnpunten (comma gescheiden)</label>
-                <input 
-                  type="text" 
-                  id="painPoints" 
-                  name="painPoints" 
-                  class="form-input" 
-                  placeholder="geen technische kennis, tijd tekort"
-                >
-              </div>
+                <div class="form-group">
+                  <label class="form-label" for="language">Taal</label>
+                  <select
+                    id="language"
+                    name="language"
+                    class="form-select"
+                    required
+                  >
+                    <option value="nl" selected>Nederlands</option>
+                    <option value="en">English</option>
+                  </select>
+                </div>
 
-              <div class="form-group">
-                <label class="form-label" for="focusKeyword">SEO Focus Keyword</label>
-                <input 
-                  type="text" 
-                  id="focusKeyword" 
-                  name="focusKeyword" 
-                  class="form-input" 
-                  placeholder="wordpress blog maken"
-                  required
-                >
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="brandName">Brand Naam</label>
-                <input 
-                  type="text" 
-                  id="brandName" 
-                  name="brandName" 
-                  class="form-input" 
-                  placeholder="My Brand"
-                  required
-                >
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="toneStyle">Tone of Voice Stijl (comma gescheiden)</label>
-                <input 
-                  type="text" 
-                  id="toneStyle" 
-                  name="toneStyle" 
-                  class="form-input" 
-                  placeholder="nuchter, direct"
-                  value="nuchter, direct"
-                >
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="formality">Formaliteit</label>
-                <select id="formality" name="formality" class="form-select" required>
-                  <option value="je" selected>Je</option>
-                  <option value="u">U</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="status">Status</label>
-                <select id="status" name="status" class="form-select" required>
-                  <option value="draft" selected>Draft</option>
-                  <option value="publish">Publish</option>
-                  <option value="future">Scheduled</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label class="form-label" for="language">Taal</label>
-                <select id="language" name="language" class="form-select" required>
-                  <option value="nl" selected>Nederlands</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
-
-              <button type="submit" class="btn btn-primary">Genereren</button>
-            </form>
-          </div>
-        </div>
-      </section>
-
-      <!-- Publish Section -->
-      <section id="publish" class="page-section hidden">
-        <div class="section">
-          <h2 class="section-title">Blog Post Publiceren</h2>
-          <div class="card">
-            <p class="text-secondary mb-lg">Publiceer de gegenereerde draft naar WordPress.</p>
-            <button id="publish-post-btn" class="btn btn-accent">Publiceren</button>
-          </div>
-        </div>
-      </section>
-
-      <!-- Jobs Section -->
-      <section id="jobs" class="page-section hidden">
-        <div class="section">
-          <h2 class="section-title">Job Status</h2>
-          <div class="card">
-            <div class="flex justify-between items-center mb-lg">
-              <h3>Jobs</h3>
-              <button id="refresh-jobs-btn" class="btn btn-secondary">Verversen</button>
-            </div>
-            <div id="jobs-list">
-              <p class="text-secondary">Geen jobs gevonden.</p>
+                <button type="submit" class="btn btn-primary">Genereren</button>
+              </form>
             </div>
           </div>
-          
-          <div id="job-status" class="mt-lg"></div>
-        </div>
-      </section>
-    </div>
-  </main>
+        </section>
 
-  <!-- Footer -->
-  <footer class="footer">
-    <div class="container">
-      <p>&copy; 2024 WordPress Blog Generator. Powered by OpenAI & Gemini.</p>
-    </div>
-  </footer>
+        <!-- Publish Section -->
+        <section id="publish" class="page-section hidden">
+          <div class="section">
+            <h2 class="section-title">Blog Post Publiceren</h2>
+            <div class="card">
+              <p class="text-secondary mb-lg">
+                Publiceer de gegenereerde draft naar WordPress.
+              </p>
+              <button id="publish-post-btn" class="btn btn-accent">
+                Publiceren
+              </button>
+            </div>
+          </div>
+        </section>
 
-  <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
-</body>
+        <!-- Jobs Section -->
+        <section id="jobs" class="page-section hidden">
+          <div class="section">
+            <h2 class="section-title">Job Status</h2>
+            <div class="card">
+              <div class="flex justify-between items-center mb-lg">
+                <h3>Jobs</h3>
+                <button id="refresh-jobs-btn" class="btn btn-secondary">
+                  Verversen
+                </button>
+              </div>
+              <div id="jobs-list">
+                <p class="text-secondary">Geen jobs gevonden.</p>
+              </div>
+            </div>
+
+            <div id="job-status" class="mt-lg"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <div class="container">
+        <p>&copy; 2024 WordPress Blog Generator. Powered by OpenAI & Gemini.</p>
+      </div>
+    </footer>
+
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
+  </body>
 </html>
