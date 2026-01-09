@@ -99,18 +99,31 @@ def upload_media(site: Dict[str, Any], filename: str, image_bytes: bytes, mime_t
     url = f"{wp_base_url}/wp-json/wp/v2/media"
     auth = HTTPBasicAuth(username, app_password)
 
+    logger.info(
+        f"Uploading media: {filename} ({len(image_bytes)} bytes, {mime_type})")
+
     files = {
         "file": (filename, image_bytes, mime_type)
     }
     data = {
-        "title": filename,
-        "status": "inherit"
+        "title": filename
     }
 
-    response = _retry_request(lambda: requests.post(
-        url, files=files, data=data, auth=auth, timeout=60))
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = _retry_request(lambda: requests.post(
+            url, files=files, data=data, auth=auth, timeout=60))
+
+        if not response.ok:
+            logger.error(
+                f"WordPress media upload error {response.status_code}: {response.text}")
+            response.raise_for_status()
+
+        logger.info(
+            f"Media uploaded successfully, ID: {response.json().get('id')}")
+        return response.json()
+    except Exception as e:
+        logger.error(f"Media upload failed: {e}")
+        raise
 
 
 def set_yoast_meta(site: Dict[str, Any], post_id: int, focuskw: str, seo_title: str, meta_desc: str) -> Dict[str, Any]:

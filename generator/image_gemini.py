@@ -1,13 +1,10 @@
-"""Gemini image generation."""
+"""Image generation using Gemini only."""
 import logging
 from typing import Tuple, Optional
-import google.generativeai as genai
+import requests
 import config
 
 logger = logging.getLogger(__name__)
-
-# Configure Gemini
-genai.configure(api_key=config.GEMINI_API_KEY)
 
 
 def generate_featured_image(
@@ -16,62 +13,94 @@ def generate_featured_image(
     language: str = "nl"
 ) -> Tuple[Optional[bytes], str, str]:
     """
-    Generate a featured image using Gemini.
-    
+    Generate a featured image using Gemini only.
+
     Returns:
         Tuple of (image_bytes, mime_type, filename) or (None, "", "") on failure
     """
+    return _try_gemini_image(topic)
+
+
+def _try_gemini_image(topic: str) -> Tuple[Optional[bytes], str, str]:
+    """Try Gemini Imagen API with correct structure."""
     try:
-        # Build prompt - avoid trademarks/logos, produce clean blog header
-        prompt = f"""Create a professional, clean blog header image for an article about: {topic}
-        
+        prompt = f"""Create a professional, modern blog header image about: {topic}
+
+Style: Clean, minimalist, abstract, high quality
 Requirements:
-- Modern, minimalist design
-- No text, logos, or trademarks
-- Suitable for blog featured image
-- High quality, visually appealing
-- Color scheme appropriate for {brand_name if brand_name else 'professional'} content
-- Abstract or conceptual representation of the topic
-"""
-        
-        # Use Gemini image generation
-        # Note: Gemini 2.0 Flash may support image generation differently
-        # This is a placeholder implementation - adjust based on actual Gemini API capabilities
-        model = genai.GenerativeModel(config.GEMINI_IMAGE_MODEL)
-        
-        # For now, we'll use a text-to-image approach if available
-        # If Gemini doesn't support direct image generation, we'll return None
-        # and the job will continue without an image
-        
-        # Attempt to generate image (this may need adjustment based on actual Gemini API)
-        try:
-            response = model.generate_content(prompt)
-            # If Gemini returns image data, extract it
-            # Otherwise, return None to continue without image
-            logger.warning("Gemini image generation not fully implemented - returning None")
+- No text or logos
+- Professional and visually appealing  
+- Suitable for business blog featured image
+- Modern color palette
+- Landscape format ideal for blog header
+- High resolution, 16:9 aspect ratio"""
+
+        logger.info(f"Generating image with Imagen 4.0 for: {topic}")
+
+        # Use correct Imagen API endpoint and structure from official docs
+        url = "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict"
+
+        headers = {
+            "x-goog-api-key": config.GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "instances": [{"prompt": prompt}],
+            "parameters": {
+                "sampleCount": 1,
+                "aspectRatio": "16:9"
+            }
+        }
+
+        response = requests.post(
+            url, json=payload, headers=headers, timeout=120)
+
+        logger.info(f"Imagen API response status: {response.status_code}")
+
+        if response.status_code == 200:
+            result = response.json()
+            logger.info(f"Response structure: {result.keys()}")
+
+            # Extract image from predictions
+            if "predictions" in result and len(result["predictions"]) > 0:
+                prediction = result["predictions"][0]
+                logger.info(f"Prediction keys: {prediction.keys()}")
+
+                # Try different possible image data locations
+                image_bytes = None
+
+                if "bytesBase64Encoded" in prediction:
+                    import base64
+                    image_bytes = base64.b64decode(
+                        prediction["bytesBase64Encoded"])
+                elif "image" in prediction:
+                    if isinstance(prediction["image"], str):
+                        # Base64 string
+                        import base64
+                        image_bytes = base64.b64decode(prediction["image"])
+                    elif "bytesBase64Encoded" in prediction["image"]:
+                        import base64
+                        image_bytes = base64.b64decode(
+                            prediction["image"]["bytesBase64Encoded"])
+
+                if image_bytes:
+                    filename = f"featured-{topic[:30].replace(' ', '-').lower()}.png"
+                    logger.info(
+                        f"Imagen image generated successfully ({len(image_bytes)} bytes)")
+                    return image_bytes, "image/png", filename
+                else:
+                    logger.warning(
+                        f"Could not extract image from prediction: {prediction}")
+                    return None, "", ""
+            else:
+                logger.warning(f"No predictions in response: {result}")
+                return None, "", ""
+        else:
+            logger.warning(
+                f"Imagen API error {response.status_code}: {response.text[:500]}")
             return None, "", ""
-        except Exception as e:
-            logger.warning(f"Gemini image generation failed: {e}. Continuing without image.")
-            return None, "", ""
-            
+
     except Exception as e:
-        logger.error(f"Error generating image with Gemini: {e}")
+        logger.warning(f"Imagen generation failed: {e}", exc_info=True)
         return None, "", ""
-
-
-def generate_featured_image_fallback(
-    topic: str,
-    brand_name: str = "",
-    language: str = "nl"
-) -> Tuple[Optional[bytes], str, str]:
-    """
-    Fallback: Generate image using alternative method or return placeholder.
-    For MVP, we'll skip image generation if Gemini doesn't support it directly.
-    """
-    # In a production system, you might:
-    # 1. Use a different image generation service
-    # 2. Use Unsplash API for stock images
-    # 3. Use DALL-E or Midjourney API
-    # For MVP, we'll just log and continue without image
-    logger.info(f"Skipping image generation for topic: {topic}")
-    return None, "", ""

@@ -94,7 +94,8 @@ def generate_post():
                 seo=req.seo.model_dump(),
                 brand=req.brand.model_dump(),
                 languages=req.multilang.languages,
-                strategy=req.multilang.strategy
+                strategy=req.multilang.strategy,
+                generate_image=req.generateImage
             )
 
             # Add status and schedule to each draft
@@ -112,7 +113,8 @@ def generate_post():
                 tone_of_voice=req.toneOfVoice.model_dump(),
                 seo=req.seo.model_dump(),
                 brand=req.brand.model_dump(),
-                language=req.language
+                language=req.language,
+                generate_image=req.generateImage
             )
 
             draft["status"] = req.status

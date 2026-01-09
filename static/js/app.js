@@ -126,6 +126,7 @@ function initGeneratePost() {
       },
       language: formData.get('language') || 'nl',
       status: formData.get('status') || 'draft',
+      generateImage: formData.get('generateImage') === 'on',  // Checkbox value
       multilang: {
         enabled: formData.get('multilangEnabled') === 'true',
         languages: formData.get('multilangLanguages')?.split(',').map(s => s.trim()).filter(Boolean) || [],
@@ -265,6 +266,14 @@ function updateJobStatus(job) {
 
 function showDraftPreview(draft) {
   const content = draft.draft ? `
+    ${draft.draft.image && draft.draft.image.bytes_base64 ? `
+      <div style="margin-bottom: var(--spacing-lg);">
+        <h5>Featured Image:</h5>
+        <img src="data:${draft.draft.image.mime_type};base64,${draft.draft.image.bytes_base64}" 
+             alt="Featured Image" 
+             style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
+      </div>
+    ` : ''}
     <h4>${draft.draft.title}</h4>
     <p><strong>Slug:</strong> ${draft.draft.slug}</p>
     <p><strong>Excerpt:</strong> ${draft.draft.excerpt}</p>

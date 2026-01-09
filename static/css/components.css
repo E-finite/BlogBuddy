@@ -219,6 +219,29 @@
   font-size: 0.875rem;
 }
 
+/* Checkbox */
+.form-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-md);
+  cursor: pointer;
+  user-select: none;
+}
+
+.form-checkbox input[type="checkbox"] {
+  margin-top: 2px;
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--color-primary-500);
+}
+
+.form-checkbox span {
+  color: var(--text-primary);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
 /* Badges */
 .badge {
   display: inline-flex;

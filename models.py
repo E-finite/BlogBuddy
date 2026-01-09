@@ -39,14 +39,15 @@ class Brand(BaseModel):
 class MultilangConfig(BaseModel):
     enabled: bool = False
     languages: List[str] = []
-    strategy: str = Field(default="translate", pattern="^(translate|localize)$")
+    strategy: str = Field(default="translate",
+                          pattern="^(translate|localize)$")
 
 
 class ConnectSiteRequest(BaseModel):
     wpBaseUrl: str
     wpUsername: str
     wpApplicationPassword: str
-    
+
     @validator("wpBaseUrl")
     def validate_url(cls, v):
         if not (v.startswith("https://") or v.startswith("http://")):
@@ -65,13 +66,14 @@ class GeneratePostRequest(BaseModel):
     status: str = Field(default="draft", pattern="^(draft|publish|future)$")
     scheduleDateGmt: Optional[str] = None
     multilang: MultilangConfig = MultilangConfig(enabled=False)
+    generateImage: bool = True  # Enable featured image generation by default
 
 
 class PublishPostRequest(BaseModel):
     siteId: str
     draft: Optional[Dict[str, Any]] = None
     drafts: Optional[Dict[str, Dict[str, Any]]] = None
-    
+
     @model_validator(mode='after')
     def validate_draft_or_drafts(self):
         if not self.draft and not self.drafts:

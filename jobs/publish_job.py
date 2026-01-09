@@ -99,7 +99,15 @@ def _publish_single_draft(
             try:
                 db.add_job_step(job_id, f"generate_image_{lang}", "running")
                 image_data = draft["_image"]
-                image_bytes = image_data["bytes"]
+
+                # Decode base64 back to bytes if needed
+                if "bytes_base64" in image_data:
+                    import base64
+                    image_bytes = base64.b64decode(image_data["bytes_base64"])
+                else:
+                    # Legacy support for old format
+                    image_bytes = image_data["bytes"]
+
                 mime_type = image_data.get("mime", "image/jpeg")
                 filename = image_data.get("filename", "featured.jpg")
 
