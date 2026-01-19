@@ -135,17 +135,17 @@ def crawl_site(site_id: str):
     """Crawl website and generate Site DNA."""
     try:
         from context.ingest import ingest_website
-        
+
         # Verify site exists
         site = db.get_site(site_id)
         if not site:
             return jsonify({"error": f"Site {site_id} not found"}), 404
-        
+
         data = request.get_json() or {}
         seed_urls = data.get("seedUrls")
         max_depth = data.get("maxDepth", 3)
         max_pages = data.get("maxPages", 50)
-        
+
         # Run ingest
         logger.info(f"Starting crawl for site {site_id}")
         result = ingest_website(
@@ -154,9 +154,9 @@ def crawl_site(site_id: str):
             max_depth=max_depth,
             max_pages=max_pages
         )
-        
+
         return jsonify(result), 200
-    
+
     except Exception as e:
         logger.error(f"Error crawling site: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -167,29 +167,30 @@ def crawl_for_context():
     """Crawl a website for context without WordPress credentials."""
     try:
         from context.ingest import ingest_website
-        
+
         data = request.get_json()
         website_url = data.get("websiteUrl")
-        
+
         if not website_url:
             return jsonify({"error": "websiteUrl is required"}), 400
-        
+
         # Normalize URL - add trailing slash if not present
         if not website_url.endswith('/'):
             website_url = website_url + '/'
-        
+
         # Create a temporary site entry for context only
         site_id = str(uuid.uuid4())
-        
+
         # Store with dummy credentials (not used for context crawling)
         db.create_site(
             site_id=site_id,
-            wp_base_url=website_url.rstrip('/'),  # Store without trailing slash
+            # Store without trailing slash
+            wp_base_url=website_url.rstrip('/'),
             wp_username="context-only",
             wp_app_password_enc=crypto_utils.encrypt("not-used"),
             default_author_id=None
         )
-        
+
         # Run ingest
         logger.info(f"Starting context crawl for {website_url}")
         result = ingest_website(
@@ -198,22 +199,23 @@ def crawl_for_context():
             max_depth=data.get("maxDepth", 2),
             max_pages=data.get("maxPages", 30)
         )
-        
+
         result["siteId"] = site_id
-        
+
         # Detect JavaScript-rendered sites
-        is_js_site = result.get("pages_crawled", 0) > 0 and result.get("pages_stored", 0) == 0
+        is_js_site = result.get("pages_crawled", 0) > 0 and result.get(
+            "pages_stored", 0) == 0
         result["is_js_site"] = is_js_site
-        
+
         # Add warning if no pages were crawled
         if result.get("pages_stored", 0) == 0:
             if is_js_site:
                 result["warning"] = "JavaScript-website gedetecteerd. Deze site laadt content via JavaScript en kan niet worden gecrawld."
             else:
                 result["warning"] = "Geen pagina's konden worden gecrawld. Controleer of de URL correct is en de website bereikbaar is."
-        
+
         return jsonify(result), 200
-    
+
     except Exception as e:
         logger.error(f"Error crawling for context: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -224,20 +226,20 @@ def test_url():
     """Test if a URL is accessible before crawling."""
     try:
         import httpx
-        
+
         data = request.get_json()
         url = data.get("url")
-        
+
         if not url:
             return jsonify({"error": "url is required"}), 400
-        
+
         # Try to fetch the URL
         with httpx.Client(timeout=10, follow_redirects=True) as client:
             response = client.get(url, headers={
                 "User-Agent": "BlogGenerator/1.0",
                 "Accept": "text/html"
             })
-        
+
         return jsonify({
             "accessible": True,
             "status_code": response.status_code,
@@ -245,7 +247,7 @@ def test_url():
             "content_type": response.headers.get("content-type", ""),
             "content_length": len(response.text)
         }), 200
-    
+
     except Exception as e:
         return jsonify({
             "accessible": False,
@@ -258,18 +260,18 @@ def get_site_dna_endpoint(site_id: str):
     """Get Site DNA for a site."""
     try:
         from context.site_dna import get_site_dna
-        
+
         # Verify site exists
         site = db.get_site(site_id)
         if not site:
             return jsonify({"error": f"Site {site_id} not found"}), 404
-        
+
         dna = get_site_dna(site_id)
         if not dna:
             return jsonify({"error": "No Site DNA found. Run /crawl first."}), 404
-        
+
         return jsonify(dna), 200
-    
+
     except Exception as e:
         logger.error(f"Error getting Site DNA: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -280,18 +282,19 @@ def get_ingest_stats_endpoint(site_id: str):
     """Get ingest statistics for a site."""
     try:
         from context.ingest import get_ingest_stats
-        
+
         # Verify site exists
         site = db.get_site(site_id)
         if not site:
             return jsonify({"error": f"Site {site_id} not found"}), 404
-        
+
         stats = get_ingest_stats(site_id)
         return jsonify(stats), 200
-    
+
     except Exception as e:
         logger.error(f"Error getting ingest stats: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/posts/publish", methods=["POST"])
 def publish_post():

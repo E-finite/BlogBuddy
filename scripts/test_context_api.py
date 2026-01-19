@@ -6,27 +6,28 @@ import time
 # API base URL
 BASE_URL = "http://localhost:5000"
 
+
 def test_connect_site():
     """Test 1: Connect een WordPress site."""
     print("\n" + "="*80)
     print("TEST 1: Connect WordPress Site")
     print("="*80)
-    
+
     # Vervang met je eigen gegevens
     payload = {
         "wpBaseUrl": "https://jouwsite.nl",  # <-- Vervang dit
         "wpUsername": "admin",                # <-- Vervang dit
         "wpApplicationPassword": "xxxx xxxx xxxx xxxx"  # <-- Vervang dit
     }
-    
+
     print(f"\n📡 Connecting to {payload['wpBaseUrl']}...")
-    
+
     response = requests.post(
         f"{BASE_URL}/api/sites/connect",
         json=payload,
         headers={"Content-Type": "application/json"}
     )
-    
+
     if response.status_code == 200:
         data = response.json()
         site_id = data.get("siteId")
@@ -45,23 +46,23 @@ def test_crawl_site(site_id):
     print("\n" + "="*80)
     print("TEST 2: Crawl Website")
     print("="*80)
-    
+
     payload = {
         "maxDepth": 2,
         "maxPages": 10  # Klein voor snelle test
     }
-    
+
     print(f"\n🕷️  Starting crawl for site {site_id}...")
     print(f"   Max depth: {payload['maxDepth']}")
     print(f"   Max pages: {payload['maxPages']}")
     print("\n⏳ This may take 10-30 seconds...")
-    
+
     response = requests.post(
         f"{BASE_URL}/api/sites/{site_id}/crawl",
         json=payload,
         headers={"Content-Type": "application/json"}
     )
-    
+
     if response.status_code == 200:
         data = response.json()
         print(f"\n✅ Crawl completed!")
@@ -81,9 +82,9 @@ def test_get_site_dna(site_id):
     print("\n" + "="*80)
     print("TEST 3: Get Site DNA")
     print("="*80)
-    
+
     response = requests.get(f"{BASE_URL}/api/sites/{site_id}/site-dna")
-    
+
     if response.status_code == 200:
         dna = response.json()
         print(f"\n✅ Site DNA retrieved!")
@@ -111,9 +112,9 @@ def test_ingest_stats(site_id):
     print("\n" + "="*80)
     print("TEST 4: Get Ingest Stats")
     print("="*80)
-    
+
     response = requests.get(f"{BASE_URL}/api/sites/{site_id}/ingest-stats")
-    
+
     if response.status_code == 200:
         stats = response.json()
         print(f"\n✅ Stats retrieved!")
@@ -133,7 +134,7 @@ def test_generate_post_with_context(site_id):
     print("\n" + "="*80)
     print("TEST 5: Generate Blog Post WITH Website Context")
     print("="*80)
-    
+
     payload = {
         "siteId": site_id,
         "topic": "Hoe kies je de juiste projectmanagement software",
@@ -164,18 +165,18 @@ def test_generate_post_with_context(site_id):
         "status": "draft",
         "generateImage": False  # Sneller voor test
     }
-    
+
     print(f"\n📝 Generating blog post...")
     print(f"   Topic: {payload['topic']}")
     print(f"   Focus keyword: {payload['seo']['focusKeyword']}")
     print(f"\n⏳ This may take 30-60 seconds (GPT processing)...")
-    
+
     response = requests.post(
         f"{BASE_URL}/api/posts/generate",
         json=payload,
         headers={"Content-Type": "application/json"}
     )
-    
+
     if response.status_code == 200:
         data = response.json()
         draft = data.get('draft', {})
@@ -189,12 +190,12 @@ def test_generate_post_with_context(site_id):
         print(f"   Meta title: {yoast.get('seo_title')}")
         print(f"   Meta desc: {yoast.get('meta_desc', '')[:80]}...")
         print(f"\n📊 Content length: {len(draft.get('contentHtml', ''))} chars")
-        
+
         # Check for internal links
         content = draft.get('contentHtml', '')
         link_count = content.count('<a href=')
         print(f"   Internal links: {link_count}")
-        
+
         return True
     else:
         print(f"❌ Error: {response.status_code}")
@@ -207,7 +208,7 @@ def test_generate_post_without_context():
     print("\n" + "="*80)
     print("TEST 6: Generate Blog Post WITHOUT Website Context (comparison)")
     print("="*80)
-    
+
     payload = {
         "siteId": "dummy-site-id",  # Niet-bestaande site
         "topic": "Hoe kies je de juiste projectmanagement software",
@@ -238,10 +239,10 @@ def test_generate_post_without_context():
         "status": "draft",
         "generateImage": False
     }
-    
+
     print(f"\n📝 Generating blog post WITHOUT context...")
     print(f"   (Using non-existent site_id so no context will be loaded)")
-    
+
     # Note: Dit zal falen omdat site niet bestaat
     # In productie zou je gewoon site_id weglaten voor generic content
     print(f"\n⚠️  Skipping - would need to adjust code to allow missing site_id")
@@ -258,51 +259,51 @@ def run_all_tests():
     print("3. Bekijk Site DNA")
     print("4. Bekijk statistieken")
     print("5. Genereer blog MET website context")
-    
+
     print("\n⚠️  BELANGRIJK: Start eerst de Flask app:")
     print("   python app.py")
     print("\n⚠️  Vervang in dit script je WordPress credentials!")
-    
+
     input("\nDruk op Enter om te starten...")
-    
+
     # Test 1: Connect site
     site_id = test_connect_site()
     if not site_id:
         print("\n❌ Test failed. Fix credentials and try again.")
         return
-    
+
     time.sleep(1)
-    
+
     # Test 2: Crawl site
     success = test_crawl_site(site_id)
     if not success:
         print("\n❌ Test failed.")
         return
-    
+
     time.sleep(1)
-    
+
     # Test 3: Get Site DNA
     success = test_get_site_dna(site_id)
     if not success:
         print("\n❌ Test failed.")
         return
-    
+
     time.sleep(1)
-    
+
     # Test 4: Get stats
     success = test_ingest_stats(site_id)
     if not success:
         print("\n❌ Test failed.")
         return
-    
+
     time.sleep(1)
-    
+
     # Test 5: Generate with context
     success = test_generate_post_with_context(site_id)
     if not success:
         print("\n❌ Test failed.")
         return
-    
+
     print("\n" + "="*80)
     print("✅ ALL TESTS PASSED!")
     print("="*80)

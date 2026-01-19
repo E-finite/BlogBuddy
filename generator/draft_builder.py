@@ -48,7 +48,8 @@ def build_draft(
                 audience=audience,
                 max_snippets=6
             )
-            logger.info(f"Built website context bundle with {len(website_context_bundle.get('relevant_snippets', []))} snippets")
+            logger.info(
+                f"Built website context bundle with {len(website_context_bundle.get('relevant_snippets', []))} snippets")
         except Exception as e:
             logger.warning(f"Could not build website context bundle: {e}")
             website_context_bundle = None

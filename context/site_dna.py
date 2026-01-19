@@ -15,7 +15,7 @@ def generate_site_dna(
 ) -> Dict[str, Any]:
     """
     Generate site DNA from scraped pages.
-    
+
     Analyzes the website content to extract:
     - Brand summary and positioning
     - Target audiences
@@ -25,22 +25,22 @@ def generate_site_dna(
     - Words to avoid
     - Proof points (factual claims from site)
     - Compliance notes
-    
+
     Args:
         pages: List of page dictionaries with clean_text, title, url, page_type
         site_url: Base URL of the site
-        
+
     Returns:
         Dictionary with site DNA
     """
     logger.info(f"Generating Site DNA from {len(pages)} pages")
-    
+
     # Select most important pages for analysis
     priority_pages = _select_priority_pages(pages)
-    
+
     # Build context from pages
     pages_context = _build_pages_context(priority_pages)
-    
+
     # Generate DNA with GPT
     system_prompt = """Je bent een expert brand analyst en content strategist.
 Je analyseert website content en extraheert de kern-identiteit, positionering, en tone of voice.
@@ -100,25 +100,25 @@ Wees kritisch en accuraat. Geen fantasie.
             temperature=0.3,  # Lower temperature for factual extraction
             max_tokens=2000
         )
-        
+
         content = response.choices[0].message.content
         dna = json.loads(content)
-        
+
         # Validate structure
         required_fields = [
             "brand_summary", "target_audiences", "pain_points",
             "solutions_themes", "tone_keywords", "avoid_words",
             "proof_points", "compliance_notes"
         ]
-        
+
         for field in required_fields:
             if field not in dna:
                 logger.warning(f"Missing field in Site DNA: {field}")
                 dna[field] = [] if field != "brand_summary" else ""
-        
+
         logger.info("Site DNA generated successfully")
         return dna
-    
+
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")
         raise
@@ -126,8 +126,9 @@ Wees kritisch en accuraat. Geen fantasie.
 
 def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Select the most important pages for DNA extraction."""
-    priority_order = ["landing", "about", "service", "pricing", "faq", "blog", "page"]
-    
+    priority_order = ["landing", "about",
+                      "service", "pricing", "faq", "blog", "page"]
+
     # Sort pages by priority
     def page_priority(page):
         page_type = page.get("page_type", "page")
@@ -135,16 +136,16 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             return priority_order.index(page_type)
         except ValueError:
             return len(priority_order)
-    
+
     sorted_pages = sorted(pages, key=page_priority)
-    
+
     # Take up to 15 pages, prioritizing different types
     selected = []
     selected_types = set()
-    
+
     for page in sorted_pages:
         page_type = page.get("page_type", "page")
-        
+
         # Always include landing, about, pricing if available
         if page_type in ["landing", "about", "pricing"]:
             selected.append(page)
@@ -161,10 +162,10 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         elif page_type == "blog" and list(selected_types).count("blog") < 2:
             selected.append(page)
             selected_types.add("blog")
-        
+
         if len(selected) >= 15:
             break
-    
+
     logger.info(f"Selected {len(selected)} priority pages for DNA extraction")
     return selected
 
@@ -172,45 +173,45 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 def _build_pages_context(pages: List[Dict[str, Any]]) -> str:
     """Build a compact context string from pages."""
     context_parts = []
-    
+
     for i, page in enumerate(pages, 1):
         title = page.get("title", "Untitled")
         url = page.get("url", "")
         page_type = page.get("page_type", "page")
         clean_text = page.get("clean_text", "")
-        
+
         # Truncate very long pages
         if len(clean_text) > 3000:
             clean_text = clean_text[:3000] + "..."
-        
+
         context_parts.append(f"""--- PAGE {i}: {title} ({page_type}) ---
 URL: {url}
 CONTENT:
 {clean_text}
 """)
-    
+
     return "\n\n".join(context_parts)
 
 
 def refresh_site_dna(site_id: str) -> Dict[str, Any]:
     """
     Refresh Site DNA for a site by re-analyzing scraped pages.
-    
+
     Args:
         site_id: Site identifier
-        
+
     Returns:
         Generated Site DNA dictionary
     """
     from db import get_db_connection
     from datetime import datetime
-    
+
     logger.info(f"Refreshing Site DNA for site: {site_id}")
-    
+
     # Get scraped pages from database
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         SELECT url, title, clean_text, page_type
         FROM scraped_pages
@@ -225,30 +226,30 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
                 ELSE 6
             END
     """, (site_id,))
-    
+
     rows = cursor.fetchall()
     conn.close()
-    
+
     if not rows:
         raise ValueError(f"No scraped pages found for site {site_id}")
-    
+
     pages = [dict(row) for row in rows]
-    
+
     # Get site URL
     from db import get_site
     site = get_site(site_id)
     site_url = site["wp_base_url"] if site else "unknown"
-    
+
     # Generate DNA
     dna = generate_site_dna(pages, site_url)
-    
+
     # Store in database
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     now = datetime.utcnow().isoformat()
     source_urls = [p["url"] for p in pages]
-    
+
     cursor.execute("""
         INSERT INTO site_dna (
             site_id, brand_summary, target_audiences_json, pain_points_json,
@@ -268,10 +269,10 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
         now,
         json.dumps(source_urls)
     ))
-    
+
     conn.commit()
     conn.close()
-    
+
     logger.info(f"Site DNA stored for site: {site_id}")
     return dna
 
@@ -279,18 +280,18 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
 def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
     """
     Get the latest Site DNA for a site.
-    
+
     Args:
         site_id: Site identifier
-        
+
     Returns:
         Site DNA dictionary or None if not found
     """
     from db import get_db_connection
-    
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         SELECT *
         FROM site_dna
@@ -298,13 +299,13 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
         ORDER BY generated_at DESC
         LIMIT 1
     """, (site_id,))
-    
+
     row = cursor.fetchone()
     conn.close()
-    
+
     if not row:
         return None
-    
+
     return {
         "brand_summary": row["brand_summary"],
         "target_audiences": json.loads(row["target_audiences_json"]),

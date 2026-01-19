@@ -19,29 +19,29 @@ def ingest_website(
 ) -> Dict[str, Any]:
     """
     Ingest website content: crawl, extract, chunk, and generate Site DNA.
-    
+
     Args:
         site_id: Site identifier
         seed_urls: URLs to start crawling from (defaults to site base URL)
         max_depth: Maximum crawl depth
         max_pages: Maximum pages to crawl
-        
+
     Returns:
         Dictionary with ingest statistics
     """
     logger.info(f"Starting website ingest for site: {site_id}")
-    
+
     # Get site info
     site = get_site(site_id)
     if not site:
         raise ValueError(f"Site not found: {site_id}")
-    
+
     base_url = site["wp_base_url"]
-    
+
     # Default seed URLs
     if seed_urls is None:
         seed_urls = [base_url]
-    
+
     # Step 1: Crawl website
     logger.info("Step 1/4: Crawling website...")
     crawler = WebsiteCrawler(
@@ -51,9 +51,10 @@ def ingest_website(
     )
     crawled_pages = crawler.crawl(seed_urls)
     logger.info(f"Crawled {len(crawled_pages)} pages")
-    
+
     if len(crawled_pages) == 0:
-        logger.warning(f"No pages crawled from {base_url}. Check if the site is accessible and doesn't block crawlers.")
+        logger.warning(
+            f"No pages crawled from {base_url}. Check if the site is accessible and doesn't block crawlers.")
         return {
             "site_id": site_id,
             "pages_crawled": 0,
@@ -63,17 +64,17 @@ def ingest_website(
             "error": "No pages could be crawled. The site may be unreachable, blocking crawlers, or all pages returned errors.",
             "completed_at": datetime.utcnow().isoformat()
         }
-    
+
     # Step 2: Extract and chunk content
     logger.info("Step 2/4: Extracting and chunking content...")
     extractor = ContentExtractor(max_chunk_tokens=1000)
-    
+
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     pages_stored = 0
     chunks_stored = 0
-    
+
     for page_data in crawled_pages:
         try:
             # Extract clean content
@@ -81,12 +82,13 @@ def ingest_website(
                 html=page_data["html"],
                 url=page_data["url"]
             )
-            
+
             # Skip pages with no content
             if not extracted["clean_text"]:
-                logger.debug(f"Skipping page with no content: {page_data['url']}")
+                logger.debug(
+                    f"Skipping page with no content: {page_data['url']}")
                 continue
-            
+
             # Store page
             cursor.execute("""
                 INSERT OR REPLACE INTO scraped_pages (
@@ -105,17 +107,17 @@ def ingest_website(
                 page_data["content_hash"],
                 extracted["page_type"]
             ))
-            
+
             page_id = cursor.lastrowid
             pages_stored += 1
-            
+
             # Chunk and store chunks
             chunks = extractor.chunk_content(
                 clean_text=extracted["clean_text"],
                 headings=extracted["headings"],
                 url=page_data["url"]
             )
-            
+
             for chunk in chunks:
                 cursor.execute("""
                     INSERT INTO page_chunks (
@@ -132,21 +134,23 @@ def ingest_website(
                     chunk["url"]
                 ))
                 chunks_stored += 1
-        
+
         except Exception as e:
             logger.error(f"Error processing page {page_data['url']}: {e}")
             continue
-    
+
     conn.commit()
     conn.close()
-    
+
     logger.info(f"Stored {pages_stored} pages and {chunks_stored} chunks")
-    
+
     # Check if this looks like a JavaScript-rendered site
     if len(crawled_pages) > 0 and pages_stored == 0:
-        logger.warning("⚠️ No content extracted - this might be a JavaScript-rendered site (SPA/React/Vue)")
-        logger.warning("💡 These sites need a headless browser or manual content input")
-    
+        logger.warning(
+            "⚠️ No content extracted - this might be a JavaScript-rendered site (SPA/React/Vue)")
+        logger.warning(
+            "💡 These sites need a headless browser or manual content input")
+
     # Step 3: Generate Site DNA
     logger.info("Step 3/4: Generating Site DNA...")
     try:
@@ -155,9 +159,9 @@ def ingest_website(
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")
         site_dna = None
-    
+
     logger.info("Step 4/4: Ingest complete")
-    
+
     return {
         "site_id": site_id,
         "pages_crawled": len(crawled_pages),
@@ -172,7 +176,7 @@ def get_ingest_stats(site_id: str) -> Dict[str, Any]:
     """Get ingest statistics for a site."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     # Count pages
     cursor.execute("""
         SELECT COUNT(*) as count, MAX(fetched_at) as last_fetch
@@ -180,7 +184,7 @@ def get_ingest_stats(site_id: str) -> Dict[str, Any]:
         WHERE site_id = ?
     """, (site_id,))
     pages_row = cursor.fetchone()
-    
+
     # Count chunks
     cursor.execute("""
         SELECT COUNT(*) as count
@@ -188,7 +192,7 @@ def get_ingest_stats(site_id: str) -> Dict[str, Any]:
         WHERE site_id = ?
     """, (site_id,))
     chunks_row = cursor.fetchone()
-    
+
     # Check Site DNA
     cursor.execute("""
         SELECT generated_at
@@ -198,9 +202,9 @@ def get_ingest_stats(site_id: str) -> Dict[str, Any]:
         LIMIT 1
     """, (site_id,))
     dna_row = cursor.fetchone()
-    
+
     conn.close()
-    
+
     return {
         "site_id": site_id,
         "pages_count": pages_row["count"] if pages_row else 0,

@@ -17,7 +17,7 @@ def init_db():
     """Initialize the database schema."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     # Sites table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sites (
@@ -29,7 +29,7 @@ def init_db():
             created_at TEXT NOT NULL
         )
     """)
-    
+
     # Jobs table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
@@ -43,7 +43,7 @@ def init_db():
             updated_at TEXT NOT NULL
         )
     """)
-    
+
     # Job steps table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS job_steps (
@@ -56,7 +56,7 @@ def init_db():
             FOREIGN KEY (job_id) REFERENCES jobs(id)
         )
     """)
-    
+
     # Scraped pages table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scraped_pages (
@@ -76,7 +76,7 @@ def init_db():
             UNIQUE(site_id, url)
         )
     """)
-    
+
     # Page chunks table
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS page_chunks (
@@ -92,7 +92,7 @@ def init_db():
             FOREIGN KEY (site_id) REFERENCES sites(id)
         )
     """)
-    
+
     # Site DNA table (brand identity extracted from website)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS site_dna (
@@ -111,12 +111,15 @@ def init_db():
             FOREIGN KEY (site_id) REFERENCES sites(id)
         )
     """)
-    
+
     # Create indexes for performance
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_chunks_site ON page_chunks(site_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scraped_pages_site ON scraped_pages(site_id)")
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scraped_pages_hash ON scraped_pages(content_hash)")
-    
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_page_chunks_site ON page_chunks(site_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scraped_pages_site ON scraped_pages(site_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_scraped_pages_hash ON scraped_pages(content_hash)")
+
     conn.commit()
     conn.close()
 
@@ -164,17 +167,18 @@ def update_job(job_id: str, status: str, result: Optional[Dict[str, Any]] = None
     cursor = conn.cursor()
     updates = ["status = ?", "updated_at = ?"]
     values = [status, datetime.utcnow().isoformat()]
-    
+
     if result is not None:
         updates.append("result_json = ?")
         values.append(json.dumps(result))
-    
+
     if error is not None:
         updates.append("error_json = ?")
         values.append(json.dumps(error))
-    
+
     values.append(job_id)
-    cursor.execute(f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?", values)
+    cursor.execute(
+        f"UPDATE jobs SET {', '.join(updates)} WHERE id = ?", values)
     conn.commit()
     conn.close()
 
@@ -203,7 +207,8 @@ def get_queued_jobs() -> List[Dict[str, Any]]:
     """Get all queued jobs."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM jobs WHERE status = 'queued' ORDER BY created_at ASC")
+    cursor.execute(
+        "SELECT * FROM jobs WHERE status = 'queued' ORDER BY created_at ASC")
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
@@ -225,7 +230,8 @@ def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
     """Get all steps for a job."""
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM job_steps WHERE job_id = ? ORDER BY ts ASC", (job_id,))
+    cursor.execute(
+        "SELECT * FROM job_steps WHERE job_id = ? ORDER BY ts ASC", (job_id,))
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
