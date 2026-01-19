@@ -57,6 +57,66 @@ def init_db():
         )
     """)
     
+    # Scraped pages table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS scraped_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_id TEXT NOT NULL,
+            url TEXT NOT NULL,
+            canonical_url TEXT,
+            title TEXT,
+            clean_text TEXT,
+            headings_json TEXT,
+            html_snippet TEXT,
+            status_code INTEGER,
+            fetched_at TEXT NOT NULL,
+            content_hash TEXT,
+            page_type TEXT,
+            FOREIGN KEY (site_id) REFERENCES sites(id),
+            UNIQUE(site_id, url)
+        )
+    """)
+    
+    # Page chunks table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS page_chunks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            page_id INTEGER NOT NULL,
+            site_id TEXT NOT NULL,
+            chunk_index INTEGER NOT NULL,
+            section_heading TEXT,
+            chunk_text TEXT NOT NULL,
+            chunk_tokens INTEGER,
+            url TEXT,
+            FOREIGN KEY (page_id) REFERENCES scraped_pages(id),
+            FOREIGN KEY (site_id) REFERENCES sites(id)
+        )
+    """)
+    
+    # Site DNA table (brand identity extracted from website)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS site_dna (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            site_id TEXT NOT NULL,
+            brand_summary TEXT,
+            target_audiences_json TEXT,
+            pain_points_json TEXT,
+            solutions_themes_json TEXT,
+            tone_keywords_json TEXT,
+            avoid_words_json TEXT,
+            proof_points_json TEXT,
+            compliance_notes_json TEXT,
+            generated_at TEXT NOT NULL,
+            source_pages_json TEXT,
+            FOREIGN KEY (site_id) REFERENCES sites(id)
+        )
+    """)
+    
+    # Create indexes for performance
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_chunks_site ON page_chunks(site_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scraped_pages_site ON scraped_pages(site_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_scraped_pages_hash ON scraped_pages(content_hash)")
+    
     conn.commit()
     conn.close()
 
@@ -169,3 +229,33 @@ def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
+
+
+def get_scraped_pages(site_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """Get scraped pages for a site."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, url, title, page_type, fetched_at
+        FROM scraped_pages
+        WHERE site_id = ?
+        ORDER BY fetched_at DESC
+        LIMIT ?
+    """, (site_id, limit))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_page_chunks_count(site_id: str) -> int:
+    """Get count of chunks for a site."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT COUNT(*) as count
+        FROM page_chunks
+        WHERE site_id = ?
+    """, (site_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["count"] if row else 0

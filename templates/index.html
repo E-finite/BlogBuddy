@@ -123,6 +123,30 @@
                   />
                 </div>
 
+                <!-- Website Context Sectie -->
+                <div class="form-group" style="background: #f8fafc; padding: 16px; border-radius: 8px; border: 2px dashed #e2e8f0;">
+                  <label class="form-label" style="display: flex; align-items: center; gap: 8px;">
+                    <span>🧬 Website URL voor Context (optioneel)</span>
+                  </label>
+                  <input
+                    type="url"
+                    id="contextWebsiteUrl"
+                    name="contextWebsiteUrl"
+                    class="form-input"
+                    placeholder="https://jouwsite.nl (laat leeg voor generic content)"
+                  />
+                  <div class="form-help">
+                    Als je een website URL invult, wordt deze eerst gecrawld om authentieke content, tone of voice en brand identity te extraheren. 
+                    Je blog wordt dan consistent met deze website en maakt geen hallucinerende claims.
+                  </div>
+                  <div id="context-status" style="margin-top: 12px; display: none;">
+                    <div class="alert" style="margin: 0;"></div>
+                  </div>
+                  <button type="button" id="crawl-context-btn" class="btn btn-secondary" style="margin-top: 12px; display: none;">
+                    🕷️ Crawl Website voor Context
+                  </button>
+                </div>
+
                 <div class="form-group">
                   <label class="form-label" for="topic">Onderwerp</label>
                   <input

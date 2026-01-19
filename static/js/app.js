@@ -85,15 +85,117 @@ function initGeneratePost() {
   const form = document.getElementById('generate-post-form');
   if (!form) return;
   
+  // Website Context URL handling
+  const contextUrlInput = document.getElementById('contextWebsiteUrl');
+  const contextStatusDiv = document.getElementById('context-status');
+  const crawlBtn = document.getElementById('crawl-context-btn');
+  const siteIdInput = document.getElementById('siteId');
+  
+  let contextSiteId = null;
+  
+  // Show crawl button when URL is entered
+  if (contextUrlInput) {
+    contextUrlInput.addEventListener('input', () => {
+      const url = contextUrlInput.value.trim();
+      if (url) {
+        crawlBtn.style.display = 'block';
+      } else {
+        crawlBtn.style.display = 'none';
+        contextStatusDiv.style.display = 'none';
+        contextSiteId = null;
+      }
+    });
+  }
+  
+  // Crawl website for context
+  if (crawlBtn) {
+    crawlBtn.addEventListener('click', async () => {
+      const url = contextUrlInput.value.trim();
+      if (!url) return;
+      
+      setButtonLoading(crawlBtn, true);
+      contextStatusDiv.style.display = 'block';
+      contextStatusDiv.querySelector('.alert').textContent = '🕷️ Crawling website... (dit kan 30-60 seconden duren)';
+      contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
+      
+      try {
+        // Use the context-only crawl endpoint
+        const response = await fetch('/api/sites/crawl-for-context', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            websiteUrl: url,
+            maxDepth: 2,
+            maxPages: 30
+          })
+        });
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMessage = 'Crawl failed';
+          try {
+            const errorJson = JSON.parse(errorText);
+            errorMessage = errorJson.error || errorMessage;
+          } catch (e) {
+            errorMessage = errorText || errorMessage;
+          }
+          throw new Error(errorMessage);
+        }
+        
+        const data = await response.json();
+        contextSiteId = data.siteId;
+        
+        // Update site ID input
+        siteIdInput.value = contextSiteId;
+        
+        // Check if crawl was successful
+        if (data.pages_stored === 0) {
+          if (data.is_js_site) {
+            contextStatusDiv.querySelector('.alert').innerHTML = 
+              `⚠️ <strong>JavaScript-website gedetecteerd!</strong><br>
+              Deze site laadt content via JavaScript (React/Vue/SPA).<br>
+              💡 <em>Tip: Gebruik een statische site of WordPress/traditionele CMS.</em>`;
+          } else {
+            contextStatusDiv.querySelector('.alert').textContent = 
+              `⚠️ Geen pagina's gecrawld! De website is mogelijk niet bereikbaar.`;
+          }
+          contextStatusDiv.querySelector('.alert').className = 'alert alert-warning';
+          crawlBtn.textContent = '⚠️ Geen Content';
+          crawlBtn.disabled = false;
+        } else {
+          contextStatusDiv.querySelector('.alert').textContent = 
+            `✅ Website gecrawld! ${data.pages_stored} pagina's, ${data.chunks_stored} chunks. ${data.site_dna_generated ? 'Site DNA gegenereerd.' : 'Site DNA kon niet worden gegenereerd.'}`;
+          contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
+          
+          crawlBtn.textContent = '✅ Context Geladen';
+          crawlBtn.disabled = true;
+          
+          // Store for use in generation
+          sessionStorage.setItem('contextSiteId', contextSiteId);
+        }
+        
+      } catch (error) {
+        console.error('Crawl error:', error);
+        contextStatusDiv.querySelector('.alert').textContent = 
+          `❌ Fout bij crawlen: ${error.message}. Check of de Flask app draait en de URL correct is.`;
+        contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
+      } finally {
+        setButtonLoading(crawlBtn, false);
+      }
+    });
+  }
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitBtn = form.querySelector('button[type="submit"]');
     
     const formData = new FormData(form);
-    const siteId = formData.get('siteId') || sessionStorage.getItem('currentSiteId');
+    
+    // Use context site ID if available, otherwise use siteId input or session
+    let siteId = contextSiteId || formData.get('siteId') || sessionStorage.getItem('currentSiteId');
     
     if (!siteId) {
-      showAlert('Geen site geselecteerd. Verbind eerst een WordPress site.', 'error');
+      showAlert('Geen site geselecteerd. Verbind eerst een WordPress site of vul een website URL in voor context.', 'error');
       return;
     }
     
@@ -146,7 +248,7 @@ function initGeneratePost() {
       // Store draft for publishing
       sessionStorage.setItem('currentDraft', JSON.stringify(result));
       
-      showAlert('Blog post gegenereerd!', 'success');
+      showAlert('Blog post gegenereerd!' + (contextSiteId ? ' (met website context)' : ''), 'success');
       
       // Show preview
       showDraftPreview(result);

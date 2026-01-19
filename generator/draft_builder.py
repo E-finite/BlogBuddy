@@ -14,13 +14,15 @@ def build_draft(
     seo: Dict[str, Any],
     brand: Dict[str, Any],
     language: str = "nl",
-    generate_image: bool = True
+    generate_image: bool = True,
+    site_id: str = None
 ) -> Dict[str, Any]:
     """
     Build a complete draft with content and optional image.
 
     Args:
         generate_image: Whether to generate a featured image with DALL-E
+        site_id: Optional site ID for website context retrieval
 
     Returns:
         Dict with draft content (title, slug, excerpt, contentHtml, yoast, tags, categories)
@@ -34,6 +36,23 @@ def build_draft(
             "url": target.get("url", "")
         })
 
+    # Build website context bundle if site_id provided
+    website_context_bundle = None
+    if site_id:
+        try:
+            from context.context_retrieval import build_context_bundle
+            website_context_bundle = build_context_bundle(
+                site_id=site_id,
+                topic=topic,
+                seo=seo,
+                audience=audience,
+                max_snippets=6
+            )
+            logger.info(f"Built website context bundle with {len(website_context_bundle.get('relevant_snippets', []))} snippets")
+        except Exception as e:
+            logger.warning(f"Could not build website context bundle: {e}")
+            website_context_bundle = None
+
     # Generate text content
     content = generate_post_content(
         topic=topic,
@@ -42,7 +61,8 @@ def build_draft(
         seo=seo,
         brand=brand,
         language=language,
-        internal_link_targets=internal_link_targets
+        internal_link_targets=internal_link_targets,
+        website_context_bundle=website_context_bundle
     )
 
     # Ensure excerpt is 1-2 sentences
@@ -106,7 +126,8 @@ def build_multilang_drafts(
     brand: Dict[str, Any],
     languages: List[str],
     strategy: str = "translate",
-    generate_image: bool = True
+    generate_image: bool = True,
+    site_id: str = None
 ) -> Dict[str, Dict[str, Any]]:
     """
     Build drafts for multiple languages.
@@ -114,6 +135,7 @@ def build_multilang_drafts(
     Args:
         strategy: "translate" (direct translation) or "localize" (adapt for local market)
         generate_image: Whether to generate a featured image with DALL-E
+        site_id: Optional site ID for website context retrieval
     """
     drafts = {}
 
@@ -133,7 +155,8 @@ def build_multilang_drafts(
             brand=brand,
             language=lang,
             # Only generate image for first language
-            generate_image=generate_image and lang == languages[0]
+            generate_image=generate_image and lang == languages[0],
+            site_id=site_id
         )
 
         # If not the first language, instruct to translate/localize
