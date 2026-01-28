@@ -8,6 +8,7 @@ import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus } f
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   initNavigation();
+  loadSitesDropdowns(); // Load sites into dropdowns
   initConnectSite();
   initGeneratePost();
   initPublishPost();
@@ -68,6 +69,9 @@ function initConnectSite() {
       
       showAlert(`Site verbonden! Site ID: ${result.siteId}`, 'success');
       form.reset();
+      
+      // Reload sites dropdowns
+      await loadSitesDropdowns();
       
       // Store siteId for later use
       sessionStorage.setItem('currentSiteId', result.siteId);
@@ -404,6 +408,45 @@ function showPublishSuccess(wpPostIds) {
   `;
   
   showModal('Publicatie Succesvol', content, '<button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">Sluiten</button>');
+}
+
+// Load sites into dropdowns
+async function loadSitesDropdowns() {
+  try {
+    const response = await fetch('/api/sites');
+    if (!response.ok) {
+      console.error('Failed to load sites');
+      return;
+    }
+    
+    const sites = await response.json();
+    
+    // Update both dropdowns
+    const siteIdSelect = document.getElementById('siteId');
+    const pubSiteIdSelect = document.getElementById('pubSiteId');
+    
+    if (siteIdSelect) {
+      siteIdSelect.innerHTML = '<option value="">-- Kies een site --</option>';
+      sites.forEach(site => {
+        const option = document.createElement('option');
+        option.value = site.id;
+        option.textContent = `${site.name} (${site.url})`;
+        siteIdSelect.appendChild(option);
+      });
+    }
+    
+    if (pubSiteIdSelect) {
+      pubSiteIdSelect.innerHTML = '<option value="">-- Kies een site --</option>';
+      sites.forEach(site => {
+        const option = document.createElement('option');
+        option.value = site.id;
+        option.textContent = `${site.name} (${site.url})`;
+        pubSiteIdSelect.appendChild(option);
+      });
+    }
+  } catch (error) {
+    console.error('Error loading sites:', error);
+  }
 }
 
 async function checkHealth() {

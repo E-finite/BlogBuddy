@@ -3,14 +3,18 @@ from jobs.worker import start_worker
 import uuid
 import json
 import logging
-from flask import Flask, request, jsonify, render_template
+import config
+from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from datetime import datetime
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_bcrypt import Bcrypt
 import db
 import crypto_utils
 import wp_client
 from models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
 from generator.draft_builder import build_draft, build_multilang_drafts
 from jobs.queue import enqueue_job
+from auth import User
 
 # Configure logging
 logging.basicConfig(
@@ -20,6 +24,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+app.secret_key = config.MASTER_KEY  # Use master key from config for sessions
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Log alsjeblieft in om deze pagina te bekijken.'
+
+# Initialize Bcrypt
+bcrypt = Bcrypt(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    """Load user by ID for Flask-Login."""
+    return User.get(int(user_id))
+
 
 # Initialize database
 db.init_db()
@@ -28,9 +49,150 @@ db.init_db()
 start_worker()
 
 
+# Authentication routes
+@app.route("/")
+def home():
+    """Home page - redirect to login or dashboard."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+    return redirect(url_for('login'))
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    """User registration page."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == "POST":
+        username = request.form.get('username')
+        email = request.form.get('email')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+
+        # Validation
+        if not username or not email or not password:
+            flash('Alle velden zijn verplicht.', 'error')
+            return render_template('register.html')
+
+        if password != confirm_password:
+            flash('Wachtwoorden komen niet overeen.', 'error')
+            return render_template('register.html')
+
+        if len(password) < 8:
+            flash('Wachtwoord moet minimaal 8 karakters lang zijn.', 'error')
+            return render_template('register.html')
+
+        # Check if user already exists
+        if db.get_user_by_username(username):
+            flash('Gebruikersnaam is al in gebruik.', 'error')
+            return render_template('register.html')
+
+        if db.get_user_by_email(email):
+            flash('Email is al geregistreerd.', 'error')
+            return render_template('register.html')
+
+        # Create user
+        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        user_id = db.create_user(username, email, password_hash)
+
+        flash('Account succesvol aangemaakt! Je kunt nu inloggen.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('register.html')
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    """User login page."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == "POST":
+        username = request.form.get('username')
+        password = request.form.get('password')
+        remember = request.form.get('remember', False) == 'on'
+
+        if not username or not password:
+            flash('Gebruikersnaam en wachtwoord zijn verplicht.', 'error')
+            return render_template('login.html')
+
+        # Check user
+        user_data = db.get_user_by_username(username)
+        if not user_data:
+            flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
+            return render_template('login.html')
+
+        # Verify password
+        if not bcrypt.check_password_hash(user_data['password_hash'], password):
+            flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
+            return render_template('login.html')
+
+        # Check if active
+        if not user_data.get('is_active', 1):
+            flash('Account is gedeactiveerd.', 'error')
+            return render_template('login.html')
+
+        # Login user
+        user = User(
+            id=user_data['id'],
+            username=user_data['username'],
+            email=user_data['email'],
+            is_active=bool(user_data.get('is_active', 1))
+        )
+        login_user(user, remember=remember)
+        db.update_user_last_login(user.id)
+
+        flash(f'Welkom terug, {user.username}!', 'success')
+
+        # Redirect to next page or dashboard
+        next_page = request.args.get('next')
+        return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+
+    return render_template('login.html')
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    """Logout user."""
+    logout_user()
+    flash('Je bent uitgelogd.', 'info')
+    return redirect(url_for('login'))
+
+
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    """Dashboard page for authenticated users."""
+    # Get user statistics
+    stats = db.get_user_stats(current_user.id)
+    sites = db.get_user_sites(current_user.id)
+    recent_jobs = db.get_user_jobs(current_user.id, limit=5)
+
+    return render_template('dashboard.html',
+                           user=current_user,
+                           stats=stats,
+                           sites=sites,
+                           recent_jobs=recent_jobs)
+
+
+@app.route("/api/sites", methods=["GET"])
+@login_required
+def get_user_sites_api():
+    """Get all sites for the logged-in user."""
+    try:
+        sites = db.get_user_sites(current_user.id)
+        return jsonify(sites), 200
+    except Exception as e:
+        logger.error(f"Error fetching user sites: {e}", exc_info=True)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
 @app.route("/api/sites/connect", methods=["POST"])
+@login_required
 def connect_site():
-    """Connect to a WordPress site."""
+    """Connect to a WordPress site - MULTI-TENANT."""
     try:
         data = request.get_json()
         req = ConnectSiteRequest(**data)
@@ -46,12 +208,13 @@ def connect_site():
             logger.error(f"Connection test failed: {e}")
             return jsonify({"ok": False, "error": f"Connection failed: {str(e)}"}), 400
 
-        # Store site
+        # Store site with user_id
         site_id = str(uuid.uuid4())
         encrypted_password = crypto_utils.encrypt(req.wpApplicationPassword)
 
         db.create_site(
             site_id=site_id,
+            user_id=current_user.id,  # MULTI-TENANT: link to current user
             wp_base_url=req.wpBaseUrl,
             wp_username=req.wpUsername,
             wp_app_password_enc=encrypted_password,
@@ -73,16 +236,17 @@ def connect_site():
 
 
 @app.route("/api/posts/generate", methods=["POST"])
+@login_required
 def generate_post():
-    """Generate blog post content."""
+    """Generate blog post content - MULTI-TENANT."""
     try:
         data = request.get_json()
         req = GeneratePostRequest(**data)
 
-        # Verify site exists
-        site = db.get_site(req.siteId)
+        # Verify site exists AND belongs to current user
+        site = db.get_site(req.siteId, user_id=current_user.id)
         if not site:
-            return jsonify({"error": f"Site {req.siteId} not found"}), 404
+            return jsonify({"error": f"Site {req.siteId} not found or access denied"}), 404
 
         # Build draft(s)
         if req.multilang.enabled and len(req.multilang.languages) > 1:
@@ -163,8 +327,9 @@ def crawl_site(site_id: str):
 
 
 @app.route("/api/sites/crawl-for-context", methods=["POST"])
+@login_required
 def crawl_for_context():
-    """Crawl a website for context without WordPress credentials."""
+    """Crawl a website for context without WordPress credentials - MULTI-TENANT."""
     try:
         from context.ingest import ingest_website
 
@@ -178,12 +343,13 @@ def crawl_for_context():
         if not website_url.endswith('/'):
             website_url = website_url + '/'
 
-        # Create a temporary site entry for context only
+        # Create a site entry for current user
         site_id = str(uuid.uuid4())
 
-        # Store with dummy credentials (not used for context crawling)
+        # Store site for current user
         db.create_site(
             site_id=site_id,
+            user_id=current_user.id,  # MULTI-TENANT: link to current user
             # Store without trailing slash
             wp_base_url=website_url.rstrip('/'),
             wp_username="context-only",
@@ -297,18 +463,19 @@ def get_ingest_stats_endpoint(site_id: str):
 
 
 @app.route("/api/posts/publish", methods=["POST"])
+@login_required
 def publish_post():
-    """Publish a blog post (creates a job)."""
+    """Publish a blog post - MULTI-TENANT."""
     try:
         data = request.get_json()
         req = PublishPostRequest(**data)
 
-        # Verify site exists
-        site = db.get_site(req.siteId)
+        # Verify site exists AND belongs to current user
+        site = db.get_site(req.siteId, user_id=current_user.id)
         if not site:
-            return jsonify({"error": f"Site {req.siteId} not found"}), 404
+            return jsonify({"error": f"Site {req.siteId} not found or access denied"}), 404
 
-        # Create job
+        # Create job for current user
         job_id = str(uuid.uuid4())
         payload = {
             "siteId": req.siteId
@@ -319,7 +486,7 @@ def publish_post():
         elif req.drafts:
             payload["drafts"] = req.drafts
 
-        db.create_job(job_id, "publish", payload)
+        db.create_job(job_id, current_user.id, "publish", payload)
         enqueue_job(job_id, "publish", payload)
 
         return jsonify({
