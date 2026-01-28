@@ -22,14 +22,18 @@
         <div class="header-content">
           <div class="logo">Blog Generator</div>
           <nav class="nav">
-            <a href="#" class="nav-link active" data-page="connect">Verbinden</a>
+            <a href="#" class="nav-link active" data-page="connect"
+              >Verbinden</a
+            >
             <a href="#" class="nav-link" data-page="generate">Genereren</a>
             <a href="#" class="nav-link" data-page="publish">Publiceren</a>
             <a href="#" class="nav-link" data-page="jobs">Jobs</a>
           </nav>
           <div class="user-info">
             <span class="user-name">{{ user.username }}</span>
-            <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm">Uitloggen</a>
+            <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm"
+              >Uitloggen</a
+            >
           </div>
         </div>
       </div>
@@ -39,18 +43,19 @@
     <main class="main">
       <div class="container">
         <!-- Flash Messages -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% if messages %}
-            <div class="flash-messages" style="margin-bottom: 2rem;">
-              {% for category, message in messages %}
-                <div class="alert alert-{{ category }}">
-                  <span>{{ message }}</span>
-                  <button class="modal-close" onclick="this.parentElement.remove()">×</button>
-                </div>
-              {% endfor %}
-            </div>
-          {% endif %}
-        {% endwith %}
+        {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %}
+        <div class="flash-messages" style="margin-bottom: 2rem">
+          {% for category, message in messages %}
+          <div class="alert alert-{{ category }}">
+            <span>{{ message }}</span>
+            <button class="modal-close" onclick="this.parentElement.remove()">
+              ×
+            </button>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %} {% endwith %}
 
         <!-- Page Header -->
         <div class="page-header">
@@ -61,7 +66,7 @@
         </div>
 
         <!-- Stats Overview -->
-        <div class="stats-grid" style="margin-bottom: 2rem;">
+        <div class="stats-grid" style="margin-bottom: 2rem">
           <div class="stat-card">
             <div class="stat-value">{{ stats.sites }}</div>
             <div class="stat-label">WordPress Sites</div>
@@ -83,7 +88,9 @@
             <div class="card">
               <form id="connect-site-form">
                 <div class="form-group">
-                  <label class="form-label" for="wpBaseUrl">WordPress Base URL</label>
+                  <label class="form-label" for="wpBaseUrl"
+                    >WordPress Base URL</label
+                  >
                   <input
                     type="url"
                     id="wpBaseUrl"
@@ -96,7 +103,9 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="wpUsername">WordPress Username</label>
+                  <label class="form-label" for="wpUsername"
+                    >WordPress Username</label
+                  >
                   <input
                     type="text"
                     id="wpUsername"
@@ -108,7 +117,9 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="wpApplicationPassword">Application Password</label>
+                  <label class="form-label" for="wpApplicationPassword"
+                    >Application Password</label
+                  >
                   <input
                     type="password"
                     id="wpApplicationPassword"
@@ -118,11 +129,14 @@
                     required
                   />
                   <div class="form-help">
-                    WordPress Application Password (Users → Profile → Application Passwords)
+                    WordPress Application Password (Users → Profile →
+                    Application Passwords)
                   </div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Site Verbinden</button>
+                <button type="submit" class="btn btn-primary">
+                  Site Verbinden
+                </button>
               </form>
             </div>
           </div>
@@ -135,37 +149,187 @@
             <div class="card">
               <form id="generate-post-form">
                 <div class="form-group">
-                  <label class="form-label" for="siteId">Selecteer WordPress Site</label>
-                  <select id="siteId" name="siteId" class="form-input" required>
-                    <option value="">-- Kies een site --</option>
-                  </select>
+                  <label class="form-label" for="siteId">Site ID</label>
+                  <input
+                    type="text"
+                    id="siteId"
+                    name="siteId"
+                    class="form-input"
+                    placeholder="Laat leeg om laatste verbonden site te gebruiken"
+                  />
+                </div>
+
+                <!-- Website Context Sectie -->
+                <div
+                  class="form-group"
+                  style="
+                    background: #f8fafc;
+                    padding: 16px;
+                    border-radius: 8px;
+                    border: 2px dashed #e2e8f0;
+                  "
+                >
+                  <label
+                    class="form-label"
+                    style="display: flex; align-items: center; gap: 8px"
+                  >
+                    <span>🧬 Website URL voor Context (optioneel)</span>
+                  </label>
+                  <input
+                    type="url"
+                    id="contextWebsiteUrl"
+                    name="contextWebsiteUrl"
+                    class="form-input"
+                    placeholder="https://jouwsite.nl (laat leeg voor generic content)"
+                  />
+                  <div class="form-help">
+                    Als je een website URL invult, wordt deze eerst gecrawld om
+                    authentieke content, tone of voice en brand identity te
+                    extraheren. Je blog wordt dan consistent met deze website en
+                    maakt geen hallucinerende claims.
+                  </div>
+                  <div
+                    id="context-status"
+                    style="margin-top: 12px; display: none"
+                  >
+                    <div class="alert" style="margin: 0"></div>
+                  </div>
+                  <button
+                    type="button"
+                    id="crawl-context-btn"
+                    class="btn btn-secondary"
+                    style="margin-top: 12px; display: none"
+                  >
+                    🕷️ Crawl Website voor Context
+                  </button>
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="topic">Blog Topic</label>
+                  <label class="form-label" for="topic">Onderwerp</label>
                   <input
                     type="text"
                     id="topic"
                     name="topic"
                     class="form-input"
-                    placeholder="bijv. 'Beste tips voor productiviteit'"
+                    placeholder="Hoe maak je een WordPress blog?"
+                    required
+                  />
+                </div>
+
+                <div class="grid grid-2">
+                  <div class="form-group">
+                    <label class="form-label" for="audienceMarket"
+                      >Doelgroep Markt</label
+                    >
+                    <input
+                      type="text"
+                      id="audienceMarket"
+                      name="audienceMarket"
+                      class="form-input"
+                      placeholder="kleine ondernemers"
+                      required
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label" for="audienceLevel">Niveau</label>
+                    <select
+                      id="audienceLevel"
+                      name="audienceLevel"
+                      class="form-select"
+                      required
+                    >
+                      <option value="beginner">Beginner</option>
+                      <option value="intermediate" selected>
+                        Intermediate
+                      </option>
+                      <option value="expert">Expert</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="painPoints"
+                    >Pijnpunten (comma gescheiden)</label
+                  >
+                  <input
+                    type="text"
+                    id="painPoints"
+                    name="painPoints"
+                    class="form-input"
+                    placeholder="geen technische kennis, tijd tekort"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="focusKeyword"
+                    >SEO Focus Keyword</label
+                  >
+                  <input
+                    type="text"
+                    id="focusKeyword"
+                    name="focusKeyword"
+                    class="form-input"
+                    placeholder="wordpress blog maken"
                     required
                   />
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="keywords">Keywords (optioneel)</label>
+                  <label class="form-label" for="brandName">Brand Naam</label>
                   <input
                     type="text"
-                    id="keywords"
-                    name="keywords"
+                    id="brandName"
+                    name="brandName"
                     class="form-input"
-                    placeholder="bijv. 'productiviteit, timemanagement, focus'"
+                    placeholder="My Brand"
+                    required
                   />
-                  <div class="form-help">Komma-gescheiden lijst</div>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Post Genereren</button>
+                <div class="form-group">
+                  <label class="form-label" for="toneStyle"
+                    >Tone of Voice Stijl (comma gescheiden)</label
+                  >
+                  <input
+                    type="text"
+                    id="toneStyle"
+                    name="toneStyle"
+                    class="form-input"
+                    placeholder="nuchter, direct"
+                    value="nuchter, direct"
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="formality">Formaliteit</label>
+                  <select
+                    id="formality"
+                    name="formality"
+                    class="form-select"
+                    required
+                  >
+                    <option value="je" selected>Je</option>
+                    <option value="u">U</option>
+                  </select>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="status">Status</label>
+                  <select
+                    id="status"
+                    name="status"
+                    class="form-select"
+                    required
+                  >
+                    <option value="draft" selected>Draft</option>
+                    <option value="publish">Publish</option>
+                  </select>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                  🚀 Genereer Blog Post
+                </button>
               </form>
             </div>
           </div>
@@ -175,11 +339,25 @@
         <section id="publish" class="page-section hidden">
           <div class="section">
             <h2 class="section-title">Post Publiceren naar WordPress</h2>
+
+            <!-- Preview area for generated post -->
+            <div
+              id="publish-preview"
+              style="display: none; margin-bottom: 2rem"
+            ></div>
+
             <div class="card">
               <form id="publish-post-form">
                 <div class="form-group">
-                  <label class="form-label" for="pubSiteId">Selecteer WordPress Site</label>
-                  <select id="pubSiteId" name="pubSiteId" class="form-input" required>
+                  <label class="form-label" for="pubSiteId"
+                    >Selecteer WordPress Site</label
+                  >
+                  <select
+                    id="pubSiteId"
+                    name="pubSiteId"
+                    class="form-input"
+                    required
+                  >
                     <option value="">-- Kies een site --</option>
                   </select>
                 </div>
@@ -197,7 +375,9 @@
                 </div>
 
                 <div class="form-group">
-                  <label class="form-label" for="content">Post Content (HTML)</label>
+                  <label class="form-label" for="content"
+                    >Post Content (HTML)</label
+                  >
                   <textarea
                     id="content"
                     name="content"
@@ -210,12 +390,19 @@
 
                 <div class="form-group">
                   <label class="form-label">
-                    <input type="checkbox" id="isDraft" name="isDraft" checked />
+                    <input
+                      type="checkbox"
+                      id="isDraft"
+                      name="isDraft"
+                      checked
+                    />
                     Publiceer als concept
                   </label>
                 </div>
 
-                <button type="submit" class="btn btn-primary">Publiceren</button>
+                <button type="submit" class="btn btn-primary">
+                  Publiceren
+                </button>
               </form>
             </div>
           </div>
@@ -233,7 +420,6 @@
             </div>
           </div>
         </section>
-
       </div>
     </main>
 
@@ -245,6 +431,9 @@
     </footer>
 
     <!-- Scripts -->
-    <script type="module" src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
   </body>
 </html>

@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Check API health
   checkHealth();
+  
+  // Restore publish preview if available
+  restorePublishPreview();
 });
 
 // Navigation
@@ -37,6 +40,11 @@ function initNavigation() {
       const targetSection = document.getElementById(target);
       if (targetSection) {
         targetSection.classList.remove('hidden');
+      }
+      
+      // Restore publish preview when navigating to publish section
+      if (target === 'publish') {
+        restorePublishPreview();
       }
     });
   });
@@ -254,8 +262,9 @@ function initGeneratePost() {
       
       showAlert('Blog post gegenereerd!' + (contextSiteId ? ' (met website context)' : ''), 'success');
       
-      // Show preview
-      showDraftPreview(result);
+      // Automatically fill publish form and switch to publish tab
+      fillPublishForm(result, siteId);
+      switchToPublishTab();
       
     } catch (error) {
       showAlert(error.message || 'Fout bij genereren van blog post', 'error');
@@ -273,6 +282,7 @@ function initPublishPost() {
   publishBtn.addEventListener('click', async () => {
     const draftData = sessionStorage.getItem('currentDraft');
     const siteId = sessionStorage.getItem('currentSiteId');
+    const imageData = sessionStorage.getItem('currentDraftImage');
     
     if (!draftData) {
       showAlert('Geen draft gevonden. Genereer eerst een blog post.', 'error');
@@ -285,6 +295,12 @@ function initPublishPost() {
     }
     
     const draft = JSON.parse(draftData);
+    
+    // Add image data to draft if available
+    if (imageData) {
+      draft.image = JSON.parse(imageData);
+    }
+    
     const payload = {
       siteId,
       ...draft,
@@ -399,6 +415,111 @@ function showDraftPreview(draft) {
   showModal('Draft Preview', content, '<button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">Sluiten</button>');
 }
 
+// Fill publish form with generated draft
+function fillPublishForm(result, siteId) {
+  const draft = result.draft || (result.drafts && result.drafts[Object.keys(result.drafts)[0]]);
+  
+  if (!draft) return;
+  
+  // Fill form fields
+  const titleInput = document.getElementById('title');
+  const contentInput = document.getElementById('content');
+  const pubSiteIdSelect = document.getElementById('pubSiteId');
+  const previewDiv = document.getElementById('publish-preview');
+  
+  if (titleInput) titleInput.value = draft.title || '';
+  if (contentInput) contentInput.value = draft.contentHtml || '';
+  if (pubSiteIdSelect && siteId) pubSiteIdSelect.value = siteId;
+  
+  // Show preview with image
+  if (previewDiv) {
+    let previewHtml = '<div class="card" style="margin-bottom: var(--spacing-lg);">';
+    previewHtml += '<div class="card-header"><h3>Preview van Gegenereerde Post</h3></div>';
+    previewHtml += '<div class="card-body">';
+    
+    // Featured image
+    if (draft.image && draft.image.bytes_base64) {
+      previewHtml += `
+        <div style="margin-bottom: var(--spacing-lg);">
+          <img src="data:${draft.image.mime_type};base64,${draft.image.bytes_base64}" 
+               alt="Featured Image" 
+               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+        </div>
+      `;
+    }
+    
+    previewHtml += `<h2>${draft.title}</h2>`;
+    if (draft.excerpt) {
+      previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
+    }
+    previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
+    previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml}</div>`;
+    previewHtml += '</div></div>';
+    
+    previewDiv.innerHTML = previewHtml;
+    previewDiv.style.display = 'block';
+  }
+  
+  // Store image data for publishing
+  if (draft.image) {
+    sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image));
+  }
+}
+
+// Switch to publish tab
+function switchToPublishTab() {
+  const publishTab = document.querySelector('.nav-link[data-page="publish"]');
+  if (publishTab) {
+    publishTab.click();
+  }
+}
+
+// Restore publish preview from sessionStorage
+function restorePublishPreview() {
+  const draftData = sessionStorage.getItem('currentDraft');
+  const imageData = sessionStorage.getItem('currentDraftImage');
+  const previewDiv = document.getElementById('publish-preview');
+  
+  if (!previewDiv || !draftData) return;
+  
+  try {
+    const draft = JSON.parse(draftData);
+    
+    // Add image data if available
+    if (imageData) {
+      draft.image = JSON.parse(imageData);
+    }
+    
+    let previewHtml = '<div class="card" style="margin-bottom: var(--spacing-lg);">';
+    previewHtml += '<div class="card-header"><h3>Preview van Gegenereerde Post</h3></div>';
+    previewHtml += '<div class="card-body">';
+    
+    // Featured image
+    if (draft.image && draft.image.bytes_base64) {
+      previewHtml += `
+        <div style="margin-bottom: var(--spacing-lg);">
+          <img src="data:${draft.image.mime_type};base64,${draft.image.bytes_base64}" 
+               alt="Featured Image" 
+               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+        </div>
+      `;
+    }
+    
+    previewHtml += `<h2>${draft.title}</h2>`;
+    if (draft.excerpt) {
+      previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
+    }
+    previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
+    previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml}</div>`;
+    previewHtml += '</div></div>';
+    
+    previewDiv.innerHTML = previewHtml;
+    previewDiv.style.display = 'block';
+  } catch (error) {
+    console.error('Error restoring publish preview:', error);
+  }
+}
+
 function showPublishSuccess(wpPostIds) {
   const content = `
     <p>Blog post(s) succesvol gepubliceerd!</p>
@@ -430,7 +551,7 @@ async function loadSitesDropdowns() {
       sites.forEach(site => {
         const option = document.createElement('option');
         option.value = site.id;
-        option.textContent = `${site.name} (${site.url})`;
+        option.textContent = `${site.wp_base_url} (${site.wp_username})`;
         siteIdSelect.appendChild(option);
       });
     }
@@ -440,7 +561,7 @@ async function loadSitesDropdowns() {
       sites.forEach(site => {
         const option = document.createElement('option');
         option.value = site.id;
-        option.textContent = `${site.name} (${site.url})`;
+        option.textContent = `${site.wp_base_url} (${site.wp_username})`;
         pubSiteIdSelect.appendChild(option);
       });
     }

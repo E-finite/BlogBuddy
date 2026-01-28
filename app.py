@@ -180,10 +180,13 @@ def dashboard():
 @app.route("/api/sites", methods=["GET"])
 @login_required
 def get_user_sites_api():
-    """Get all sites for the logged-in user."""
+    """Get all sites for the logged-in user (excluding temporary context sites)."""
     try:
         sites = db.get_user_sites(current_user.id)
-        return jsonify(sites), 200
+        # Filter out temporary context sites
+        real_sites = [site for site in sites if site.get(
+            'wp_username') != '__context_temp__']
+        return jsonify(real_sites), 200
     except Exception as e:
         logger.error(f"Error fetching user sites: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -329,7 +332,10 @@ def crawl_site(site_id: str):
 @app.route("/api/sites/crawl-for-context", methods=["POST"])
 @login_required
 def crawl_for_context():
-    """Crawl a website for context without WordPress credentials - MULTI-TENANT."""
+    """Crawl a website for context without WordPress credentials - MULTI-TENANT.
+
+    Note: Creates a temporary site entry for crawling. These should be cleaned up after use.
+    """
     try:
         from context.ingest import ingest_website
 
@@ -343,22 +349,22 @@ def crawl_for_context():
         if not website_url.endswith('/'):
             website_url = website_url + '/'
 
-        # Create a site entry for current user
+        # Create a temporary site entry (will be stored, but marked as context-only)
         site_id = str(uuid.uuid4())
 
-        # Store site for current user
+        # Store temporary site for crawling (marked with context-only username)
         db.create_site(
             site_id=site_id,
-            user_id=current_user.id,  # MULTI-TENANT: link to current user
-            # Store without trailing slash
+            user_id=current_user.id,
             wp_base_url=website_url.rstrip('/'),
-            wp_username="context-only",
+            wp_username="__context_temp__",  # Special marker for temp context sites
             wp_app_password_enc=crypto_utils.encrypt("not-used"),
             default_author_id=None
         )
 
         # Run ingest
-        logger.info(f"Starting context crawl for {website_url}")
+        logger.info(
+            f"Starting context crawl for {website_url} (temporary site)")
         result = ingest_website(
             site_id=site_id,
             seed_urls=[website_url],
