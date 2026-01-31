@@ -15,7 +15,8 @@ def build_draft(
     brand: Dict[str, Any],
     language: str = "nl",
     generate_image: bool = True,
-    site_id: str = None
+    site_id: str = None,
+    image_settings: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
     Build a complete draft with content and optional image.
@@ -23,6 +24,7 @@ def build_draft(
     Args:
         generate_image: Whether to generate a featured image with DALL-E
         site_id: Optional site ID for website context retrieval
+        image_settings: Optional image generation settings (preset, colors, etc.)
 
     Returns:
         Dict with draft content (title, slug, excerpt, contentHtml, yoast, tags, categories)
@@ -93,28 +95,46 @@ def build_draft(
             slug = f"{focus_keyword}-{slug}"
     content["slug"] = slug
 
-    # Generate featured image (optional, won't fail if it doesn't work)
-    image_bytes, mime_type, filename = None, "", ""
+    # Generate featured image(s) - supports multiple variations
+    images = []
     if generate_image:
-        image_bytes, mime_type, filename = generate_featured_image(
-            topic=topic,
-            brand_name=brand.get("name", ""),
-            language=language
-        )
+        if image_settings is None:
+            image_settings = {}
+
+        variations_count = image_settings.get("variations", 1)
+
+        # Generate multiple variations
+        for i in range(variations_count):
+            image_bytes, mime_type, filename = generate_featured_image(
+                topic=topic,
+                brand=brand,
+                language=language,
+                image_settings=image_settings,
+                variation_index=i
+            )
+
+            if image_bytes:
+                import base64
+                images.append({
+                    "bytes_base64": base64.b64encode(image_bytes).decode('utf-8'),
+                    "mime_type": mime_type,
+                    "filename": filename or f"featured-{content.get('slug', 'featured')}-{i}.jpg"
+                })
 
     draft = {
         **content,
         "language": language
     }
 
-    if image_bytes:
-        # Convert bytes to base64 for JSON serialization
-        import base64
-        draft["image"] = {
-            "bytes_base64": base64.b64encode(image_bytes).decode('utf-8'),
-            "mime_type": mime_type,
-            "filename": filename or f"featured-{content.get('slug', 'featured')}.jpg"
-        }
+    # Store images - single or multiple variations
+    if images:
+        if len(images) == 1:
+            # Single image - use old format for compatibility
+            draft["image"] = images[0]
+        else:
+            # Multiple variations - store all
+            draft["images"] = images
+            draft["image"] = images[0]  # Default to first one
 
     return draft
 

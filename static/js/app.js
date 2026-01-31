@@ -97,6 +97,20 @@ function initGeneratePost() {
   const form = document.getElementById('generate-post-form');
   if (!form) return;
   
+  // Image settings toggle
+  const generateImageCheckbox = document.getElementById('generateImage');
+  const imageSettingsPanel = document.getElementById('image-settings-panel');
+  
+  if (generateImageCheckbox && imageSettingsPanel) {
+    // Initial state
+    imageSettingsPanel.style.display = generateImageCheckbox.checked ? 'block' : 'none';
+    
+    // Toggle on change
+    generateImageCheckbox.addEventListener('change', () => {
+      imageSettingsPanel.style.display = generateImageCheckbox.checked ? 'block' : 'none';
+    });
+  }
+  
   // Website Context URL handling
   const contextUrlInput = document.getElementById('contextWebsiteUrl');
   const contextStatusDiv = document.getElementById('context-status');
@@ -201,6 +215,9 @@ function initGeneratePost() {
     e.preventDefault();
     const submitBtn = form.querySelector('button[type="submit"]');
     
+    console.log('Generate form - Submit button found:', submitBtn);
+    console.log('Generate form - Form element:', form);
+    
     const formData = new FormData(form);
     
     // Use context site ID if available, otherwise use siteId input or session
@@ -237,10 +254,24 @@ function initGeneratePost() {
       brand: {
         name: formData.get('brandName'),
         cta: formData.get('brandCta') || '',
+        colors: formData.get('brandColors')?.split(',').map(s => s.trim()).filter(Boolean) || [],
       },
       language: formData.get('language') || 'nl',
       status: formData.get('status') || 'draft',
       generateImage: formData.get('generateImage') === 'on',  // Checkbox value
+      imageSettings: {
+        preset: formData.get('imagePreset') || 'minimal-tech',
+        aspectRatio: formData.get('aspectRatio') || '16:9',
+        styleStrength: formData.get('styleStrength') || 'medium',
+        useBrandColors: formData.get('useBrandColors') === 'on',
+        colorStrictness: formData.get('colorStrictness') || 'medium',
+        composition: formData.get('composition') || 'auto',
+        lighting: formData.get('lighting') || 'soft-studio',
+        lockSeed: formData.get('lockSeed') === 'on',
+        seedValue: formData.get('seedValue') ? parseInt(formData.get('seedValue')) : null,
+        negativePrompt: formData.get('negativePrompt') || 'blurry, low quality, watermark, text overlay, jpeg artifacts, deformed, pixelated',
+        variations: parseInt(formData.get('variations')) || 1,
+      },
       multilang: {
         enabled: formData.get('multilangEnabled') === 'true',
         languages: formData.get('multilangLanguages')?.split(',').map(s => s.trim()).filter(Boolean) || [],
@@ -251,6 +282,8 @@ function initGeneratePost() {
     if (formData.get('scheduleDateGmt')) {
       payload.scheduleDateGmt = formData.get('scheduleDateGmt');
     }
+    
+    console.log('Image Settings:', payload.imageSettings);
     
     setButtonLoading(submitBtn, true);
     
@@ -266,11 +299,35 @@ function initGeneratePost() {
         throw new Error('Geen draft ontvangen van API');
       }
       
-      // Store draft for publishing
-      sessionStorage.setItem('currentDraft', JSON.stringify(draft));
-      sessionStorage.setItem('currentSiteId', siteId);
+      // Store draft WITHOUT images to avoid sessionStorage quota issues
+      // Images will be stored separately in memory via fillPublishForm
+      const draftWithoutImages = {
+        ...draft,
+        images: undefined  // Remove images array
+        // Keep single 'image' field if it exists for compatibility
+      };
+      
+      try {
+        sessionStorage.setItem('currentDraft', JSON.stringify(draftWithoutImages));
+        sessionStorage.setItem('currentSiteId', siteId);
+      } catch (e) {
+        console.warn('Could not store draft in sessionStorage (too large):', e);
+        // Store minimal version without any images
+        const minimalDraft = {
+          title: draft.title,
+          contentHtml: draft.contentHtml,
+          excerpt: draft.excerpt,
+          slug: draft.slug
+        };
+        sessionStorage.setItem('currentDraft', JSON.stringify(minimalDraft));
+      }
       
       console.log('Stored draft:', draft);
+      console.log('Draft has images array:', draft.images);
+      console.log('Draft has single image:', draft.image);
+      
+      // Store the full draft with images in a module-level variable
+      window._currentDraftWithImages = draft;
       
       showAlert('Blog post gegenereerd!' + (contextSiteId ? ' (met website context)' : ''), 'success');
       
@@ -334,10 +391,18 @@ function initPublishPost() {
       console.log('Using form values as draft:', draft);
     }
     
-    // Add image data to draft if available
+    // Add image data - try sessionStorage first, then global variable
     if (imageData) {
-      draft.image = JSON.parse(imageData);
-      console.log('Added image to draft');
+      try {
+        draft.image = JSON.parse(imageData);
+        console.log('Added image from sessionStorage');
+      } catch (e) {
+        console.error('Failed to parse image data:', e);
+      }
+    } else if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
+      // Fallback to global variable
+      draft.image = window._currentDraftWithImages.image;
+      console.log('Added image from global variable');
     }
     
     // Build payload with correct structure - draft as nested object
@@ -474,40 +539,18 @@ function fillPublishForm(result, siteId) {
   if (contentInput) contentInput.value = draft.contentHtml || '';
   if (pubSiteIdSelect && siteId) pubSiteIdSelect.value = siteId;
   
-  // Show preview with image
+  // Render preview using the renderPreview function (which uses global _currentDraftWithImages)
   if (previewDiv) {
-    let previewHtml = '<div class="card" style="margin-bottom: var(--spacing-lg);">';
-    previewHtml += '<div class="card-header"><h3>Preview van Gegenereerde Post</h3></div>';
-    previewHtml += '<div class="card-body">';
-    
-    // Featured image - check both draft.image and draft._image for compatibility
-    const imageData = draft.image || draft._image;
-    if (imageData && imageData.bytes_base64) {
-      previewHtml += `
-        <div style="margin-bottom: var(--spacing-lg);">
-          <h5 style="margin-bottom: var(--spacing-sm); color: var(--text-secondary);">Featured Image Preview:</h5>
-          <img src="data:${imageData.mime_type || imageData.mime};base64,${imageData.bytes_base64}" 
-               alt="Featured Image" 
-               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
-        </div>
-      `;
-    }
-    
-    previewHtml += `<h2>${draft.title}</h2>`;
-    if (draft.excerpt) {
-      previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
-    }
-    previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-    previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml}</div>`;
-    previewHtml += '</div></div>';
-    
-    previewDiv.innerHTML = previewHtml;
-    previewDiv.style.display = 'block';
+    renderPreview(draft, previewDiv);
   }
   
-  // Store image data for publishing
+  // Store ONLY the selected image (not all variations) for publishing
   if (draft.image || draft._image) {
-    sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image || draft._image));
+    try {
+      sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image || draft._image));
+    } catch (e) {
+      console.warn('Could not store image in sessionStorage:', e);
+    }
   }
 }
 
@@ -588,18 +631,59 @@ function updatePublishPreviewFromForm() {
 
 // Render preview HTML
 function renderPreview(draft, previewDiv) {
+  console.log('renderPreview called with draft:', draft);
+  
+  // Use the full draft with images if available
+  const fullDraft = window._currentDraftWithImages || draft;
+  
   let previewHtml = '';
   
-  // Featured image - separate card
-  const imageToDisplay = draft.image || draft._image;
-  if (imageToDisplay && imageToDisplay.bytes_base64) {
+  // Featured image(s) - handle single or multiple variations
+  const images = fullDraft.images || (fullDraft.image ? [fullDraft.image] : []);
+  const imageToDisplay = fullDraft.image || fullDraft._image;
+  
+  console.log('Images to render:', images);
+  console.log('Images array length:', images.length);
+  
+  if (images.length > 0) {
     previewHtml += `
       <div class="card" style="margin-bottom: var(--spacing-lg);">
-        <div class="card-header"><h3>Featured Image</h3></div>
+        <div class="card-header">
+          <h3>Featured Image ${images.length > 1 ? `(${images.length} variations)` : ''}</h3>
+        </div>
         <div class="card-body">
-          <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
-               alt="Featured Image" 
-               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+    `;
+    
+    // Show all variations if multiple
+    if (images.length > 1) {
+      previewHtml += '<div id="image-variations-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">';
+      images.forEach((img, index) => {
+        const isSelected = index === 0; // First one is default
+        const borderStyle = isSelected ? '4px solid #10b981' : '2px solid #e2e8f0';
+        const boxShadow = isSelected ? '0 0 0 3px rgba(16, 185, 129, 0.2)' : 'none';
+        previewHtml += `
+          <div class="image-variation-card" style="position: relative; border: ${borderStyle}; box-shadow: ${boxShadow}; border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.2s ease;" 
+               data-variation-index="${index}">
+            ${isSelected ? '<div class="variation-selected-badge" style="position: absolute; top: 12px; right: 12px; background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">✓ Geselecteerd</div>' : ''}
+            <img src="data:${img.mime_type || img.mime};base64,${img.bytes_base64}" 
+                 alt="Variation ${index + 1}" 
+                 style="max-width: 100%; height: auto; border-radius: 4px; pointer-events: none;" />
+            <div style="text-align: center; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Variation ${index + 1}</div>
+          </div>
+        `;
+      });
+      previewHtml += '</div>';
+      previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;">💡 <strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
+    } else if (imageToDisplay && imageToDisplay.bytes_base64) {
+      // Single image
+      previewHtml += `
+        <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
+             alt="Featured Image" 
+             style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+      `;
+    }
+    
+    previewHtml += `
         </div>
       </div>
     `;
@@ -609,17 +693,89 @@ function renderPreview(draft, previewDiv) {
   previewHtml += '<div class="card" style="margin-bottom: var(--spacing-lg);">';
   previewHtml += '<div class="card-header"><h3>Content Preview</h3></div>';
   previewHtml += '<div class="card-body">';
-  previewHtml += `<h2>${draft.title || 'Geen titel'}</h2>`;
-  if (draft.excerpt) {
-    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
+  previewHtml += `<h2>${fullDraft.title || 'Geen titel'}</h2>`;
+  if (fullDraft.excerpt) {
+    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${fullDraft.excerpt}</p>`;
   }
   previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-  previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml || 'Geen content'}</div>`;
+  previewHtml += `<div style="line-height: 1.6;">${fullDraft.contentHtml || 'Geen content'}</div>`;
   previewHtml += '</div></div>';
   
   previewDiv.innerHTML = previewHtml;
   previewDiv.style.display = 'block';
+  
+  // Setup event delegation for image variation selection
+  const variationsContainer = previewDiv.querySelector('#image-variations-container');
+  if (variationsContainer) {
+    variationsContainer.addEventListener('click', (e) => {
+      const card = e.target.closest('.image-variation-card');
+      if (card) {
+        const index = parseInt(card.dataset.variationIndex);
+        selectImageVariation(index);
+      }
+    });
+  }
 }
+
+// Select image variation
+function selectImageVariation(index) {
+  console.log('Selecting variation:', index);
+  
+  // Use the global draft with images
+  const draft = window._currentDraftWithImages;
+  if (!draft) {
+    console.error('No draft with images available');
+    return;
+  }
+  
+  try {
+    // If we have multiple variations, select the chosen one
+    if (draft.images && draft.images[index]) {
+      draft.image = draft.images[index];
+      
+      // Store ONLY the selected image in sessionStorage (much smaller)
+      try {
+        sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image));
+      } catch (e) {
+        console.warn('Could not store image in sessionStorage:', e);
+      }
+      
+      // Update visual feedback - remove all selected badges first
+      const container = document.querySelector('#image-variations-container');
+      if (container) {
+        const allCards = container.querySelectorAll('.image-variation-card');
+        allCards.forEach((card, i) => {
+          const badge = card.querySelector('.variation-selected-badge');
+          if (badge) badge.remove();
+          
+          // Update border - groene rand voor geselecteerde
+          if (i === index) {
+            card.style.border = '4px solid #10b981';
+            card.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.2)';
+            // Add selected badge
+            const newBadge = document.createElement('div');
+            newBadge.className = 'variation-selected-badge';
+            newBadge.style.cssText = 'position: absolute; top: 12px; right: 12px; background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);';
+            newBadge.textContent = '✓ Geselecteerd';
+            card.insertBefore(newBadge, card.firstChild);
+          } else {
+            card.style.border = '2px solid #e2e8f0';
+            card.style.boxShadow = 'none';
+          }
+        });
+      }
+      
+      showAlert(`Variation ${index + 1} geselecteerd!`, 'success', 2000);
+    } else {
+      console.error('No image at index:', index);
+    }
+  } catch (e) {
+    console.error('Error selecting variation:', e);
+  }
+}
+
+// Make function globally available
+window.selectImageVariation = selectImageVariation;
 
 function showPublishSuccess(wpPostIds) {
   const content = `

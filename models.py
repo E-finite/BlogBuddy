@@ -67,6 +67,7 @@ class GeneratePostRequest(BaseModel):
     scheduleDateGmt: Optional[str] = None
     multilang: MultilangConfig = MultilangConfig(enabled=False)
     generateImage: bool = True  # Enable featured image generation by default
+    imageSettings: Optional[Dict[str, Any]] = None  # Image generation settings
 
 
 class PublishPostRequest(BaseModel):

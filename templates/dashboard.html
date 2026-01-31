@@ -346,6 +346,526 @@
                   </div>
                 </div>
 
+                <!-- Image Settings -->
+                <div
+                  id="image-settings-panel"
+                  class="form-group"
+                  style="
+                    background: linear-gradient(
+                      135deg,
+                      #667eea 0%,
+                      #764ba2 100%
+                    );
+                    padding: 24px;
+                    border-radius: 12px;
+                    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
+                    border: none;
+                  "
+                >
+                  <h4
+                    style="
+                      margin: 0 0 20px 0;
+                      font-size: 18px;
+                      color: white;
+                      font-weight: 600;
+                      display: flex;
+                      align-items: center;
+                      gap: 10px;
+                    "
+                  >
+                    🎨 Image Settings
+                    <span
+                      style="
+                        font-size: 12px;
+                        background: rgba(255, 255, 255, 0.2);
+                        padding: 4px 10px;
+                        border-radius: 12px;
+                        font-weight: 500;
+                      "
+                      >Powered by Gemini Imagen</span
+                    >
+                  </h4>
+
+                  <!-- Preset -->
+                  <div class="form-group" style="margin-bottom: 16px">
+                    <label
+                      class="form-label"
+                      for="imagePreset"
+                      style="
+                        color: rgba(255, 255, 255, 0.95);
+                        font-weight: 500;
+                        margin-bottom: 8px;
+                        display: block;
+                      "
+                    >
+                      🎭 Style Preset
+                    </label>
+                    <select
+                      id="imagePreset"
+                      name="imagePreset"
+                      class="form-select"
+                      style="
+                        background: white;
+                        border: 2px solid rgba(255, 255, 255, 0.3);
+                        color: #2d3748;
+                        font-weight: 500;
+                      "
+                    >
+                      <option value="minimal-tech" selected>
+                        ✨ Minimal Tech
+                      </option>
+                      <option value="bold-creative">🎨 Bold Creative</option>
+                      <option value="professional">💼 Professional</option>
+                      <option value="modern-gradient">
+                        🌈 Modern Gradient
+                      </option>
+                      <option value="flat-illustration">
+                        🎯 Flat Illustration
+                      </option>
+                    </select>
+                  </div>
+
+                  <!-- Quick Controls Grid -->
+                  <div
+                    style="
+                      display: grid;
+                      grid-template-columns: 1fr 1fr 1fr;
+                      gap: 16px;
+                      margin-bottom: 16px;
+                    "
+                  >
+                    <div
+                      style="
+                        background: rgba(255, 255, 255, 0.15);
+                        backdrop-filter: blur(10px);
+                        padding: 16px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                      "
+                    >
+                      <label
+                        class="form-label"
+                        for="aspectRatio"
+                        style="
+                          color: rgba(255, 255, 255, 0.9);
+                          font-size: 13px;
+                          font-weight: 500;
+                          margin-bottom: 8px;
+                          display: block;
+                        "
+                      >
+                        📐 Aspect Ratio
+                      </label>
+                      <select
+                        id="aspectRatio"
+                        name="aspectRatio"
+                        class="form-select"
+                        style="
+                          background: white;
+                          border: none;
+                          color: #2d3748;
+                          font-weight: 500;
+                          padding: 10px;
+                        "
+                      >
+                        <option value="16:9" selected>16:9 Blog</option>
+                        <option value="1:1">1:1 Square</option>
+                        <option value="4:5">4:5 Portrait</option>
+                      </select>
+                    </div>
+
+                    <div
+                      style="
+                        background: rgba(255, 255, 255, 0.15);
+                        backdrop-filter: blur(10px);
+                        padding: 16px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                      "
+                    >
+                      <label
+                        class="form-label"
+                        for="styleStrength"
+                        style="
+                          color: rgba(255, 255, 255, 0.9);
+                          font-size: 13px;
+                          font-weight: 500;
+                          margin-bottom: 8px;
+                          display: block;
+                        "
+                      >
+                        💪 Style Strength
+                      </label>
+                      <select
+                        id="styleStrength"
+                        name="styleStrength"
+                        class="form-select"
+                        style="
+                          background: white;
+                          border: none;
+                          color: #2d3748;
+                          font-weight: 500;
+                          padding: 10px;
+                        "
+                      >
+                        <option value="low">🌱 Low (Subtle)</option>
+                        <option value="medium" selected>⚡ Medium</option>
+                        <option value="high">🔥 High (Bold)</option>
+                      </select>
+                    </div>
+
+                    <div
+                      style="
+                        background: rgba(255, 255, 255, 0.15);
+                        backdrop-filter: blur(10px);
+                        padding: 16px;
+                        border-radius: 8px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                      "
+                    >
+                      <label
+                        class="form-label"
+                        style="
+                          color: rgba(255, 255, 255, 0.9);
+                          font-size: 13px;
+                          font-weight: 500;
+                          margin-bottom: 8px;
+                          display: block;
+                        "
+                      >
+                        🎨 Brand Colors
+                      </label>
+                      <label
+                        style="
+                          display: flex;
+                          align-items: center;
+                          gap: 8px;
+                          margin-top: 12px;
+                          cursor: pointer;
+                        "
+                      >
+                        <input
+                          type="checkbox"
+                          id="useBrandColors"
+                          name="useBrandColors"
+                          checked
+                          style="width: 20px; height: 20px; cursor: pointer"
+                        />
+                        <span
+                          style="
+                            font-size: 14px;
+                            color: white;
+                            font-weight: 500;
+                          "
+                          >Use brand palette</span
+                        >
+                      </label>
+                    </div>
+                  </div>
+
+                  <!-- Advanced Settings Toggle -->
+                  <details style="margin-top: 16px">
+                    <summary
+                      style="
+                        cursor: pointer;
+                        font-weight: 600;
+                        padding: 14px 18px;
+                        background: rgba(255, 255, 255, 0.2);
+                        backdrop-filter: blur(10px);
+                        border-radius: 8px;
+                        color: white;
+                        list-style: none;
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                        transition: all 0.2s;
+                        border: 1px solid rgba(255, 255, 255, 0.3);
+                      "
+                      onmouseover="
+                        this.style.background = 'rgba(255,255,255,0.25)'
+                      "
+                      onmouseout="
+                        this.style.background = 'rgba(255,255,255,0.2)'
+                      "
+                    >
+                      <span>⚙️</span>
+                      <span>Advanced Settings</span>
+                      <span
+                        style="margin-left: auto; font-size: 12px; opacity: 0.8"
+                        >Click to expand</span
+                      >
+                    </summary>
+
+                    <div
+                      style="
+                        padding: 20px;
+                        background: rgba(255, 255, 255, 0.1);
+                        backdrop-filter: blur(10px);
+                        border-radius: 8px;
+                        margin-top: 12px;
+                        border: 1px solid rgba(255, 255, 255, 0.2);
+                      "
+                    >
+                      <div
+                        style="
+                          display: grid;
+                          grid-template-columns: 1fr 1fr;
+                          gap: 16px;
+                        "
+                      >
+                        <!-- Color Strictness -->
+                        <div class="form-group" style="margin: 0">
+                          <label
+                            class="form-label"
+                            for="colorStrictness"
+                            style="
+                              color: rgba(255, 255, 255, 0.95);
+                              font-weight: 500;
+                              margin-bottom: 8px;
+                              display: block;
+                            "
+                          >
+                            🎯 Brand Color Strictness
+                          </label>
+                          <select
+                            id="colorStrictness"
+                            name="colorStrictness"
+                            class="form-select"
+                            style="
+                              background: white;
+                              border: none;
+                              color: #2d3748;
+                            "
+                          >
+                            <option value="low">💡 Low (Inspiration)</option>
+                            <option value="medium" selected>⚖️ Medium</option>
+                            <option value="high">🎯 High (Strict)</option>
+                          </select>
+                        </div>
+
+                        <!-- Composition -->
+                        <div class="form-group" style="margin: 0">
+                          <label
+                            class="form-label"
+                            for="composition"
+                            style="
+                              color: rgba(255, 255, 255, 0.95);
+                              font-weight: 500;
+                              margin-bottom: 8px;
+                              display: block;
+                            "
+                          >
+                            📸 Composition
+                          </label>
+                          <select
+                            id="composition"
+                            name="composition"
+                            class="form-select"
+                            style="
+                              background: white;
+                              border: none;
+                              color: #2d3748;
+                            "
+                          >
+                            <option value="auto" selected>🤖 Auto</option>
+                            <option value="centered">🎯 Centered Hero</option>
+                            <option value="left-whitespace">
+                              ◀️ Left + Space
+                            </option>
+                            <option value="flat-lay">📋 Flat Lay</option>
+                            <option value="isometric">📦 Isometric</option>
+                          </select>
+                        </div>
+
+                        <!-- Lighting -->
+                        <div class="form-group" style="margin: 0">
+                          <label
+                            class="form-label"
+                            for="lighting"
+                            style="
+                              color: rgba(255, 255, 255, 0.95);
+                              font-weight: 500;
+                              margin-bottom: 8px;
+                              display: block;
+                            "
+                          >
+                            💡 Lighting
+                          </label>
+                          <select
+                            id="lighting"
+                            name="lighting"
+                            class="form-select"
+                            style="
+                              background: white;
+                              border: none;
+                              color: #2d3748;
+                            "
+                          >
+                            <option value="soft-studio" selected>
+                              ✨ Soft Studio
+                            </option>
+                            <option value="natural">☀️ Natural Light</option>
+                            <option value="dramatic">🌟 Dramatic</option>
+                            <option value="backlit">💫 Backlit</option>
+                          </select>
+                        </div>
+
+                        <!-- Variations -->
+                        <div class="form-group" style="margin: 0">
+                          <label
+                            class="form-label"
+                            for="variations"
+                            style="
+                              color: rgba(255, 255, 255, 0.95);
+                              font-weight: 500;
+                              margin-bottom: 8px;
+                              display: block;
+                            "
+                          >
+                            🔄 Variations
+                          </label>
+                          <select
+                            id="variations"
+                            name="variations"
+                            class="form-select"
+                            style="
+                              background: white;
+                              border: none;
+                              color: #2d3748;
+                            "
+                          >
+                            <option value="1" selected>1 image</option>
+                            <option value="2">2 variations</option>
+                            <option value="4">4 variations</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      <!-- Brand Colors -->
+                      <div class="form-group" style="margin-top: 16px">
+                        <label
+                          class="form-label"
+                          for="brandColors"
+                          style="
+                            color: rgba(255, 255, 255, 0.95);
+                            font-weight: 500;
+                            margin-bottom: 8px;
+                            display: block;
+                          "
+                        >
+                          🎨 Brand Kleuren (HEX codes)
+                        </label>
+                        <input
+                          type="text"
+                          id="brandColors"
+                          name="brandColors"
+                          class="form-input"
+                          placeholder="#667eea, #764ba2, #f093fb"
+                          style="
+                            background: white;
+                            border: none;
+                            color: #2d3748;
+                          "
+                        />
+                        <div
+                          class="form-help"
+                          style="
+                            color: rgba(255, 255, 255, 0.8);
+                            margin-top: 4px;
+                          "
+                        >
+                          Comma-gescheiden HEX codes voor jouw merk kleuren
+                          (bijv. #667eea, #764ba2)
+                        </div>
+                      </div>
+
+                      <!-- Consistency Seed -->
+                      <div class="form-group" style="margin-top: 16px">
+                        <label
+                          class="form-label"
+                          style="
+                            color: rgba(255, 255, 255, 0.95);
+                            font-weight: 500;
+                            display: flex;
+                            align-items: center;
+                            gap: 8px;
+                          "
+                        >
+                          <input
+                            type="checkbox"
+                            id="lockSeed"
+                            name="lockSeed"
+                            style="width: 18px; height: 18px"
+                          />
+                          <span>🔒 Lock Seed (Consistency)</span>
+                        </label>
+                        <div
+                          class="form-help"
+                          style="
+                            color: rgba(255, 255, 255, 0.8);
+                            margin-top: 4px;
+                            margin-bottom: 8px;
+                          "
+                        >
+                          Use same seed for consistent style across images
+                        </div>
+                        <input
+                          type="number"
+                          id="seedValue"
+                          name="seedValue"
+                          class="form-input"
+                          placeholder="Auto (leave empty)"
+                          style="
+                            background: white;
+                            border: none;
+                            color: #2d3748;
+                          "
+                        />
+                      </div>
+
+                      <!-- Negative Prompt -->
+                      <div class="form-group" style="margin-top: 16px">
+                        <label
+                          class="form-label"
+                          for="negativePrompt"
+                          style="
+                            color: rgba(255, 255, 255, 0.95);
+                            font-weight: 500;
+                            margin-bottom: 8px;
+                            display: block;
+                          "
+                        >
+                          🚫 Negative Prompt
+                        </label>
+                        <textarea
+                          id="negativePrompt"
+                          name="negativePrompt"
+                          class="form-input"
+                          rows="2"
+                          placeholder="Things to avoid..."
+                          style="
+                            background: white;
+                            border: none;
+                            color: #2d3748;
+                            font-size: 13px;
+                          "
+                        >
+blurry, low quality, watermark, text overlay, jpeg artifacts, deformed, pixelated</textarea
+                        >
+                        <div
+                          class="form-help"
+                          style="
+                            color: rgba(255, 255, 255, 0.8);
+                            margin-top: 4px;
+                          "
+                        >
+                          Quality control - things to avoid in the image
+                        </div>
+                      </div>
+                    </div>
+                  </details>
+                </div>
+
                 <button type="submit" class="btn btn-primary">
                   🚀 Genereer Blog Post
                 </button>

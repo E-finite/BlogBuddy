@@ -215,7 +215,7 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
     cursor.execute("""
         SELECT url, title, clean_text, page_type
         FROM scraped_pages
-        WHERE site_id = ?
+        WHERE site_id = %s
         ORDER BY 
             CASE page_type
                 WHEN 'landing' THEN 1
@@ -250,12 +250,15 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
     now = datetime.utcnow().isoformat()
     source_urls = [p["url"] for p in pages]
 
+    # First delete old DNA if exists (we only keep latest)
+    cursor.execute("DELETE FROM site_dna WHERE site_id = %s", (site_id,))
+
     cursor.execute("""
         INSERT INTO site_dna (
             site_id, brand_summary, target_audiences_json, pain_points_json,
             solutions_themes_json, tone_keywords_json, avoid_words_json,
             proof_points_json, compliance_notes_json, generated_at, source_pages_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         site_id,
         dna.get("brand_summary", ""),
@@ -295,7 +298,7 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
     cursor.execute("""
         SELECT *
         FROM site_dna
-        WHERE site_id = ?
+        WHERE site_id = %s
         ORDER BY generated_at DESC
         LIMIT 1
     """, (site_id,))

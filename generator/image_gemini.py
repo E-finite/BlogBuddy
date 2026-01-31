@@ -1,6 +1,6 @@
 """Image generation using Gemini only."""
 import logging
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict, Any
 import requests
 import config
 
@@ -9,35 +9,110 @@ logger = logging.getLogger(__name__)
 
 def generate_featured_image(
     topic: str,
-    brand_name: str = "",
-    language: str = "nl"
+    brand: Dict[str, Any] = None,
+    language: str = "nl",
+    image_settings: Dict[str, Any] = None,
+    variation_index: int = 0
 ) -> Tuple[Optional[bytes], str, str]:
     """
-    Generate a featured image using Gemini only.
+    Generate a featured image using Gemini Imagen.
+
+    Args:
+        topic: Blog post topic
+        brand: Brand info (name, colors, etc.)
+        language: Language code
+        image_settings: Image generation settings (preset, aspectRatio, etc.)
+        variation_index: Which variation number (for seed variation)
 
     Returns:
         Tuple of (image_bytes, mime_type, filename) or (None, "", "") on failure
     """
-    return _try_gemini_image(topic)
+    if brand is None:
+        brand = {}
+    if image_settings is None:
+        image_settings = {}
+
+    return _try_gemini_image(topic, brand, image_settings, variation_index)
 
 
-def _try_gemini_image(topic: str) -> Tuple[Optional[bytes], str, str]:
-    """Try Gemini Imagen API with correct structure."""
+def _try_gemini_image(
+    topic: str,
+    brand: Dict[str, Any],
+    image_settings: Dict[str, Any],
+    variation_index: int
+) -> Tuple[Optional[bytes], str, str]:
+    """Try Gemini Imagen API with customizable settings."""
     try:
-        prompt = f"""Create a professional, modern blog header image about: {topic}
+        # Extract settings
+        preset = image_settings.get("preset", "minimal-tech")
+        aspect_ratio = image_settings.get("aspectRatio", "16:9")
+        style_strength = image_settings.get("styleStrength", "medium")
+        use_brand_colors = image_settings.get("useBrandColors", False)
+        brand_colors = brand.get("colors", [])
+        composition = image_settings.get("composition", "auto")
+        lighting = image_settings.get("lighting", "soft-studio")
+        negative_prompt = image_settings.get(
+            "negativePrompt", "blurry, low quality, watermark, text overlay")
 
-Style: Clean, minimalist, abstract, high quality
+        # Build style description from preset
+        style_presets = {
+            "minimal-tech": "Clean, minimalist, modern tech aesthetic with geometric shapes",
+            "bold-creative": "Bold, creative, vibrant with strong visual elements",
+            "professional": "Professional, corporate, clean business aesthetic",
+            "modern-gradient": "Modern gradient design with smooth color transitions",
+            "flat-illustration": "Flat illustration style with simple shapes and colors"
+        }
+        style_desc = style_presets.get(preset, style_presets["minimal-tech"])
+
+        # Build lighting description
+        lighting_desc = {
+            "soft-studio": "soft studio lighting, even illumination",
+            "natural": "natural daylight, soft shadows",
+            "dramatic": "dramatic lighting with strong contrast",
+            "backlit": "backlit subject with rim lighting"
+        }.get(lighting, "soft studio lighting")
+
+        # Build composition description
+        composition_desc = {
+            "auto": "",
+            "centered": "centered hero composition",
+            "left-whitespace": "subject on left with generous whitespace on right",
+            "flat-lay": "flat lay top-down perspective",
+            "isometric": "isometric 3D perspective"
+        }.get(composition, "")
+
+        # Build color palette instruction
+        color_instruction = ""
+        if use_brand_colors and brand_colors:
+            color_hex_list = ", ".join(brand_colors)
+            color_instruction = f"\nColor palette: {color_hex_list}"
+
+        # Build style strength modifier
+        strength_modifier = {
+            "low": "subtle",
+            "medium": "",
+            "high": "bold and striking"
+        }.get(style_strength, "")
+
+        prompt = f"""Create a professional blog header image about: {topic}
+
+Style: {style_desc} {strength_modifier}
+{composition_desc}
+Lighting: {lighting_desc}{color_instruction}
+
 Requirements:
 - No text or logos
-- Professional and visually appealing  
+- Professional and visually appealing
 - Suitable for business blog featured image
-- Modern color palette
-- Landscape format ideal for blog header
-- High resolution, 16:9 aspect ratio"""
+- High resolution
+- Modern aesthetic"""
 
-        logger.info(f"Generating image with Imagen 4.0 for: {topic}")
+        logger.info(
+            f"Generating image variation {variation_index} with Imagen 4.0 for: {topic}")
+        logger.info(
+            f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
 
-        # Use correct Imagen API endpoint and structure from official docs
+        # Use correct Imagen API endpoint
         url = "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict"
 
         headers = {
@@ -49,9 +124,17 @@ Requirements:
             "instances": [{"prompt": prompt}],
             "parameters": {
                 "sampleCount": 1,
-                "aspectRatio": "16:9"
+                "aspectRatio": aspect_ratio
             }
         }
+
+        # Note: negativePrompt is no longer supported by Imagen API
+
+        # Add seed if locked
+        if image_settings.get("lockSeed") and image_settings.get("seedValue"):
+            # Vary seed slightly per variation
+            payload["parameters"]["seed"] = image_settings["seedValue"] + \
+                variation_index
 
         response = requests.post(
             url, json=payload, headers=headers, timeout=120)
@@ -85,7 +168,7 @@ Requirements:
                             prediction["image"]["bytesBase64Encoded"])
 
                 if image_bytes:
-                    filename = f"featured-{topic[:30].replace(' ', '-').lower()}.png"
+                    filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.png"
                     logger.info(
                         f"Imagen image generated successfully ({len(image_bytes)} bytes)")
                     return image_bytes, "image/png", filename

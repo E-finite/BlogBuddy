@@ -56,6 +56,11 @@ export function showModal(title, content, footer = null) {
 
 // Set button loading state
 export function setButtonLoading(button, loading) {
+  if (!button) {
+    console.error('setButtonLoading called with null button');
+    return;
+  }
+  
   if (loading) {
     button.disabled = true;
     button.classList.add('btn-loading');

@@ -283,7 +283,8 @@ def generate_post():
                 brand=req.brand.model_dump(),
                 language=req.language,
                 generate_image=req.generateImage,
-                site_id=req.siteId
+                site_id=req.siteId,
+                image_settings=req.imageSettings
             )
 
             draft["status"] = req.status

@@ -90,7 +90,7 @@ class ContextRetriever:
                 sp.page_type
             FROM page_chunks pc
             JOIN scraped_pages sp ON pc.page_id = sp.id
-            WHERE pc.site_id = ?
+            WHERE pc.site_id = %s
         """, (self.site_id,))
 
         rows = cursor.fetchall()

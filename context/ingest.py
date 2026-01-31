@@ -91,10 +91,10 @@ def ingest_website(
 
             # Store page
             cursor.execute("""
-                INSERT OR REPLACE INTO scraped_pages (
+                REPLACE INTO scraped_pages (
                     site_id, url, canonical_url, title, clean_text, headings_json,
                     status_code, fetched_at, content_hash, page_type
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 site_id,
                 page_data["url"],
@@ -123,7 +123,7 @@ def ingest_website(
                     INSERT INTO page_chunks (
                         page_id, site_id, chunk_index, section_heading,
                         chunk_text, chunk_tokens, url
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (
                     page_id,
                     site_id,
