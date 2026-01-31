@@ -257,8 +257,20 @@ function initGeneratePost() {
     try {
       const result = await api.generatePost(payload);
       
+      console.log('Generate Post Result:', result);
+      
+      // Extract the actual draft from the result
+      const draft = result.draft || (result.drafts && result.drafts[Object.keys(result.drafts)[0]]);
+      
+      if (!draft) {
+        throw new Error('Geen draft ontvangen van API');
+      }
+      
       // Store draft for publishing
-      sessionStorage.setItem('currentDraft', JSON.stringify(result));
+      sessionStorage.setItem('currentDraft', JSON.stringify(draft));
+      sessionStorage.setItem('currentSiteId', siteId);
+      
+      console.log('Stored draft:', draft);
       
       showAlert('Blog post gegenereerd!' + (contextSiteId ? ' (met website context)' : ''), 'success');
       
@@ -267,6 +279,7 @@ function initGeneratePost() {
       switchToPublishTab();
       
     } catch (error) {
+      console.error('Generate error:', error);
       showAlert(error.message || 'Fout bij genereren van blog post', 'error');
     } finally {
       setButtonLoading(submitBtn, false);
@@ -276,37 +289,66 @@ function initGeneratePost() {
 
 // Publish Post
 function initPublishPost() {
-  const publishBtn = document.getElementById('publish-post-btn');
-  if (!publishBtn) return;
+  const publishForm = document.getElementById('publish-post-form');
+  if (!publishForm) return;
   
-  publishBtn.addEventListener('click', async () => {
+  // Setup real-time preview sync
+  const titleInput = document.getElementById('title');
+  const contentInput = document.getElementById('content');
+  
+  if (titleInput && contentInput) {
+    // Update preview when title or content changes
+    titleInput.addEventListener('input', updatePublishPreviewFromForm);
+    contentInput.addEventListener('input', updatePublishPreviewFromForm);
+  }
+  
+  publishForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const submitBtn = publishForm.querySelector('button[type="submit"]');
     const draftData = sessionStorage.getItem('currentDraft');
-    const siteId = sessionStorage.getItem('currentSiteId');
     const imageData = sessionStorage.getItem('currentDraftImage');
     
-    if (!draftData) {
-      showAlert('Geen draft gevonden. Genereer eerst een blog post.', 'error');
+    // Get form data
+    const formData = new FormData(publishForm);
+    const pubSiteId = formData.get('pubSiteId');
+    
+    // Validation
+    if (!pubSiteId) {
+      showAlert('Selecteer een WordPress site.', 'error');
       return;
     }
     
-    if (!siteId) {
-      showAlert('Geen site geselecteerd. Verbind eerst een WordPress site.', 'error');
-      return;
+    // Get draft or use form values
+    let draft;
+    if (draftData) {
+      draft = JSON.parse(draftData);
+      console.log('Using stored draft:', draft);
+    } else {
+      // Fallback: use form values if no draft stored
+      draft = {
+        title: formData.get('title'),
+        contentHtml: formData.get('content'),
+        status: formData.get('isDraft') === 'on' ? 'draft' : 'publish'
+      };
+      console.log('Using form values as draft:', draft);
     }
-    
-    const draft = JSON.parse(draftData);
     
     // Add image data to draft if available
     if (imageData) {
       draft.image = JSON.parse(imageData);
+      console.log('Added image to draft');
     }
     
+    // Build payload with correct structure - draft as nested object
     const payload = {
-      siteId,
-      ...draft,
+      siteId: pubSiteId,
+      draft: draft
     };
     
-    setButtonLoading(publishBtn, true);
+    console.log('Publishing payload:', payload);
+    
+    setButtonLoading(submitBtn, true);
     
     try {
       const result = await api.publishPost(payload);
@@ -320,7 +362,7 @@ function initPublishPost() {
           updateJobStatus(job);
         },
         (job, error) => {
-          setButtonLoading(publishBtn, false);
+          setButtonLoading(submitBtn, false);
           if (error) {
             showAlert(`Fout bij job: ${error.message}`, 'error');
           } else if (job) {
@@ -333,8 +375,9 @@ function initPublishPost() {
       );
       
     } catch (error) {
+      console.error('Publish error:', error);
       showAlert(error.message || 'Fout bij publiceren', 'error');
-      setButtonLoading(publishBtn, false);
+      setButtonLoading(submitBtn, false);
     }
   });
 }
@@ -437,11 +480,13 @@ function fillPublishForm(result, siteId) {
     previewHtml += '<div class="card-header"><h3>Preview van Gegenereerde Post</h3></div>';
     previewHtml += '<div class="card-body">';
     
-    // Featured image
-    if (draft.image && draft.image.bytes_base64) {
+    // Featured image - check both draft.image and draft._image for compatibility
+    const imageData = draft.image || draft._image;
+    if (imageData && imageData.bytes_base64) {
       previewHtml += `
         <div style="margin-bottom: var(--spacing-lg);">
-          <img src="data:${draft.image.mime_type};base64,${draft.image.bytes_base64}" 
+          <h5 style="margin-bottom: var(--spacing-sm); color: var(--text-secondary);">Featured Image Preview:</h5>
+          <img src="data:${imageData.mime_type || imageData.mime};base64,${imageData.bytes_base64}" 
                alt="Featured Image" 
                style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
         </div>
@@ -461,8 +506,8 @@ function fillPublishForm(result, siteId) {
   }
   
   // Store image data for publishing
-  if (draft.image) {
-    sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image));
+  if (draft.image || draft._image) {
+    sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image || draft._image));
   }
 }
 
@@ -480,44 +525,100 @@ function restorePublishPreview() {
   const imageData = sessionStorage.getItem('currentDraftImage');
   const previewDiv = document.getElementById('publish-preview');
   
+  console.log('Restoring preview - draftData:', draftData);
+  console.log('Restoring preview - imageData:', imageData);
+  
   if (!previewDiv || !draftData) return;
   
   try {
     const draft = JSON.parse(draftData);
+    
+    console.log('Parsed draft:', draft);
     
     // Add image data if available
     if (imageData) {
       draft.image = JSON.parse(imageData);
     }
     
-    let previewHtml = '<div class="card" style="margin-bottom: var(--spacing-lg);">';
-    previewHtml += '<div class="card-header"><h3>Preview van Gegenereerde Post</h3></div>';
-    previewHtml += '<div class="card-body">';
-    
-    // Featured image
-    if (draft.image && draft.image.bytes_base64) {
-      previewHtml += `
-        <div style="margin-bottom: var(--spacing-lg);">
-          <img src="data:${draft.image.mime_type};base64,${draft.image.bytes_base64}" 
-               alt="Featured Image" 
-               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
-        </div>
-      `;
-    }
-    
-    previewHtml += `<h2>${draft.title}</h2>`;
-    if (draft.excerpt) {
-      previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
-    }
-    previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-    previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml}</div>`;
-    previewHtml += '</div></div>';
-    
-    previewDiv.innerHTML = previewHtml;
-    previewDiv.style.display = 'block';
+    renderPreview(draft, previewDiv);
   } catch (error) {
     console.error('Error restoring publish preview:', error);
   }
+}
+
+// Update preview from form inputs (real-time sync)
+function updatePublishPreviewFromForm() {
+  const titleInput = document.getElementById('title');
+  const contentInput = document.getElementById('content');
+  const previewDiv = document.getElementById('publish-preview');
+  const imageData = sessionStorage.getItem('currentDraftImage');
+  const draftData = sessionStorage.getItem('currentDraft');
+  
+  if (!previewDiv || !titleInput || !contentInput) return;
+  
+  // Build draft from current form values
+  const draft = {
+    title: titleInput.value || 'Geen titel',
+    contentHtml: contentInput.value || 'Geen content'
+  };
+  
+  // Add stored excerpt if available
+  if (draftData) {
+    try {
+      const storedDraft = JSON.parse(draftData);
+      if (storedDraft.excerpt) {
+        draft.excerpt = storedDraft.excerpt;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+  }
+  
+  // Add image data if available
+  if (imageData) {
+    try {
+      draft.image = JSON.parse(imageData);
+    } catch (e) {
+      // Ignore parse errors
+    }
+  }
+  
+  renderPreview(draft, previewDiv);
+}
+
+// Render preview HTML
+function renderPreview(draft, previewDiv) {
+  let previewHtml = '';
+  
+  // Featured image - separate card
+  const imageToDisplay = draft.image || draft._image;
+  if (imageToDisplay && imageToDisplay.bytes_base64) {
+    previewHtml += `
+      <div class="card" style="margin-bottom: var(--spacing-lg);">
+        <div class="card-header"><h3>Featured Image</h3></div>
+        <div class="card-body">
+          <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
+               alt="Featured Image" 
+               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+        </div>
+      </div>
+    `;
+  }
+  
+  // Content preview - separate card
+  previewHtml += '<div class="card" style="margin-bottom: var(--spacing-lg);">';
+  previewHtml += '<div class="card-header"><h3>Content Preview</h3></div>';
+  previewHtml += '<div class="card-body">';
+  previewHtml += `<h2>${draft.title || 'Geen titel'}</h2>`;
+  if (draft.excerpt) {
+    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${draft.excerpt}</p>`;
+  }
+  previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
+  previewHtml += `<div style="line-height: 1.6;">${draft.contentHtml || 'Geen content'}</div>`;
+  previewHtml += '</div></div>';
+  
+  previewDiv.innerHTML = previewHtml;
+  previewDiv.style.display = 'block';
 }
 
 function showPublishSuccess(wpPostIds) {

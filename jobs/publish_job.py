@@ -95,10 +95,12 @@ def _publish_single_draft(
     try:
         # Step A: Generate featured image (optional)
         image_media_id = None
-        if "_image" in draft:
+        # Support both "image" and "_image" field names
+        image_data = draft.get("image") or draft.get("_image")
+
+        if image_data:
             try:
                 db.add_job_step(job_id, f"generate_image_{lang}", "running")
-                image_data = draft["_image"]
 
                 # Decode base64 back to bytes if needed
                 if "bytes_base64" in image_data:
@@ -106,9 +108,10 @@ def _publish_single_draft(
                     image_bytes = base64.b64decode(image_data["bytes_base64"])
                 else:
                     # Legacy support for old format
-                    image_bytes = image_data["bytes"]
+                    image_bytes = image_data.get("bytes")
 
-                mime_type = image_data.get("mime", "image/jpeg")
+                mime_type = image_data.get(
+                    "mime_type") or image_data.get("mime", "image/jpeg")
                 filename = image_data.get("filename", "featured.jpg")
 
                 media = wp_client.upload_media(

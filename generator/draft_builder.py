@@ -110,10 +110,10 @@ def build_draft(
     if image_bytes:
         # Convert bytes to base64 for JSON serialization
         import base64
-        draft["_image"] = {
+        draft["image"] = {
             "bytes_base64": base64.b64encode(image_bytes).decode('utf-8'),
-            "mime": mime_type,
-            "filename": filename or f"featured-{slug}.jpg"
+            "mime_type": mime_type,
+            "filename": filename or f"featured-{content.get('slug', 'featured')}.jpg"
         }
 
     return draft
