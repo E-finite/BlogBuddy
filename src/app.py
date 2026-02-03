@@ -210,14 +210,16 @@ def connect_site():
         # Check if user already has a site (limit: 1 site per account)
         existing_sites = db.get_user_sites(current_user.id)
         # Filter out temporary context sites
-        real_sites = [site for site in existing_sites if site.get('wp_username') != '__context_temp__']
-        
+        real_sites = [site for site in existing_sites if site.get(
+            'wp_username') != '__context_temp__']
+
         replaced_site = None
         if real_sites:
             # Delete all existing real sites (should be only 1, but delete all to be safe)
             deleted_count = db.delete_user_sites(current_user.id)
             replaced_site = real_sites[0]
-            logger.info(f"User {current_user.id} replacing existing site: {replaced_site.get('wp_base_url')} - Deleted {deleted_count} site(s)")
+            logger.info(
+                f"User {current_user.id} replacing existing site: {replaced_site.get('wp_base_url')} - Deleted {deleted_count} site(s)")
 
         # Test connection
         try:
@@ -251,11 +253,11 @@ def connect_site():
                 "name": user_info.get("name")
             }
         }
-        
+
         if replaced_site:
             response_data["replaced"] = True
             response_data["oldSiteUrl"] = replaced_site.get("wp_base_url")
-        
+
         return jsonify(response_data), 200
 
     except Exception as e:

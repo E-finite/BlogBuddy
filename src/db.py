@@ -190,12 +190,14 @@ def delete_site(site_id: str, user_id: int) -> bool:
     cursor = conn.cursor()
     try:
         # Check if site belongs to user
-        cursor.execute("SELECT id FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        cursor.execute(
+            "SELECT id FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
         if not cursor.fetchone():
             return False
-        
+
         # Delete site (CASCADE will handle related data: scraped_pages, page_chunks, site_dna)
-        cursor.execute("DELETE FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        cursor.execute(
+            "DELETE FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
         conn.commit()
         return True
     finally:
