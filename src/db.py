@@ -184,6 +184,42 @@ def get_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, 
     return row
 
 
+def delete_site(site_id: str, user_id: int) -> bool:
+    """Delete a site and all its related data for a specific user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if site belongs to user
+        cursor.execute("SELECT id FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        if not cursor.fetchone():
+            return False
+        
+        # Delete site (CASCADE will handle related data: scraped_pages, page_chunks, site_dna)
+        cursor.execute("DELETE FROM sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        conn.commit()
+        return True
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_user_sites(user_id: int) -> int:
+    """Delete all sites for a specific user (excluding temp context sites)."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Delete all real sites for this user (not temp context sites)
+        cursor.execute("""
+            DELETE FROM sites 
+            WHERE user_id = %s AND wp_username != '__context_temp__'
+        """, (user_id,))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+        conn.close()
+
+
 def create_job(job_id: str, user_id: int, job_type: str, payload: Dict[str, Any]) -> None:
     """Create a new job for a specific user."""
     conn = get_db_connection()

@@ -202,10 +202,22 @@ def get_user_sites_api():
 @app.route("/api/sites/connect", methods=["POST"])
 @login_required
 def connect_site():
-    """Connect to a WordPress site - MULTI-TENANT."""
+    """Connect to a WordPress site - MULTI-TENANT. Replaces existing site if user already has one."""
     try:
         data = request.get_json()
         req = ConnectSiteRequest(**data)
+
+        # Check if user already has a site (limit: 1 site per account)
+        existing_sites = db.get_user_sites(current_user.id)
+        # Filter out temporary context sites
+        real_sites = [site for site in existing_sites if site.get('wp_username') != '__context_temp__']
+        
+        replaced_site = None
+        if real_sites:
+            # Delete all existing real sites (should be only 1, but delete all to be safe)
+            deleted_count = db.delete_user_sites(current_user.id)
+            replaced_site = real_sites[0]
+            logger.info(f"User {current_user.id} replacing existing site: {replaced_site.get('wp_base_url')} - Deleted {deleted_count} site(s)")
 
         # Test connection
         try:
@@ -231,14 +243,20 @@ def connect_site():
             default_author_id=user_info.get("id")
         )
 
-        return jsonify({
+        response_data = {
             "siteId": site_id,
             "ok": True,
             "wpUser": {
                 "id": user_info.get("id"),
                 "name": user_info.get("name")
             }
-        }), 200
+        }
+        
+        if replaced_site:
+            response_data["replaced"] = True
+            response_data["oldSiteUrl"] = replaced_site.get("wp_base_url")
+        
+        return jsonify(response_data), 200
 
     except Exception as e:
         logger.error(f"Error connecting site: {e}", exc_info=True)

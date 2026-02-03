@@ -55,6 +55,9 @@ function initConnectSite() {
   const form = document.getElementById('connect-site-form');
   if (!form) return;
   
+  // Check if user already has a site and show warning
+  checkExistingSites(form);
+  
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const submitBtn = form.querySelector('button[type="submit"]');
@@ -75,7 +78,12 @@ function initConnectSite() {
         payload.wpApplicationPassword
       );
       
-      showAlert(`Site verbonden! Site ID: ${result.siteId}`, 'success');
+      if (result.replaced) {
+        showAlert(`Site vervangen! Oude site (${result.oldSiteUrl}) is verwijderd en nieuwe site is verbonden.`, 'success', 8000);
+      } else {
+        showAlert(`Site verbonden! Site ID: ${result.siteId}`, 'success');
+      }
+      
       form.reset();
       
       // Reload sites dropdowns
@@ -84,12 +92,43 @@ function initConnectSite() {
       // Store siteId for later use
       sessionStorage.setItem('currentSiteId', result.siteId);
       
+      // Update warning message
+      checkExistingSites(form);
+      
     } catch (error) {
       showAlert(error.message || 'Fout bij verbinden met WordPress', 'error');
     } finally {
       setButtonLoading(submitBtn, false);
     }
   });
+}
+
+// Check if user has existing sites and show warning
+async function checkExistingSites(form) {
+  try {
+    const sites = await api.getSites();
+    
+    // Remove existing warning
+    const existingWarning = form.querySelector('.site-replace-warning');
+    if (existingWarning) {
+      existingWarning.remove();
+    }
+    
+    if (sites && sites.length > 0) {
+      // Show warning that connecting will replace existing site
+      const warningDiv = document.createElement('div');
+      warningDiv.className = 'alert alert-warning site-replace-warning';
+      warningDiv.style.marginTop = '1rem';
+      warningDiv.innerHTML = `
+        <strong>⚠️ Let op!</strong><br>
+        <small>Je hebt al een site verbonden: <strong>${sites[0].wp_base_url}</strong></small><br>
+        <small>Als je een nieuwe site verbindt, wordt de oude site automatisch vervangen.</small>
+      `;
+      form.appendChild(warningDiv);
+    }
+  } catch (error) {
+    console.error('Error checking existing sites:', error);
+  }
 }
 
 // Generate Post

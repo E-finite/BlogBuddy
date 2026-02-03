@@ -55,6 +55,10 @@ async function apiRequest(endpoint, options = {}) {
 // API Methods
 export const api = {
   // Sites
+  async getSites() {
+    return apiRequest('/api/sites');
+  },
+
   async connectSite(wpBaseUrl, wpUsername, wpApplicationPassword) {
     return apiRequest('/api/sites/connect', {
       method: 'POST',
