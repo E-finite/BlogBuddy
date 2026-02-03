@@ -4,7 +4,7 @@ from mysql.connector import Error
 import json
 from datetime import datetime
 from typing import Optional, Dict, Any, List
-import config
+from src import config
 
 
 def get_db_connection():

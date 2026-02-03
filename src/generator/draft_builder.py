@@ -1,8 +1,8 @@
 """Draft builder orchestrator."""
 import logging
 from typing import Dict, Any, List
-from generator.text_openai import generate_post_content
-from generator.image_gemini import generate_featured_image
+from src.generator.text_openai import generate_post_content
+from src.generator.image_gemini import generate_featured_image
 
 logger = logging.getLogger(__name__)
 

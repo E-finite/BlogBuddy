@@ -1,29 +1,36 @@
 """Flask API application."""
-from jobs.worker import start_worker
+from src.jobs.worker import start_worker
 import uuid
 import json
 import logging
-import config
+from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from datetime import datetime
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
-import db
-import crypto_utils
-import wp_client
-from models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
-from generator.draft_builder import build_draft, build_multilang_drafts
-from jobs.queue import enqueue_job
-from auth import User
+from src import db
+from src import crypto_utils
+from src import wp_client
+from src.models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
+from src.generator.draft_builder import build_draft, build_multilang_drafts
+from src.jobs.queue import enqueue_job
+from src.auth import User
 
 # Configure logging
+import os
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+# Get the project root directory (parent of src/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+app = Flask(__name__, 
+           template_folder=os.path.join(BASE_DIR, 'templates'),
+           static_folder=os.path.join(BASE_DIR, 'static'))
 app.secret_key = config.MASTER_KEY  # Use master key from config for sessions
 
 # Initialize Flask-Login
@@ -552,6 +559,6 @@ def index():
 
 
 if __name__ == "__main__":
-    import config
+    from src import config
     logger.info(f"Starting Flask app on {config.APP_HOST}:{config.APP_PORT}")
     app.run(host=config.APP_HOST, port=config.APP_PORT, debug=False)

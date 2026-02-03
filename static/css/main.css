@@ -1,6 +1,10 @@
 /**
  * Main Stylesheet - Imports all CSS modules
+ * SME Blog Platform - Professional & Business-friendly
  */
+
+/* Google Fonts - Roboto */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&family=Roboto+Mono:wght@400;500&display=swap');
 
 @import url('colors.css');
 @import url('base.css');

@@ -2,9 +2,9 @@
 import threading
 import logging
 import time
-import db
-from jobs.queue import dequeue_job
-from jobs.publish_job import execute_publish_job
+from src import db
+from src.jobs.queue import dequeue_job
+from src.jobs.publish_job import execute_publish_job
 
 logger = logging.getLogger(__name__)
 

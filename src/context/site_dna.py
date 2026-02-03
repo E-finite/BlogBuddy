@@ -3,7 +3,7 @@ import logging
 import json
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
-import config
+from src import config
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=config.OPENAI_API_KEY)

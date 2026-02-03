@@ -4,7 +4,7 @@ import time
 import logging
 from typing import Dict, Any, Optional, Tuple
 from requests.auth import HTTPBasicAuth
-import crypto_utils
+from src import crypto_utils
 
 logger = logging.getLogger(__name__)
 

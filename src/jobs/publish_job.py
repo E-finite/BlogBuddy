@@ -1,9 +1,9 @@
 """Publish job implementation."""
 import logging
 from typing import Dict, Any, Optional
-import db
-import wp_client
-from generator.image_gemini import generate_featured_image
+from src import db
+from src import wp_client
+from src.generator.image_gemini import generate_featured_image
 
 logger = logging.getLogger(__name__)
 

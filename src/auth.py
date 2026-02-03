@@ -1,7 +1,7 @@
 """Authentication models and utilities."""
 from flask_login import UserMixin
 from typing import Optional
-import db
+from src import db
 
 
 class User(UserMixin):
