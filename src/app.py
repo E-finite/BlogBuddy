@@ -28,9 +28,9 @@ logger = logging.getLogger(__name__)
 # Get the project root directory (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-app = Flask(__name__, 
-           template_folder=os.path.join(BASE_DIR, 'templates'),
-           static_folder=os.path.join(BASE_DIR, 'static'))
+app = Flask(__name__,
+            template_folder=os.path.join(BASE_DIR, 'templates'),
+            static_folder=os.path.join(BASE_DIR, 'static'))
 app.secret_key = config.MASTER_KEY  # Use master key from config for sessions
 
 # Initialize Flask-Login
