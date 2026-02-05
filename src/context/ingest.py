@@ -31,7 +31,8 @@ def ingest_website(
     Returns:
         Dictionary with ingest statistics
     """
-    logger.info(f"Starting website ingest for site: {site_id} (type: {site_type})")
+    logger.info(
+        f"Starting website ingest for site: {site_id} (type: {site_type})")
 
     # Get site info based on type
     if site_type == 'context':
@@ -82,9 +83,15 @@ def ingest_website(
 
     pages_stored = 0
     chunks_stored = 0
+    all_colors = []  # Collect colors from all pages
 
     for page_data in crawled_pages:
         try:
+            # Extract colors from HTML
+            from src.context.extractor import extract_colors_from_html
+            page_colors = extract_colors_from_html(page_data["html"])
+            all_colors.extend(page_colors)
+            
             # Extract clean content
             extracted = extractor.extract_clean_text(
                 html=page_data["html"],
@@ -164,7 +171,13 @@ def ingest_website(
     # Step 3: Generate Site DNA
     logger.info("Step 3/4: Generating Site DNA...")
     try:
-        site_dna = refresh_site_dna(site_id, site_type=site_type)
+        # Get unique colors (most common ones first)
+        from collections import Counter
+        color_counts = Counter(all_colors)
+        unique_colors = [color for color, count in color_counts.most_common(10)]
+        logger.info(f"Extracted {len(unique_colors)} unique colors from pages")
+        
+        site_dna = refresh_site_dna(site_id, site_type=site_type, extracted_colors=unique_colors)
         logger.info("Site DNA generated successfully")
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")

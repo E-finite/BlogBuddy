@@ -11,7 +11,8 @@ client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 def generate_site_dna(
     pages: List[Dict[str, Any]],
-    site_url: str
+    site_url: str,
+    extracted_colors: List[str] = None
 ) -> Dict[str, Any]:
     """
     Generate site DNA from scraped pages.
@@ -29,6 +30,7 @@ def generate_site_dna(
     Args:
         pages: List of page dictionaries with clean_text, title, url, page_type
         site_url: Base URL of the site
+        extracted_colors: Pre-extracted hex color codes from HTML
 
     Returns:
         Dictionary with site DNA
@@ -69,6 +71,8 @@ WEBSITE: {site_url}
 PAGINA'S:
 {pages_context}
 
+{f"GEËXTRAHEERDE KLEUREN UIT HTML: {', '.join(extracted_colors[:10])}" if extracted_colors else ""}
+
 Genereer een JSON object met deze structuur:
 {{
   "brand_name": "De merknaam zoals genoemd op de website (bijv. 'Acme Inc', 'Tech Solutions')",
@@ -85,7 +89,7 @@ Genereer een JSON object met deze structuur:
 
 Regels:
 - brand_name: De officiële bedrijfsnaam zoals gebruikt op de website (niet de domeinnaam)
-- brand_colors: Primaire kleuren als hex codes (schat de kleuren uit het design, max 3 kleuren). Als niet duidelijk: lege array.
+- brand_colors: {f"Gebruik de geëxtraheerde kleuren hierboven. Kies max 3 primaire/opvallende kleuren." if extracted_colors else "Lege array (geen kleuren beschikbaar)."}
 - tone_keywords: 5-10 woorden die de schrijfstijl beschrijven (bijv. "nuchter", "praktisch", "toegankelijk")
 - avoid_words: overdreven termen die NIET passen bij de tone (bijv. "revolutionair", "uniek", "beste")
 - proof_points: alleen claims die je letterlijk terug kunt vinden in de content (geen aannames)
@@ -105,7 +109,6 @@ Wees kritisch en accuraat. Geen fantasie.
             temperature=0.3,  # Lower temperature for factual extraction
             max_tokens=2000
         )
-
         content = response.choices[0].message.content
         dna = json.loads(content)
 
@@ -201,13 +204,14 @@ CONTENT:
     return "\n\n".join(context_parts)
 
 
-def refresh_site_dna(site_id: str, site_type: str = 'wp') -> Dict[str, Any]:
+def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List[str] = None) -> Dict[str, Any]:
     """
     Refresh Site DNA for a site by re-analyzing scraped pages.
 
     Args:
         site_id: Site identifier
         site_type: Type of site ('wp' or 'context')
+        extracted_colors: Pre-extracted color hex codes from HTML
 
     Returns:
         Generated Site DNA dictionary
@@ -255,7 +259,7 @@ def refresh_site_dna(site_id: str, site_type: str = 'wp') -> Dict[str, Any]:
         site_url = site["wp_base_url"] if site else "unknown"
 
     # Generate DNA
-    dna = generate_site_dna(pages, site_url)
+    dna = generate_site_dna(pages, site_url, extracted_colors=extracted_colors)
 
     # Store in database
     conn = get_db_connection()
@@ -265,7 +269,8 @@ def refresh_site_dna(site_id: str, site_type: str = 'wp') -> Dict[str, Any]:
     source_urls = [p["url"] for p in pages]
 
     # First delete old DNA if exists (we only keep latest)
-    cursor.execute("DELETE FROM site_dna WHERE site_id = %s AND site_type = %s", (site_id, site_type))
+    cursor.execute(
+        "DELETE FROM site_dna WHERE site_id = %s AND site_type = %s", (site_id, site_type))
 
     cursor.execute("""
         INSERT INTO site_dna (

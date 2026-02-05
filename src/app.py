@@ -373,7 +373,8 @@ def crawl_for_context():
         # Clean up old context sites (older than 30 days / 1 month)
         cleaned = db.cleanup_old_context_sites(current_user.id, days_old=30)
         if cleaned > 0:
-            logger.info(f"Cleaned up {cleaned} old context site(s) for user {current_user.id}")
+            logger.info(
+                f"Cleaned up {cleaned} old context site(s) for user {current_user.id}")
 
         # Normalize URL - add trailing slash if not present
         if not website_url.endswith('/'):
@@ -407,7 +408,7 @@ def crawl_for_context():
         # BUT: if we got SOME content from SOME pages, it's not purely JS
         pages_crawled = result.get("pages_crawled", 0)
         pages_stored = result.get("pages_stored", 0)
-        
+
         # Consider it a JS site only if:
         # 1. We crawled multiple pages (at least 3)
         # 2. NONE of them had extractable content
@@ -583,22 +584,23 @@ def get_site_dna_api(site_id):
     try:
         # Check if it's a WordPress site
         site = db.get_site(site_id, user_id=current_user.id)
-        
+
         if not site:
             # Check if it's a context site
-            context_site = db.get_context_site(site_id, user_id=current_user.id)
+            context_site = db.get_context_site(
+                site_id, user_id=current_user.id)
             if not context_site:
                 return jsonify({"error": f"Site {site_id} not found or access denied"}), 404
-        
+
         # Get Site DNA (works for both WP and context sites)
         from src.context.site_dna import get_site_dna
         dna = get_site_dna(site_id)
-        
+
         if not dna:
             return jsonify({"error": "No Site DNA found for this site"}), 404
-        
+
         return jsonify(dna), 200
-    
+
     except Exception as e:
         logger.error(f"Error fetching Site DNA: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
