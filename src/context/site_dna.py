@@ -52,6 +52,7 @@ Je taak is om een "Site DNA" te creëren: een compacte maar complete beschrijvin
 - Hoe ze communiceren (tone of voice)
 - Wat wel/niet te zeggen (woordenlijst)
 - Feitelijke bewijspunten die op de site staan
+- Brand informatie (naam en kleuren)
 
 BELANGRIJK:
 - Gebruik alleen informatie die LETTERLIJK op de website staat
@@ -70,6 +71,8 @@ PAGINA'S:
 
 Genereer een JSON object met deze structuur:
 {{
+  "brand_name": "De merknaam zoals genoemd op de website (bijv. 'Acme Inc', 'Tech Solutions')",
+  "brand_colors": ["#hex1", "#hex2", ...],
   "brand_summary": "Korte beschrijving (2-3 zinnen) van wat de organisatie doet en belooft",
   "target_audiences": ["primaire doelgroep 1", "doelgroep 2", ...],
   "pain_points": ["pijnpunt/probleem dat klanten hebben", ...],
@@ -81,6 +84,8 @@ Genereer een JSON object met deze structuur:
 }}
 
 Regels:
+- brand_name: De officiële bedrijfsnaam zoals gebruikt op de website (niet de domeinnaam)
+- brand_colors: Primaire kleuren als hex codes (schat de kleuren uit het design, max 3 kleuren). Als niet duidelijk: lege array.
 - tone_keywords: 5-10 woorden die de schrijfstijl beschrijven (bijv. "nuchter", "praktisch", "toegankelijk")
 - avoid_words: overdreven termen die NIET passen bij de tone (bijv. "revolutionair", "uniek", "beste")
 - proof_points: alleen claims die je letterlijk terug kunt vinden in de content (geen aannames)
@@ -106,7 +111,7 @@ Wees kritisch en accuraat. Geen fantasie.
 
         # Validate structure
         required_fields = [
-            "brand_summary", "target_audiences", "pain_points",
+            "brand_name", "brand_colors", "brand_summary", "target_audiences", "pain_points",
             "solutions_themes", "tone_keywords", "avoid_words",
             "proof_points", "compliance_notes"
         ]
@@ -114,7 +119,10 @@ Wees kritisch en accuraat. Geen fantasie.
         for field in required_fields:
             if field not in dna:
                 logger.warning(f"Missing field in Site DNA: {field}")
-                dna[field] = [] if field != "brand_summary" else ""
+                if field in ["brand_name", "brand_summary"]:
+                    dna[field] = ""
+                else:
+                    dna[field] = []
 
         logger.info("Site DNA generated successfully")
         return dna
@@ -193,29 +201,30 @@ CONTENT:
     return "\n\n".join(context_parts)
 
 
-def refresh_site_dna(site_id: str) -> Dict[str, Any]:
+def refresh_site_dna(site_id: str, site_type: str = 'wp') -> Dict[str, Any]:
     """
     Refresh Site DNA for a site by re-analyzing scraped pages.
 
     Args:
         site_id: Site identifier
+        site_type: Type of site ('wp' or 'context')
 
     Returns:
         Generated Site DNA dictionary
     """
-    from db import get_db_connection
+    from src.db import get_db_connection
     from datetime import datetime
 
-    logger.info(f"Refreshing Site DNA for site: {site_id}")
+    logger.info(f"Refreshing Site DNA for site: {site_id} (type: {site_type})")
 
     # Get scraped pages from database
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
         SELECT url, title, clean_text, page_type
         FROM scraped_pages
-        WHERE site_id = %s
+        WHERE site_id = %s AND site_type = %s
         ORDER BY 
             CASE page_type
                 WHEN 'landing' THEN 1
@@ -225,7 +234,7 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
                 WHEN 'faq' THEN 5
                 ELSE 6
             END
-    """, (site_id,))
+    """, (site_id, site_type))
 
     rows = cursor.fetchall()
     conn.close()
@@ -235,10 +244,15 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
 
     pages = [dict(row) for row in rows]
 
-    # Get site URL
-    from db import get_site
-    site = get_site(site_id)
-    site_url = site["wp_base_url"] if site else "unknown"
+    # Get site URL based on type
+    if site_type == 'context':
+        from src.db import get_context_site
+        site = get_context_site(site_id)
+        site_url = site["base_url"] if site else "unknown"
+    else:
+        from src.db import get_site
+        site = get_site(site_id)
+        site_url = site["wp_base_url"] if site else "unknown"
 
     # Generate DNA
     dna = generate_site_dna(pages, site_url)
@@ -251,16 +265,19 @@ def refresh_site_dna(site_id: str) -> Dict[str, Any]:
     source_urls = [p["url"] for p in pages]
 
     # First delete old DNA if exists (we only keep latest)
-    cursor.execute("DELETE FROM site_dna WHERE site_id = %s", (site_id,))
+    cursor.execute("DELETE FROM site_dna WHERE site_id = %s AND site_type = %s", (site_id, site_type))
 
     cursor.execute("""
         INSERT INTO site_dna (
-            site_id, brand_summary, target_audiences_json, pain_points_json,
+            site_id, site_type, brand_name, brand_colors_json, brand_summary, target_audiences_json, pain_points_json,
             solutions_themes_json, tone_keywords_json, avoid_words_json,
             proof_points_json, compliance_notes_json, generated_at, source_pages_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         site_id,
+        site_type,
+        dna.get("brand_name", ""),
+        json.dumps(dna.get("brand_colors", [])),
         dna.get("brand_summary", ""),
         json.dumps(dna.get("target_audiences", [])),
         json.dumps(dna.get("pain_points", [])),
@@ -290,10 +307,10 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
     Returns:
         Site DNA dictionary or None if not found
     """
-    from db import get_db_connection
+    from src.db import get_db_connection
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
         SELECT *
@@ -310,6 +327,8 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
         return None
 
     return {
+        "brand_name": row.get("brand_name", ""),
+        "brand_colors": json.loads(row.get("brand_colors_json", "[]")) if row.get("brand_colors_json") else [],
         "brand_summary": row["brand_summary"],
         "target_audiences": json.loads(row["target_audiences_json"]),
         "pain_points": json.loads(row["pain_points_json"]),

@@ -58,6 +58,18 @@ def init_db():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
+    # Context Sites table - For scraped websites (not WordPress sites)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS context_sites (
+            id VARCHAR(36) PRIMARY KEY,
+            user_id INT NOT NULL,
+            base_url VARCHAR(255) NOT NULL,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
     # Jobs table - MULTI-TENANT: each job belongs to a user
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS jobs (
@@ -91,11 +103,12 @@ def init_db():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
-    # Scraped pages table
+    # Scraped pages table - can reference both sites and context_sites
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS scraped_pages (
             id INT AUTO_INCREMENT PRIMARY KEY,
             site_id VARCHAR(36) NOT NULL,
+            site_type ENUM('wp', 'context') DEFAULT 'wp',
             url VARCHAR(500) NOT NULL,
             canonical_url VARCHAR(500),
             title VARCHAR(255),
@@ -106,12 +119,29 @@ def init_db():
             fetched_at DATETIME NOT NULL,
             content_hash VARCHAR(64),
             page_type VARCHAR(50),
-            FOREIGN KEY (site_id) REFERENCES sites(id),
             UNIQUE KEY unique_site_url (site_id, url(191)),
             INDEX idx_site_id (site_id),
+            INDEX idx_site_type (site_type),
             INDEX idx_content_hash (content_hash)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
+    
+    # Add site_type column if it doesn't exist (migration)
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'scraped_pages'
+            AND column_name = 'site_type'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] == 0:
+            cursor.execute("ALTER TABLE scraped_pages ADD COLUMN site_type ENUM('wp', 'context') DEFAULT 'wp' AFTER site_id")
+            print("✅ Added site_type column to scraped_pages table")
+    except Exception as e:
+        print(f"⚠️ Migration note (scraped_pages): {e}")
 
     # Page chunks table
     cursor.execute("""
@@ -119,23 +149,44 @@ def init_db():
             id INT AUTO_INCREMENT PRIMARY KEY,
             page_id INT NOT NULL,
             site_id VARCHAR(36) NOT NULL,
+            site_type ENUM('wp', 'context') DEFAULT 'wp',
             chunk_index INT NOT NULL,
             section_heading VARCHAR(255),
             chunk_text TEXT NOT NULL,
             chunk_tokens INT,
             url VARCHAR(500),
-            FOREIGN KEY (page_id) REFERENCES scraped_pages(id),
-            FOREIGN KEY (site_id) REFERENCES sites(id),
+            FOREIGN KEY (page_id) REFERENCES scraped_pages(id) ON DELETE CASCADE,
             INDEX idx_site_id (site_id),
+            INDEX idx_site_type (site_type),
             INDEX idx_page_id (page_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
+    
+    # Add site_type column if it doesn't exist (migration)
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'page_chunks'
+            AND column_name = 'site_type'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] == 0:
+            cursor.execute("ALTER TABLE page_chunks ADD COLUMN site_type ENUM('wp', 'context') DEFAULT 'wp' AFTER site_id")
+            print("✅ Added site_type column to page_chunks table")
+    except Exception as e:
+        print(f"⚠️ Migration note (page_chunks): {e}")
 
     # Site DNA table (brand identity extracted from website)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS site_dna (
             id INT AUTO_INCREMENT PRIMARY KEY,
             site_id VARCHAR(36) NOT NULL,
+            site_type ENUM('wp', 'context') DEFAULT 'wp',
+            brand_name VARCHAR(255),
+            brand_colors_json TEXT,
             brand_summary TEXT,
             target_audiences_json TEXT,
             pain_points_json TEXT,
@@ -146,10 +197,95 @@ def init_db():
             compliance_notes_json TEXT,
             generated_at DATETIME NOT NULL,
             source_pages_json TEXT,
-            FOREIGN KEY (site_id) REFERENCES sites(id),
-            INDEX idx_site_id (site_id)
+            INDEX idx_site_id (site_id),
+            INDEX idx_site_type (site_type)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
+    
+    # Add brand_name and brand_colors_json columns if they don't exist (migration)
+    try:
+        # First check and add site_type if needed
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'site_dna'
+            AND column_name = 'site_type'
+        """, (config.MYSQL_DATABASE,))
+        
+        has_site_type = cursor.fetchone()[0] > 0
+        
+        if not has_site_type:
+            cursor.execute("ALTER TABLE site_dna ADD COLUMN site_type ENUM('wp', 'context') DEFAULT 'wp' AFTER site_id")
+            print("✅ Added site_type column to site_dna table")
+        
+        # Then check and add brand_name
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'site_dna'
+            AND column_name = 'brand_name'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] == 0:
+            cursor.execute("ALTER TABLE site_dna ADD COLUMN brand_name VARCHAR(255) AFTER site_type")
+            cursor.execute("ALTER TABLE site_dna ADD COLUMN brand_colors_json TEXT AFTER brand_name")
+            print("✅ Added brand_name and brand_colors_json columns to site_dna table")
+    except Exception as e:
+        print(f"⚠️ Migration note (site_dna): {e}")
+
+    # Drop foreign key constraint from scraped_pages to support both sites and context_sites
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE table_schema = %s
+            AND table_name = 'scraped_pages'
+            AND constraint_name = 'scraped_pages_ibfk_1'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] > 0:
+            cursor.execute("ALTER TABLE scraped_pages DROP FOREIGN KEY scraped_pages_ibfk_1")
+            print("✅ Dropped foreign key constraint scraped_pages_ibfk_1 to support context_sites")
+    except Exception as e:
+        print(f"⚠️ Migration note (scraped_pages FK): {e}")
+
+    # Drop foreign key constraint from page_chunks to support both sites and context_sites
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE table_schema = %s
+            AND table_name = 'page_chunks'
+            AND constraint_name = 'page_chunks_ibfk_2'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] > 0:
+            cursor.execute("ALTER TABLE page_chunks DROP FOREIGN KEY page_chunks_ibfk_2")
+            print("✅ Dropped foreign key constraint page_chunks_ibfk_2 to support context_sites")
+    except Exception as e:
+        print(f"⚠️ Migration note (page_chunks FK): {e}")
+
+    # Drop foreign key constraint from site_dna to support both sites and context_sites
+    try:
+        cursor.execute("""
+            SELECT COUNT(*) as count
+            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+            WHERE table_schema = %s
+            AND table_name = 'site_dna'
+            AND constraint_name = 'site_dna_ibfk_1'
+        """, (config.MYSQL_DATABASE,))
+        
+        result = cursor.fetchone()
+        if result[0] > 0:
+            cursor.execute("ALTER TABLE site_dna DROP FOREIGN KEY site_dna_ibfk_1")
+            print("✅ Dropped foreign key constraint site_dna_ibfk_1 to support context_sites")
+    except Exception as e:
+        print(f"⚠️ Migration note (site_dna FK): {e}")
 
     conn.commit()
     cursor.close()
@@ -206,14 +342,144 @@ def delete_site(site_id: str, user_id: int) -> bool:
 
 
 def delete_user_sites(user_id: int) -> int:
-    """Delete all sites for a specific user (excluding temp context sites)."""
+    """Delete all WordPress sites for a specific user."""
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Delete all real sites for this user (not temp context sites)
+        cursor.execute("""
+            DELETE FROM sites WHERE user_id = %s
+        """, (user_id,))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+        conn.close()
+
+
+# Context Sites functions
+def create_context_site(site_id: str, user_id: int, base_url: str) -> None:
+    """Create a new context site record for scraped websites."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO context_sites (id, user_id, base_url, created_at)
+        VALUES (%s, %s, %s, %s)
+    """, (site_id, user_id, base_url, datetime.utcnow()))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def get_context_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
+    """Get a context site by ID, optionally filtered by user."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    if user_id:
+        cursor.execute(
+            "SELECT * FROM context_sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+    else:
+        cursor.execute("SELECT * FROM context_sites WHERE id = %s", (site_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def get_user_context_sites(user_id: int) -> List[Dict[str, Any]]:
+    """Get all context sites for a specific user."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT * FROM context_sites WHERE user_id = %s ORDER BY created_at DESC
+    """, (user_id,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
+    """Delete context sites older than specified days for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # First, delete related data (scraped_pages, page_chunks, site_dna)
+        cursor.execute("""
+            DELETE sp, pc, sd FROM context_sites cs
+            LEFT JOIN scraped_pages sp ON sp.site_id = cs.id AND sp.site_type = 'context'
+            LEFT JOIN page_chunks pc ON pc.site_id = cs.id AND pc.site_type = 'context'
+            LEFT JOIN site_dna sd ON sd.site_id = cs.id AND sd.site_type = 'context'
+            WHERE cs.user_id = %s 
+            AND cs.created_at < DATE_SUB(NOW(), INTERVAL %s DAY)
+        """, (user_id, days_old))
+        
+        # Then delete the context sites themselves
+        cursor.execute("""
+            DELETE FROM context_sites 
+            WHERE user_id = %s 
+            AND created_at < DATE_SUB(NOW(), INTERVAL %s DAY)
+        """, (user_id, days_old))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_all_context_sites(user_id: int) -> int:
+    """Delete all context sites for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Delete related data first
+        cursor.execute("""
+            DELETE sp, pc, sd FROM context_sites cs
+            LEFT JOIN scraped_pages sp ON sp.site_id = cs.id AND sp.site_type = 'context'
+            LEFT JOIN page_chunks pc ON pc.site_id = cs.id AND pc.site_type = 'context'
+            LEFT JOIN site_dna sd ON sd.site_id = cs.id AND sd.site_type = 'context'
+            WHERE cs.user_id = %s
+        """, (user_id,))
+        
+        # Then delete context sites
+        cursor.execute("""
+            DELETE FROM context_sites WHERE user_id = %s
+        """, (user_id,))
+        conn.commit()
+        return cursor.rowcount
+    finally:
+        cursor.close()
+        conn.close()
+
+
+def delete_context_site(site_id: str, user_id: int) -> bool:
+    """Delete a specific context site and its related data."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        # Check if site belongs to user
+        cursor.execute(
+            "SELECT id FROM context_sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        if not cursor.fetchone():
+            return False
+        
+        # Delete related data
+        cursor.execute("DELETE FROM scraped_pages WHERE site_id = %s AND site_type = 'context'", (site_id,))
+        cursor.execute("DELETE FROM page_chunks WHERE site_id = %s AND site_type = 'context'", (site_id,))
+        cursor.execute("DELETE FROM site_dna WHERE site_id = %s AND site_type = 'context'", (site_id,))
+        
+        # Delete context site
+        cursor.execute(
+            "DELETE FROM context_sites WHERE id = %s AND user_id = %s", (site_id, user_id))
+        conn.commit()
+        return True
+    finally:
+        cursor.close()
+        conn.close()
+    cursor = conn.cursor()
+    try:
         cursor.execute("""
             DELETE FROM sites 
-            WHERE user_id = %s AND wp_username != '__context_temp__'
+            WHERE user_id = %s AND wp_username = '__context_temp__'
         """, (user_id,))
         conn.commit()
         return cursor.rowcount

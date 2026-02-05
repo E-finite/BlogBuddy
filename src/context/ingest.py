@@ -15,7 +15,8 @@ def ingest_website(
     site_id: str,
     seed_urls: Optional[List[str]] = None,
     max_depth: int = 3,
-    max_pages: int = 50
+    max_pages: int = 50,
+    site_type: str = 'wp'
 ) -> Dict[str, Any]:
     """
     Ingest website content: crawl, extract, chunk, and generate Site DNA.
@@ -25,18 +26,25 @@ def ingest_website(
         seed_urls: URLs to start crawling from (defaults to site base URL)
         max_depth: Maximum crawl depth
         max_pages: Maximum pages to crawl
+        site_type: Type of site ('wp' or 'context')
 
     Returns:
         Dictionary with ingest statistics
     """
-    logger.info(f"Starting website ingest for site: {site_id}")
+    logger.info(f"Starting website ingest for site: {site_id} (type: {site_type})")
 
-    # Get site info
-    site = get_site(site_id)
-    if not site:
-        raise ValueError(f"Site not found: {site_id}")
-
-    base_url = site["wp_base_url"]
+    # Get site info based on type
+    if site_type == 'context':
+        from src.db import get_context_site
+        site = get_context_site(site_id)
+        if not site:
+            raise ValueError(f"Context site not found: {site_id}")
+        base_url = site["base_url"]
+    else:
+        site = get_site(site_id)
+        if not site:
+            raise ValueError(f"Site not found: {site_id}")
+        base_url = site["wp_base_url"]
 
     # Default seed URLs
     if seed_urls is None:
@@ -92,11 +100,12 @@ def ingest_website(
             # Store page
             cursor.execute("""
                 REPLACE INTO scraped_pages (
-                    site_id, url, canonical_url, title, clean_text, headings_json,
+                    site_id, site_type, url, canonical_url, title, clean_text, headings_json,
                     status_code, fetched_at, content_hash, page_type
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
                 site_id,
+                site_type,
                 page_data["url"],
                 page_data["canonical_url"],
                 page_data["title"],
@@ -121,12 +130,13 @@ def ingest_website(
             for chunk in chunks:
                 cursor.execute("""
                     INSERT INTO page_chunks (
-                        page_id, site_id, chunk_index, section_heading,
+                        page_id, site_id, site_type, chunk_index, section_heading,
                         chunk_text, chunk_tokens, url
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 """, (
                     page_id,
                     site_id,
+                    site_type,
                     chunk["chunk_index"],
                     chunk["section_heading"],
                     chunk["chunk_text"],
@@ -154,7 +164,7 @@ def ingest_website(
     # Step 3: Generate Site DNA
     logger.info("Step 3/4: Generating Site DNA...")
     try:
-        site_dna = refresh_site_dna(site_id)
+        site_dna = refresh_site_dna(site_id, site_type=site_type)
         logger.info("Site DNA generated successfully")
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")

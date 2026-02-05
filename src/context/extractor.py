@@ -45,9 +45,10 @@ class ContentExtractor:
                 html,
                 include_links=False,
                 include_images=False,
-                include_tables=False,
+                include_tables=True,      # Include tables (changed from False)
                 no_fallback=False,
-                favor_precision=False,  # Less precision, more content
+                favor_precision=False,     # Favor recall over precision
+                favor_recall=True,         # Get more content, even if less precise
                 deduplicate=True
             )
 
@@ -95,21 +96,25 @@ class ContentExtractor:
             f"HTML structure - body length: {len(soup.body.get_text()) if soup.body else 0}")
 
         # Remove unwanted elements
-        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript']):
+        for element in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'noscript', 'iframe']):
             element.decompose()
 
-        # Try common content containers
+        # Try common content containers (WordPress and general)
         content_selectors = [
             'main',
             'article',
             '[role="main"]',
+            '.entry-content',      # WordPress standard
+            '.post-content',       # WordPress standard
             '.content',
             '.main-content',
             '#content',
             '#main',
-            '.post-content',
-            '.entry-content',
-            'body'
+            '.site-content',       # WordPress common
+            '.page-content',       # WordPress common
+            '.elementor',          # Elementor builder
+            '.wp-block-post-content',  # Gutenberg
+            'body'                 # Last resort
         ]
 
         content_text = ""
@@ -118,21 +123,21 @@ class ContentExtractor:
             if container:
                 # Get all text, preserving paragraph structure
                 paragraphs = []
-                for p in container.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'li', 'div']):
+                for p in container.find_all(['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'div', 'span']):
                     text = p.get_text(strip=True)
-                    # Be less strict - accept shorter text
-                    if text and len(text) > 10 and not self._is_likely_noise(text):
+                    # Be less strict - accept shorter text (lowered from 10 to 5)
+                    if text and len(text) > 5 and not self._is_likely_noise(text):
                         paragraphs.append(text)
 
                 content_text = "\n\n".join(paragraphs)
                 logger.info(
                     f"Selector '{selector}' found {len(paragraphs)} text blocks, {len(content_text)} chars")
-                if len(content_text) > 100:  # Lower threshold
+                if len(content_text) > 50:  # Lowered threshold from 100 to 50
                     break
 
-        # If still no content, try body directly
-        if not content_text or len(content_text) < 100:
-            logger.info("Trying body fallback")
+        # If still no content, try body directly with more lenient filtering
+        if not content_text or len(content_text) < 50:
+            logger.info("Trying body fallback with lenient filtering")
             body = soup.find('body')
             if body:
                 # Get visible text
@@ -140,8 +145,8 @@ class ContentExtractor:
                 # Clean up multiple newlines
                 lines = [line.strip()
                          for line in text.split('\n') if line.strip()]
-                # Filter out very short lines (likely nav/menu items)
-                content_lines = [line for line in lines if len(line) > 15]
+                # Filter out very short lines but be more lenient (lowered from 15 to 10)
+                content_lines = [line for line in lines if len(line) > 10 and not self._is_likely_noise(line)]
                 content_text = "\n\n".join(content_lines)
                 logger.info(
                     f"Body extraction found {len(content_lines)} lines, {len(content_text)} chars")

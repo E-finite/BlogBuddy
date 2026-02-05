@@ -17,7 +17,8 @@ def generate_post_content(
     brand: Dict[str, Any],
     language: str = "nl",
     internal_link_targets: list = None,
-    website_context_bundle: Dict[str, Any] = None
+    website_context_bundle: Dict[str, Any] = None,
+    form_data: Dict[str, Any] = None
 ) -> Dict[str, Any]:
     """
     Generate blog post content using OpenAI Responses API.
@@ -29,116 +30,91 @@ def generate_post_content(
         internal_link_targets = []
     if website_context_bundle is None:
         website_context_bundle = {}
+    if form_data is None:
+        form_data = {}
+
+    # NIEUW: Zorg dat deze variabelen beschikbaar zijn vanuit je formulier data
+    # Als ze leeg zijn, vallen we terug op een generieke waarde
+    current_angle = form_data.get('angle', 'Uitgebreide gids met tips')
+    specific_question = form_data.get('customer_question', '')
 
     # Build website context section
     website_context_section = ""
     if website_context_bundle:
         website_context_section = f"""
-
-WEBSITE CONTEXT (authentieke website content):
+### BRONMATERIAAL & HUISSTIJL:
 {json.dumps(website_context_bundle, ensure_ascii=False, indent=2)}
-
-REGELS VOOR WEBSITE CONTEXT:
-- Gebruik deze context om consistent te blijven met de website
-- Verzin GEEN website-specifieke claims die niet in deze context staan
-- Als iets ontbreekt: formuleer het algemeen, of laat het weg
-- Volg de tone_keywords uit site_dna strikt
-- Vermijd woorden uit avoid_words uit site_dna
-- Gebruik proof_points voor geloofwaardigheid (maar alleen als het relevant is)
+REGELS:
+1. Dit materiaal is leidend boven algemene kennis.
+2. Gebruik de tone-of-voice keywords strikt.
+3. Vermijd woorden uit de 'avoid_words' lijst.
 """
 
     # Build system prompt
     system_prompt = f"""
-Je bent een senior contentstrateeg en professionele blogschrijver. Je schrijft SEO-geoptimaliseerde blogposts in het {language}.
-Je schrijft alsof je een ervaren adviseur bent: je helpt, legt uit, geeft praktische inzichten en bouwt vertrouwen op.
-Je verkoopt niet agressief. Je gebruikt 'soft sell' en focust op autoriteit.{website_context_section}
+Je bent een senior contentstrateeg. Je schrijft long-form, diepgaande content voor {brand.get('name', 'het merk')} in het {language}.
+Je doel is niet alleen informeren, maar de autoriteit op het onderwerp claimen door diepgang.
 
-REQUIREMENTS:
+{website_context_section}
 
-1. TONE OF VOICE (volg strikt):
-   - Stijl: {', '.join(tone_of_voice.get('style', []))}
-   - Formaliteit: {tone_of_voice.get('formality', 'je')}
-   - DO: {', '.join(tone_of_voice.get('do', []))}
-   - DON'T: {', '.join(tone_of_voice.get('dont', []))}
+### 1. LENGTE & DIEPGANG (STRIKT)
+Je schrijft een uitgebreid artikel (richtlijn: 600-800 woorden / 3500+ karakters).
+Om dit te bereiken moet je de volgende structuur hanteren:
+1. **Intro:** Pakkend, benoem het probleem, introduceer de oplossing.
+2. **Kern:** Minimaal **4 secties (H2)**. Elke sectie moet diepgaand zijn (minimaal 2-3 alinea's per H2).
+3. **Details:** Gebruik voorbeelden, scenario's of stappenplannen in elke sectie om body te geven.
+4. **FAQ Sectie:** Eindig de body verplicht met een H2 getiteld "Veelgestelde vragen over [Onderwerp]" met daarin 3 relevante vragen en antwoorden.
+5. **Conclusie:** Samenvatting en zachte CTA.
 
-2. CONTENT DNA (altijd toepassen):
-   - Slim: inhoudelijk sterk, geen open deuren, leg verbanden en oorzaken uit, toon expertise zonder belerend te zijn.
-   - Snel: korte intro, snel naar de kern, actieve zinnen, scanbaar met koppen en lijstjes.
-   - Simpel: B1/B2, weinig jargon (of meteen uitleg), helder en praktisch.
+### 2. INVALSHOEK & UNIEKHEID
+We willen GEEN generieke content die op elke andere website staat.
+- **De Invalshoek:** Je schrijft dit artikel vanuit het type: "{current_angle}". Pas de structuur hierop aan.
+- **Vermijd Herhaling:** Als je over algemene concepten schrijft, zoek dan altijd naar een specifieke nuance of een recent voorbeeld.
+- **Diepgang:** Ga verder dan de basis. Leg niet alleen uit WAT iets is, maar ook HOE je het toepast en WAAROM het vaak misgaat.
 
-3. SEO:
-   - Focus keyword: {seo.get('focusKeyword', '')}
-   - Secondary keywords: {', '.join(seo.get('secondaryKeywords', []))}
-   - Meta description max lengte: {seo.get('metaDescMaxLen', 155)} karakters
-   - Meta title pattern: {seo.get('metaTitlePattern', '{topic} | {brand}')}
+### 3. SEO & GEO
+- **Focus Keyword:** {seo.get('focusKeyword', '')} (Gebruik in Titel, Intro, minstens 1x H2, en verspreid in tekst).
+- **Secondary Keywords:** {', '.join(seo.get('secondaryKeywords', []))}
+- **Snippet-ready:** Zorg dat definities helder en direct na een kopje staan.
 
-4. AUDIENCE (schrijf voor deze lezer):
-   - Markt: {audience.get('market', '')}
-   - Niveau: {audience.get('level', 'intermediate')}
-   - Pijnpunten: {', '.join(audience.get('painPoints', []))}
-   - Bezwaren: {', '.join(audience.get('objections', []))}
+### 4. TONE OF VOICE
+- Stijl: {', '.join(tone_of_voice.get('style', []))}
+- Niveau: {audience.get('level', 'intermediate')}
+- Schrijf actief en direct. Vermijd passieve zinnen.
 
-5. BRAND (soft sell regels):
-   - Naam: {brand.get('name', '')}
-   - CTA: {brand.get('cta', '')}
+### 5. FORMATTERING (HTML)
+- Output moet pure HTML zijn in de JSON string.
+- Gebruik <h2> voor hoofdsecties, <h3> voor subsecties.
+- Gebruik <ul>/<ol> voor opsommingen (dit breekt de tekst en leest fijn).
+- Gebruik <strong> om kernzinnen te benadrukken (max 1x per alinea).
 
-   Soft sell protocol:
-   - 80/20 regel: 80% pure waarde, max 20% subtiele verwijzing naar “tools”, “aanpak”, “software” of {brand.get('name', '')} als het logisch is.
-   - Verboden: harde sales (“koop nu”, “vraag direct demo aan”, “mis deze kans niet”, “de beste”, “uniek”).
-   - Als je eindigt met een CTA, maak hem zacht en behulpzaam. Gebruik de {brand.get('cta', '')} alleen als het past bij de context.
-
-6. INTERNAL LINKS:
-   Plaats 2-5 contextuele interne links naar deze pagina's:
-   {json.dumps(internal_link_targets, ensure_ascii=False, indent=2)}
-   Regels:
-   - Links moeten natuurlijk in de tekst passen (niet geforceerd).
-   - Gebruik beschrijvende ankertekst (geen “klik hier”).
-   - Varieer in ankerteksten.
-
-7. STRUCTUUR & KWALITEIT:
-   - Begin zonder lange opwarming: binnen 1 alinea moet duidelijk zijn wat de lezer eraan heeft.
-   - Gebruik H2/H3-koppen die zoekintentie reflecteren.
-   - Geef concrete tips, stappen, voorbeelden of checklists.
-   - Erken bezwaren van de doelgroep en neem ze serieus.
-   - Vermijd clichés (“in de wereld van vandaag”, “meer dan ooit”, etc.).
-   - Geen oncontroleerbare claims; blijf realistisch.
-
-8. OUTPUT FORMAT (strikt):
-   - contentHtml: Gebruik ALLEEN HTML tags (geen markdown). Toegestaan: <h2>, <h5>, <p>, <ul>, <ol>, <li>, <em>, <a href="...">.
-   - excerpt: 1-2 zinnen, pakkend
-   - slug: kebab-case, bevat focus keyword indien mogelijk
-   - yoast.meta_desc: exact {seo.get('metaDescMaxLen', 155)} karakters of minder
-   - yoast.seo_title: volg het pattern, max 60 karakters
-   - tags: 3-7 relevante tags
-   - categories: 1-3 categorieën
-
-9. JSON OUTPUT (strikt):
-Return ALLEEN geldige JSON, geen markdown, geen extra tekst. Structuur:
+### 6. JSON OUTPUT (STRIKT)
+Geef ALLEEN de JSON terug.
 {{
   "title": "...",
   "slug": "...",
   "excerpt": "...",
-  "contentHtml": "<p>...</p>",
-  "yoast": {{
-    "focuskw": "...",
-    "seo_title": "...",
-    "meta_desc": "..."
-  }},
-  "tags": ["tag1", "tag2"],
-  "categories": ["cat1"]
+  "contentHtml": "...",
+  "yoast": {{ "focuskw": "...", "seo_title": "...", "meta_desc": "..." }},
+  "tags": [],
+  "categories": []
 }}
 """
 
-    user_prompt = f"""Schrijf een complete blog post over: {topic}
+    # Hier voegen we de specifieke sturing toe in de user prompt
+    context_injection = ""
+    if specific_question:
+        context_injection = f"Behandel in dit artikel specifiek deze lezersvraag/situatie: '{specific_question}'."
 
-Zorg dat:
-- De focus keyword natuurlijk voorkomt in de eerste alinea en 2-3x in de content
-- Secondary keywords natuurlijk verspreid worden (zonder keyword stuffing)
-- De content waardevol, informatief en praktisch is (advies-stijl)
-- Interne links contextueel geplaatst worden (niet geforceerd)
-- De tone of voice strikt gevolgd wordt
-- De meta description exact {seo.get('metaDescMaxLen', 155)} karakters of minder is
-- Je eindigt zonder harde sales; CTA alleen zacht en alleen als het logisch is (zie brandregels)
+    user_prompt = f"""
+Schrijf het blogartikel over: "{topic}".
+
+SPECIFIEKE OPDRACHT:
+1. Invalshoek: Hanteer de stijl van een **{current_angle}**.
+2. {context_injection}
+3. Zorg voor voldoende lengte door veel voorbeelden te gebruiken.
+4. Voeg aan het eind een FAQ sectie toe met 3 vragen.
+5. Pijnpunten om te adresseren: {', '.join(audience.get('painPoints', []))}.
 """
 
     try:

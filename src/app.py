@@ -187,13 +187,10 @@ def dashboard():
 @app.route("/api/sites", methods=["GET"])
 @login_required
 def get_user_sites_api():
-    """Get all sites for the logged-in user (excluding temporary context sites)."""
+    """Get all WordPress sites for the logged-in user."""
     try:
         sites = db.get_user_sites(current_user.id)
-        # Filter out temporary context sites
-        real_sites = [site for site in sites if site.get(
-            'wp_username') != '__context_temp__']
-        return jsonify(real_sites), 200
+        return jsonify(sites), 200
     except Exception as e:
         logger.error(f"Error fetching user sites: {e}", exc_info=True)
         return jsonify({"ok": False, "error": str(e)}), 500
@@ -362,7 +359,7 @@ def crawl_site(site_id: str):
 def crawl_for_context():
     """Crawl a website for context without WordPress credentials - MULTI-TENANT.
 
-    Note: Creates a temporary site entry for crawling. These should be cleaned up after use.
+    Note: Creates a context site entry. Old context sites are automatically cleaned up.
     """
     try:
         from context.ingest import ingest_website
@@ -373,46 +370,59 @@ def crawl_for_context():
         if not website_url:
             return jsonify({"error": "websiteUrl is required"}), 400
 
+        # Clean up old context sites (older than 30 days / 1 month)
+        cleaned = db.cleanup_old_context_sites(current_user.id, days_old=30)
+        if cleaned > 0:
+            logger.info(f"Cleaned up {cleaned} old context site(s) for user {current_user.id}")
+
         # Normalize URL - add trailing slash if not present
         if not website_url.endswith('/'):
             website_url = website_url + '/'
 
-        # Create a temporary site entry (will be stored, but marked as context-only)
+        # Create a context site entry in separate table
         site_id = str(uuid.uuid4())
 
-        # Store temporary site for crawling (marked with context-only username)
-        db.create_site(
+        # Store context site (separate from WordPress sites)
+        db.create_context_site(
             site_id=site_id,
             user_id=current_user.id,
-            wp_base_url=website_url.rstrip('/'),
-            wp_username="__context_temp__",  # Special marker for temp context sites
-            wp_app_password_enc=crypto_utils.encrypt("not-used"),
-            default_author_id=None
+            base_url=website_url.rstrip('/')
         )
 
-        # Run ingest
+        # Run ingest with site_type='context'
         logger.info(
-            f"Starting context crawl for {website_url} (temporary site)")
+            f"Starting context crawl for {website_url} (context site)")
         result = ingest_website(
             site_id=site_id,
             seed_urls=[website_url],
             max_depth=data.get("maxDepth", 2),
-            max_pages=data.get("maxPages", 30)
+            max_pages=data.get("maxPages", 30),
+            site_type='context'  # Pass site_type to ingest
         )
 
         result["siteId"] = site_id
 
-        # Detect JavaScript-rendered sites
-        is_js_site = result.get("pages_crawled", 0) > 0 and result.get(
-            "pages_stored", 0) == 0
+        # Detect JavaScript-rendered sites more accurately
+        # A JS site has pages that return 200 but yield no extractable content
+        # BUT: if we got SOME content from SOME pages, it's not purely JS
+        pages_crawled = result.get("pages_crawled", 0)
+        pages_stored = result.get("pages_stored", 0)
+        
+        # Consider it a JS site only if:
+        # 1. We crawled multiple pages (at least 3)
+        # 2. NONE of them had extractable content
+        # 3. HTTP responses were successful (not blocked)
+        is_js_site = pages_crawled >= 3 and pages_stored == 0
         result["is_js_site"] = is_js_site
 
-        # Add warning if no pages were crawled
-        if result.get("pages_stored", 0) == 0:
+        # Add warning if no pages were crawled or stored
+        if pages_stored == 0:
             if is_js_site:
                 result["warning"] = "JavaScript-website gedetecteerd. Deze site laadt content via JavaScript en kan niet worden gecrawld."
-            else:
+            elif pages_crawled == 0:
                 result["warning"] = "Geen pagina's konden worden gecrawld. Controleer of de URL correct is en de website bereikbaar is."
+            else:
+                result["warning"] = f"Website gecrawld ({pages_crawled} pagina's), maar geen content kon worden geëxtraheerd. Mogelijk gebruikt de site ongebruikelijke HTML structuur."
 
         return jsonify(result), 200
 
@@ -564,6 +574,34 @@ def get_job(job_id: str):
     except Exception as e:
         logger.error(f"Error getting job: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/sites/<site_id>/dna", methods=["GET"])
+@login_required
+def get_site_dna_api(site_id):
+    """Get Site DNA for a site - MULTI-TENANT."""
+    try:
+        # Check if it's a WordPress site
+        site = db.get_site(site_id, user_id=current_user.id)
+        
+        if not site:
+            # Check if it's a context site
+            context_site = db.get_context_site(site_id, user_id=current_user.id)
+            if not context_site:
+                return jsonify({"error": f"Site {site_id} not found or access denied"}), 404
+        
+        # Get Site DNA (works for both WP and context sites)
+        from src.context.site_dna import get_site_dna
+        dna = get_site_dna(site_id)
+        
+        if not dna:
+            return jsonify({"error": "No Site DNA found for this site"}), 404
+        
+        return jsonify(dna), 200
+    
+    except Exception as e:
+        logger.error(f"Error fetching Site DNA: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 @app.route("/health", methods=["GET"])

@@ -158,6 +158,49 @@ function initGeneratePost() {
   
   let contextSiteId = null;
   
+  // Auto-fill form from Site DNA
+  async function autoFillFromSiteDNA(siteId) {
+    try {
+      const response = await fetch(`/api/sites/${siteId}/dna`);
+      if (!response.ok) {
+        console.log('No Site DNA found for this site');
+        return;
+      }
+      
+      const dna = await response.json();
+      console.log('Site DNA loaded:', dna);
+      
+      // Fill brand name
+      if (dna.brand_name && document.getElementById('brandName')) {
+        document.getElementById('brandName').value = dna.brand_name;
+      }
+      
+      // Fill brand colors
+      if (dna.brand_colors && dna.brand_colors.length > 0 && document.getElementById('brandColors')) {
+        document.getElementById('brandColors').value = dna.brand_colors.join(', ');
+      }
+      
+      // Fill audience (eerste target audience)
+      if (dna.target_audiences && dna.target_audiences.length > 0 && document.getElementById('audienceMarket')) {
+        document.getElementById('audienceMarket').value = dna.target_audiences[0];
+      }
+      
+      // Fill pain points
+      if (dna.pain_points && dna.pain_points.length > 0 && document.getElementById('painPoints')) {
+        document.getElementById('painPoints').value = dna.pain_points.join(', ');
+      }
+      
+      // Fill tone keywords
+      if (dna.tone_keywords && dna.tone_keywords.length > 0 && document.getElementById('toneStyle')) {
+        document.getElementById('toneStyle').value = dna.tone_keywords.slice(0, 5).join(', ');
+      }
+      
+      showAlert('✅ Formulier automatisch ingevuld met Site DNA', 'success', 3000);
+    } catch (error) {
+      console.error('Error loading Site DNA:', error);
+    }
+  }
+  
   // Show crawl button when URL is entered
   if (contextUrlInput) {
     contextUrlInput.addEventListener('input', () => {
@@ -237,6 +280,11 @@ function initGeneratePost() {
           
           // Store for use in generation
           sessionStorage.setItem('contextSiteId', contextSiteId);
+          
+          // Auto-fill form with Site DNA
+          if (data.site_dna_generated) {
+            await autoFillFromSiteDNA(contextSiteId);
+          }
         }
         
       } catch (error) {
