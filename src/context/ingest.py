@@ -91,7 +91,7 @@ def ingest_website(
             from src.context.extractor import extract_colors_from_html
             page_colors = extract_colors_from_html(page_data["html"])
             all_colors.extend(page_colors)
-            
+
             # Extract clean content
             extracted = extractor.extract_clean_text(
                 html=page_data["html"],
@@ -174,10 +174,12 @@ def ingest_website(
         # Get unique colors (most common ones first)
         from collections import Counter
         color_counts = Counter(all_colors)
-        unique_colors = [color for color, count in color_counts.most_common(10)]
+        unique_colors = [color for color,
+                         count in color_counts.most_common(10)]
         logger.info(f"Extracted {len(unique_colors)} unique colors from pages")
-        
-        site_dna = refresh_site_dna(site_id, site_type=site_type, extracted_colors=unique_colors)
+
+        site_dna = refresh_site_dna(
+            site_id, site_type=site_type, extracted_colors=unique_colors)
         logger.info("Site DNA generated successfully")
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")

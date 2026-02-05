@@ -394,33 +394,33 @@ def extract_colors_from_html(html: str) -> List[str]:
     """
     Extract brand color hex codes from HTML inline styles and style tags.
     Filters out neutrals, grays, and boring colors to focus on brand colors.
-    
+
     Args:
         html: Raw HTML content
-        
+
     Returns:
         List of unique hex color codes, sorted by vibrancy/saturation
     """
     colors = set()
-    
+
     # Parse HTML
     soup = BeautifulSoup(html, 'html.parser')
-    
+
     # Pattern for hex colors
     hex_pattern = re.compile(r'#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b')
-    
+
     # Extract from inline styles
     for tag in soup.find_all(style=True):
         style = tag.get('style', '')
         matches = hex_pattern.findall(style)
         colors.update(matches)
-    
+
     # Extract from style tags
     for style_tag in soup.find_all('style'):
         if style_tag.string:
             matches = hex_pattern.findall(style_tag.string)
             colors.update(matches)
-    
+
     # Convert 3-char hex to 6-char hex and normalize
     normalized_colors = []
     for color in colors:
@@ -428,37 +428,38 @@ def extract_colors_from_html(html: str) -> List[str]:
             # Expand #abc to #aabbcc
             color = ''.join([c*2 for c in color])
         normalized_colors.append(f"#{color.upper()}")
-    
+
     # Filter out boring colors
     def is_brand_color(hex_color: str) -> bool:
         """Check if color is interesting enough to be a brand color."""
         # Remove # for processing
         hex_val = hex_color.lstrip('#')
-        
+
         # Convert to RGB
         r = int(hex_val[0:2], 16)
         g = int(hex_val[2:4], 16)
         b = int(hex_val[4:6], 16)
-        
+
         # Filter 1: Too dark (almost black)
         if max(r, g, b) < 30:
             return False
-        
+
         # Filter 2: Too light (almost white)
         if min(r, g, b) > 240:
             return False
-        
+
         # Filter 3: Gray/neutral (low saturation)
         # Check if R, G, B are too similar
         max_val = max(r, g, b)
         min_val = min(r, g, b)
-        saturation = (max_val - min_val) / (max_val + 1)  # Avoid division by zero
-        
+        saturation = (max_val - min_val) / \
+            (max_val + 1)  # Avoid division by zero
+
         if saturation < 0.15:  # Very low saturation = gray
             return False
-        
+
         return True
-    
+
     # Calculate color "vibrancy" for sorting
     def color_vibrancy(hex_color: str) -> float:
         """Calculate how vibrant/saturated a color is (higher = more brand-like)."""
@@ -466,21 +467,22 @@ def extract_colors_from_html(html: str) -> List[str]:
         r = int(hex_val[0:2], 16)
         g = int(hex_val[2:4], 16)
         b = int(hex_val[4:6], 16)
-        
+
         max_val = max(r, g, b)
         min_val = min(r, g, b)
-        
+
         # Saturation
         saturation = (max_val - min_val) / (max_val + 1)
-        
+
         # Brightness (prefer medium brightness over very dark/light)
         brightness = (r + g + b) / 3
-        brightness_score = 1.0 - abs(brightness - 128) / 128  # Peak at mid-brightness
-        
+        # Peak at mid-brightness
+        brightness_score = 1.0 - abs(brightness - 128) / 128
+
         return saturation * 2 + brightness_score  # Weight saturation higher
-    
+
     # Filter and sort colors
     brand_colors = [c for c in set(normalized_colors) if is_brand_color(c)]
     brand_colors.sort(key=color_vibrancy, reverse=True)
-    
+
     return brand_colors[:10]  # Return top 10 most vibrant colors
