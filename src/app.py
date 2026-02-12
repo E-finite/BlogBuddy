@@ -276,10 +276,11 @@ def generate_post():
         if req.siteId:
             # Try WordPress site first
             site = db.get_site(req.siteId, user_id=current_user.id)
-            
+
             # If not found, check if it's a context site (used for context retrieval only)
             if not site:
-                context_site = db.get_context_site(req.siteId, user_id=current_user.id)
+                context_site = db.get_context_site(
+                    req.siteId, user_id=current_user.id)
                 if not context_site:
                     return jsonify({"error": f"Site {req.siteId} not found or access denied"}), 404
                 # Context site is OK for generation (used for context retrieval)
@@ -341,38 +342,40 @@ def regenerate_image():
         data = request.get_json()
         parent_id = data.get('parentId')
         user_feedback = data.get('feedback', '').strip()
-        
+
         if not parent_id:
             return jsonify({"error": "parentId is required"}), 400
-        
+
         if not user_feedback:
             return jsonify({"error": "feedback is required"}), 400
-        
+
         # Validate regeneration limit
-        is_valid, error_msg = db.validate_regeneration_limit(parent_id, current_user.id)
+        is_valid, error_msg = db.validate_regeneration_limit(
+            parent_id, current_user.id)
         if not is_valid:
             return jsonify({"error": error_msg}), 400
-        
+
         # Get parent generation
         parent = db.get_image_generation(parent_id, current_user.id)
         if not parent:
             return jsonify({"error": "Parent image generation not found"}), 404
-        
+
         # Build cumulative feedback chain
         import json
         previous_feedback = json.loads(parent['all_feedback_json'] or '[]')
         all_feedback = previous_feedback + [user_feedback]
-        
+
         # Parse parent settings
         topic = parent['topic']
-        brand = json.loads(parent['brand_json']) if parent['brand_json'] else {}
+        brand = json.loads(parent['brand_json']
+                           ) if parent['brand_json'] else {}
         image_settings = json.loads(parent['image_settings_json'])
-        
+
         # Generate new image with cumulative feedback
         from src.generator.image_gemini import generate_featured_image
-        
+
         logger.info(f"Regenerating image with feedback: {all_feedback}")
-        
+
         image_bytes, mime_type, filename = generate_featured_image(
             topic=topic,
             brand=brand,
@@ -380,14 +383,15 @@ def regenerate_image():
             variation_index=0,
             feedback_chain=all_feedback
         )
-        
+
         if not image_bytes:
-            logger.error(f"Image generation failed for regeneration. Topic: {topic}, Feedback: {all_feedback}")
+            logger.error(
+                f"Image generation failed for regeneration. Topic: {topic}, Feedback: {all_feedback}")
             return jsonify({"error": "Image generation failed. The prompt may be too complex or contain invalid content. Try simpler feedback."}), 500
-        
+
         # Build prompt for storage
         prompt = f"Topic: {topic}, Settings: {json.dumps(image_settings)}, Feedback: {all_feedback}"
-        
+
         # Save new generation
         new_image_id = db.save_image_generation(
             user_id=current_user.id,
@@ -402,10 +406,10 @@ def regenerate_image():
             user_feedback=user_feedback,
             all_feedback=all_feedback
         )
-        
+
         # Get updated generation info
         new_generation = db.get_image_generation(new_image_id, current_user.id)
-        
+
         # Return response
         import base64
         return jsonify({
@@ -419,7 +423,7 @@ def regenerate_image():
                 "filename": filename
             }
         }), 200
-        
+
     except Exception as e:
         logger.error(f"Error regenerating image: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

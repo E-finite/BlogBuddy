@@ -123,7 +123,7 @@ def build_draft(
                 # Build prompt for storage (for debugging/audit)
                 import json
                 prompt = f"Topic: {topic}, Settings: {json.dumps(image_settings)}"
-                
+
                 # Save to database
                 image_id = db.save_image_generation(
                     user_id=user_id,
@@ -136,9 +136,9 @@ def build_draft(
                     brand=brand,
                     job_id=job_id
                 )
-                
+
                 image_ids.append(image_id)
-                
+
                 # Also keep base64 for backward compatibility with existing frontend
                 import base64
                 images.append({

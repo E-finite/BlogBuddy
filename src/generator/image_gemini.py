@@ -126,7 +126,7 @@ Requirements:
             f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
         if feedback_chain:
             logger.info(f"Feedback chain: {feedback_chain}")
-        
+
         # Log the full prompt for debugging
         logger.debug(f"Full prompt being sent: {prompt[:500]}...")
 

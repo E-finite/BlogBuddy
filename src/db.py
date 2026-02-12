@@ -808,7 +808,7 @@ def save_image_generation(
     """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     # Determine generation number
     generation_number = 1
     if parent_id:
@@ -819,7 +819,7 @@ def save_image_generation(
         parent = cursor.fetchone()
         if parent:
             generation_number = parent[0] + 1
-    
+
     cursor.execute("""
         INSERT INTO image_generations (
             user_id, job_id, parent_id, generation_number,
@@ -840,12 +840,12 @@ def save_image_generation(
         prompt_used, image_data, mime_type, filename,
         datetime.utcnow(), 'completed'
     ))
-    
+
     image_id = cursor.lastrowid
     conn.commit()
     cursor.close()
     conn.close()
-    
+
     return image_id
 
 
@@ -856,16 +856,16 @@ def get_image_generation(image_id: int, user_id: int) -> Optional[Dict[str, Any]
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute("""
         SELECT * FROM image_generations 
         WHERE id = %s AND user_id = %s
     """, (image_id, user_id))
-    
+
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    
+
     return row
 
 
@@ -876,16 +876,16 @@ def get_feedback_chain(image_id: int, user_id: int) -> List[str]:
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute("""
         SELECT all_feedback_json FROM image_generations 
         WHERE id = %s AND user_id = %s
     """, (image_id, user_id))
-    
+
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    
+
     if row and row['all_feedback_json']:
         return json.loads(row['all_feedback_json'])
     return []
@@ -898,22 +898,22 @@ def validate_regeneration_limit(image_id: int, user_id: int) -> tuple[bool, str]
     """
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    
+
     cursor.execute("""
         SELECT generation_number FROM image_generations 
         WHERE id = %s AND user_id = %s
     """, (image_id, user_id))
-    
+
     row = cursor.fetchone()
     cursor.close()
     conn.close()
-    
+
     if not row:
         return False, "Image generation not found"
-    
+
     if row['generation_number'] >= 3:
         return False, "Maximum regeneration limit (3 generations) reached"
-    
+
     return True, ""
 
 
@@ -923,13 +923,13 @@ def update_image_uploaded(image_id: int, wordpress_media_id: int) -> None:
     """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         UPDATE image_generations 
         SET wordpress_media_id = %s, uploaded_at = %s
         WHERE id = %s
     """, (wordpress_media_id, datetime.utcnow(), image_id))
-    
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -942,15 +942,15 @@ def cleanup_job_images(job_id: str) -> int:
     """
     conn = get_db_connection()
     cursor = conn.cursor()
-    
+
     cursor.execute("""
         DELETE FROM image_generations 
         WHERE job_id = %s AND wordpress_media_id IS NOT NULL
     """, (job_id,))
-    
+
     deleted_count = cursor.rowcount
     conn.commit()
     cursor.close()
     conn.close()
-    
+
     return deleted_count

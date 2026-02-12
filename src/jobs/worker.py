@@ -73,15 +73,17 @@ def _worker_loop():
 
                         db.update_job(job_id, status, result=result)
                         db.add_job_step(job_id, "complete", status, result)
-                        
+
                         # Cleanup images after successful publish
                         if status == "success":
                             try:
                                 deleted_count = db.cleanup_job_images(job_id)
                                 if deleted_count > 0:
-                                    logger.info(f"Cleaned up {deleted_count} image(s) for job {job_id}")
+                                    logger.info(
+                                        f"Cleaned up {deleted_count} image(s) for job {job_id}")
                             except Exception as cleanup_error:
-                                logger.warning(f"Image cleanup failed for job {job_id}: {cleanup_error}")
+                                logger.warning(
+                                    f"Image cleanup failed for job {job_id}: {cleanup_error}")
                                 # Don't fail the job if cleanup fails
                     else:
                         raise ValueError(f"Unknown job type: {job_type}")
