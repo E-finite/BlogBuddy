@@ -3,6 +3,7 @@ import logging
 from typing import Dict, Any, List
 from src.generator.text_openai import generate_post_content
 from src.generator.image_gemini import generate_featured_image
+from src import db
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +17,9 @@ def build_draft(
     language: str = "nl",
     generate_image: bool = True,
     site_id: str = None,
-    image_settings: Dict[str, Any] = None
+    image_settings: Dict[str, Any] = None,
+    user_id: int = None,
+    job_id: str = None
 ) -> Dict[str, Any]:
     """
     Build a complete draft with content and optional image.
@@ -25,6 +28,8 @@ def build_draft(
         generate_image: Whether to generate a featured image with DALL-E
         site_id: Optional site ID for website context retrieval
         image_settings: Optional image generation settings (preset, colors, etc.)
+        user_id: User ID for saving images to database
+        job_id: Job ID for linking images to publish job
 
     Returns:
         Dict with draft content (title, slug, excerpt, contentHtml, yoast, tags, categories)
@@ -97,7 +102,8 @@ def build_draft(
 
     # Generate featured image(s) - supports multiple variations
     images = []
-    if generate_image:
+    image_ids = []
+    if generate_image and user_id:
         if image_settings is None:
             image_settings = {}
 
@@ -114,8 +120,29 @@ def build_draft(
             )
 
             if image_bytes:
+                # Build prompt for storage (for debugging/audit)
+                import json
+                prompt = f"Topic: {topic}, Settings: {json.dumps(image_settings)}"
+                
+                # Save to database
+                image_id = db.save_image_generation(
+                    user_id=user_id,
+                    topic=topic,
+                    image_settings=image_settings,
+                    prompt_used=prompt,
+                    image_data=image_bytes,
+                    mime_type=mime_type,
+                    filename=filename,
+                    brand=brand,
+                    job_id=job_id
+                )
+                
+                image_ids.append(image_id)
+                
+                # Also keep base64 for backward compatibility with existing frontend
                 import base64
                 images.append({
+                    "imageId": image_id,
                     "bytes_base64": base64.b64encode(image_bytes).decode('utf-8'),
                     "mime_type": mime_type,
                     "filename": filename or f"featured-{content.get('slug', 'featured')}-{i}.jpg"
@@ -131,10 +158,12 @@ def build_draft(
         if len(images) == 1:
             # Single image - use old format for compatibility
             draft["image"] = images[0]
+            draft["imageId"] = image_ids[0] if image_ids else None
         else:
             # Multiple variations - store all
             draft["images"] = images
             draft["image"] = images[0]  # Default to first one
+            draft["imageIds"] = image_ids
 
     return draft
 

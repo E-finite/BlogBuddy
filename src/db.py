@@ -204,6 +204,44 @@ def init_db():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
+    # Image generations table - stores generated images with regeneration chains
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS image_generations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            job_id VARCHAR(36) NULL,
+            parent_id INT NULL,
+            generation_number INT NOT NULL DEFAULT 1,
+            
+            topic VARCHAR(500) NOT NULL,
+            brand_json TEXT,
+            image_settings_json TEXT NOT NULL,
+            
+            user_feedback TEXT NULL,
+            all_feedback_json TEXT NULL,
+            
+            prompt_used TEXT NOT NULL,
+            image_data LONGBLOB NULL,
+            mime_type VARCHAR(50),
+            filename VARCHAR(255),
+            
+            wordpress_media_id INT NULL,
+            uploaded_at DATETIME NULL,
+            
+            created_at DATETIME NOT NULL,
+            status ENUM('generating', 'completed', 'failed') DEFAULT 'completed',
+            error_message TEXT NULL,
+            
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (parent_id) REFERENCES image_generations(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_job_id (job_id),
+            INDEX idx_parent_id (parent_id),
+            INDEX idx_created (created_at),
+            INDEX idx_wordpress_media_id (wordpress_media_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
     # Add brand_name and brand_colors_json columns if they don't exist (migration)
     try:
         # First check and add site_type if needed
@@ -747,3 +785,172 @@ def get_user_stats(user_id: int) -> Dict[str, int]:
         'jobs': jobs_count,
         'completed_jobs': completed_jobs
     }
+
+
+# Image generation functions
+def save_image_generation(
+    user_id: int,
+    topic: str,
+    image_settings: Dict[str, Any],
+    prompt_used: str,
+    image_data: bytes,
+    mime_type: str,
+    filename: str,
+    brand: Optional[Dict[str, Any]] = None,
+    job_id: Optional[str] = None,
+    parent_id: Optional[int] = None,
+    user_feedback: Optional[str] = None,
+    all_feedback: Optional[List[str]] = None
+) -> int:
+    """
+    Save a generated image to database.
+    Returns the new image_generation id.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Determine generation number
+    generation_number = 1
+    if parent_id:
+        cursor.execute(
+            "SELECT generation_number FROM image_generations WHERE id = %s",
+            (parent_id,)
+        )
+        parent = cursor.fetchone()
+        if parent:
+            generation_number = parent[0] + 1
+    
+    cursor.execute("""
+        INSERT INTO image_generations (
+            user_id, job_id, parent_id, generation_number,
+            topic, brand_json, image_settings_json,
+            user_feedback, all_feedback_json,
+            prompt_used, image_data, mime_type, filename,
+            created_at, status
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+    """, (
+        user_id, job_id, parent_id, generation_number,
+        topic,
+        json.dumps(brand) if brand else None,
+        json.dumps(image_settings),
+        user_feedback,
+        json.dumps(all_feedback) if all_feedback else None,
+        prompt_used, image_data, mime_type, filename,
+        datetime.utcnow(), 'completed'
+    ))
+    
+    image_id = cursor.lastrowid
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return image_id
+
+
+def get_image_generation(image_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get an image generation by ID.
+    Validates that the image belongs to the user.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT * FROM image_generations 
+        WHERE id = %s AND user_id = %s
+    """, (image_id, user_id))
+    
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    return row
+
+
+def get_feedback_chain(image_id: int, user_id: int) -> List[str]:
+    """
+    Get the complete feedback chain for an image by traversing parent relationships.
+    Returns list of feedback strings in chronological order.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT all_feedback_json FROM image_generations 
+        WHERE id = %s AND user_id = %s
+    """, (image_id, user_id))
+    
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if row and row['all_feedback_json']:
+        return json.loads(row['all_feedback_json'])
+    return []
+
+
+def validate_regeneration_limit(image_id: int, user_id: int) -> tuple[bool, str]:
+    """
+    Validate if regeneration is allowed for this image.
+    Returns (is_valid, error_message).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT generation_number FROM image_generations 
+        WHERE id = %s AND user_id = %s
+    """, (image_id, user_id))
+    
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not row:
+        return False, "Image generation not found"
+    
+    if row['generation_number'] >= 3:
+        return False, "Maximum regeneration limit (3 generations) reached"
+    
+    return True, ""
+
+
+def update_image_uploaded(image_id: int, wordpress_media_id: int) -> None:
+    """
+    Mark an image as uploaded to WordPress with media ID.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        UPDATE image_generations 
+        SET wordpress_media_id = %s, uploaded_at = %s
+        WHERE id = %s
+    """, (wordpress_media_id, datetime.utcnow(), image_id))
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def cleanup_job_images(job_id: str) -> int:
+    """
+    Delete images for a job that have been successfully uploaded to WordPress.
+    Returns count of deleted images.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        DELETE FROM image_generations 
+        WHERE job_id = %s AND wordpress_media_id IS NOT NULL
+    """, (job_id,))
+    
+    deleted_count = cursor.rowcount
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return deleted_count

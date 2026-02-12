@@ -95,6 +95,7 @@ def _publish_single_draft(
     try:
         # Step A: Generate featured image (optional)
         image_media_id = None
+        image_id = None
         # Support both "image" and "_image" field names
         image_data = draft.get("image") or draft.get("_image")
 
@@ -102,21 +103,55 @@ def _publish_single_draft(
             try:
                 db.add_job_step(job_id, f"generate_image_{lang}", "running")
 
-                # Decode base64 back to bytes if needed
-                if "bytes_base64" in image_data:
+                # Check if image is stored in database (new format)
+                if "imageId" in image_data:
+                    image_id = image_data["imageId"]
+                    # Load from database
+                    import src.db as db_module
+                    # Get without user check (job context - already authorized via site ownership)
+                    conn = db_module.get_db_connection()
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("""
+                        SELECT * FROM image_generations WHERE id = %s
+                    """, (image_id,))
+                    image_gen = cursor.fetchone()
+                    cursor.close()
+                    conn.close()
+                    
+                    if image_gen and image_gen['image_data']:
+                        image_bytes = image_gen['image_data']
+                        mime_type = image_gen['mime_type']
+                        filename = image_gen['filename']
+                    else:
+                        # Fallback to base64 if DB load fails
+                        if "bytes_base64" in image_data:
+                            import base64
+                            image_bytes = base64.b64decode(image_data["bytes_base64"])
+                            mime_type = image_data.get("mime_type", "image/jpeg")
+                            filename = image_data.get("filename", "featured.jpg")
+                        else:
+                            raise Exception("Image data not found in database or draft")
+                elif "bytes_base64" in image_data:
+                    # Legacy format - base64 in draft
                     import base64
                     image_bytes = base64.b64decode(image_data["bytes_base64"])
+                    mime_type = image_data.get("mime_type", "image/jpeg")
+                    filename = image_data.get("filename", "featured.jpg")
                 else:
                     # Legacy support for old format
                     image_bytes = image_data.get("bytes")
-
-                mime_type = image_data.get(
-                    "mime_type") or image_data.get("mime", "image/jpeg")
-                filename = image_data.get("filename", "featured.jpg")
+                    mime_type = image_data.get("mime_type") or image_data.get("mime", "image/jpeg")
+                    filename = image_data.get("filename", "featured.jpg")
 
                 media = wp_client.upload_media(
                     site, filename, image_bytes, mime_type)
                 image_media_id = media.get("id")
+                
+                # Update database with WordPress media ID if image was stored in DB
+                if image_id and image_media_id:
+                    import src.db as db_module
+                    db_module.update_image_uploaded(image_id, image_media_id)
+                
                 db.add_job_step(job_id, f"generate_image_{lang}", "success", {
                                 "mediaId": image_media_id})
             except Exception as e:

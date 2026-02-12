@@ -12,7 +12,8 @@ def generate_featured_image(
     brand: Dict[str, Any] = None,
     language: str = "nl",
     image_settings: Dict[str, Any] = None,
-    variation_index: int = 0
+    variation_index: int = 0,
+    feedback_chain: list[str] = None
 ) -> Tuple[Optional[bytes], str, str]:
     """
     Generate a featured image using Gemini Imagen.
@@ -23,6 +24,7 @@ def generate_featured_image(
         language: Language code
         image_settings: Image generation settings (preset, aspectRatio, etc.)
         variation_index: Which variation number (for seed variation)
+        feedback_chain: List of cumulative user feedback for regeneration
 
     Returns:
         Tuple of (image_bytes, mime_type, filename) or (None, "", "") on failure
@@ -31,15 +33,18 @@ def generate_featured_image(
         brand = {}
     if image_settings is None:
         image_settings = {}
+    if feedback_chain is None:
+        feedback_chain = []
 
-    return _try_gemini_image(topic, brand, image_settings, variation_index)
+    return _try_gemini_image(topic, brand, image_settings, variation_index, feedback_chain)
 
 
 def _try_gemini_image(
     topic: str,
     brand: Dict[str, Any],
     image_settings: Dict[str, Any],
-    variation_index: int
+    variation_index: int,
+    feedback_chain: list[str]
 ) -> Tuple[Optional[bytes], str, str]:
     """Try Gemini Imagen API with customizable settings."""
     try:
@@ -107,10 +112,23 @@ Requirements:
 - High resolution
 - Modern aesthetic"""
 
+        # Add cumulative feedback if regenerating
+        if feedback_chain:
+            prompt += "\n\n### USER REFINEMENTS (REQUIRED):\n"
+            prompt += "Apply ALL of the following refinements to the image:\n"
+            for i, feedback in enumerate(feedback_chain, 1):
+                prompt += f"{i}. {feedback}\n"
+            prompt += "\nThese refinements MUST all be visible in the final image."
+
         logger.info(
             f"Generating image variation {variation_index} with Imagen 4.0 for: {topic}")
         logger.info(
             f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
+        if feedback_chain:
+            logger.info(f"Feedback chain: {feedback_chain}")
+        
+        # Log the full prompt for debugging
+        logger.debug(f"Full prompt being sent: {prompt[:500]}...")
 
         # Use correct Imagen API endpoint
         url = "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict"
@@ -178,6 +196,8 @@ Requirements:
                     return None, "", ""
             else:
                 logger.warning(f"No predictions in response: {result}")
+                # Log the full response for debugging
+                logger.warning(f"Full response text: {response.text[:1000]}")
                 return None, "", ""
         else:
             logger.warning(

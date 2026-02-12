@@ -748,25 +748,109 @@ function renderPreview(draft, previewDiv) {
         const isSelected = index === 0; // First one is default
         const borderStyle = isSelected ? '4px solid #10b981' : '2px solid #e2e8f0';
         const boxShadow = isSelected ? '0 0 0 3px rgba(16, 185, 129, 0.2)' : 'none';
+        
+        // Extract feedback chain if available
+        const feedbackChain = img.feedbackChain || [];
+        const generationNumber = img.generationNumber || 1;
+        const imageId = img.imageId;
+        
         previewHtml += `
           <div class="image-variation-card" style="position: relative; border: ${borderStyle}; box-shadow: ${boxShadow}; border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.2s ease;" 
-               data-variation-index="${index}">
+               data-variation-index="${index}"
+               data-image-id="${imageId || ''}">
             ${isSelected ? '<div class="variation-selected-badge" style="position: absolute; top: 12px; right: 12px; background: #10b981; color: white; padding: 4px 12px; border-radius: 12px; font-size: 12px; font-weight: 600; box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);">✓ Geselecteerd</div>' : ''}
             <img src="data:${img.mime_type || img.mime};base64,${img.bytes_base64}" 
                  alt="Variation ${index + 1}" 
                  style="max-width: 100%; height: auto; border-radius: 4px; pointer-events: none;" />
             <div style="text-align: center; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Variation ${index + 1}</div>
+            
+            ${feedbackChain.length > 0 ? `
+              <div class="feedback-history" style="margin-top: 12px; padding: 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px;">
+                <div style="font-weight: 600; color: #374151; margin-bottom: 4px;">Toegepaste feedback:</div>
+                <ol style="margin: 0; padding-left: 20px; color: #6b7280;">
+                  ${feedbackChain.map(fb => `<li>${escapeHtml(fb)}</li>`).join('')}
+                </ol>
+              </div>
+            ` : ''}
           </div>
         `;
       });
       previewHtml += '</div>';
       previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;">💡 <strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
+      
+      // Add regeneration controls for selected image
+      previewHtml += `
+        <div id="regenerate-section" style="margin-top: 24px;">
+          <div class="card">
+            <div class="card-header">
+              <h4>🔄 Regenereer Geselecteerde Afbeelding</h4>
+            </div>
+            <div class="card-body">
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
+              <textarea id="regenerate-feedback" 
+                        placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
+                        rows="3"
+                        style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+                <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">1</span> van 3</span>
+                <button id="regenerate-btn" 
+                        onclick="regenerateImage()"
+                        class="btn btn-primary"
+                        style="display: inline-flex; align-items: center; gap: 8px;">
+                  <span>🔄 Regenereer</span>
+                </button>
+              </div>
+              <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
+            </div>
+          </div>
+        </div>
+      `;
     } else if (imageToDisplay && imageToDisplay.bytes_base64) {
       // Single image
+      const feedbackChain = imageToDisplay.feedbackChain || [];
+      const generationNumber = imageToDisplay.generationNumber || 1;
+      const imageId = imageToDisplay.imageId;
+      
       previewHtml += `
-        <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
-             alt="Featured Image" 
-             style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+        <div data-image-id="${imageId || ''}">
+          <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
+               alt="Featured Image" 
+               style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
+          
+          ${feedbackChain.length > 0 ? `
+            <div class="feedback-history" style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">
+              <div style="font-weight: 600; color: #374151; margin-bottom: 8px;">Toegepaste feedback:</div>
+              <ol style="margin: 0; padding-left: 20px; color: #6b7280;">
+                ${feedbackChain.map(fb => `<li>${escapeHtml(fb)}</li>`).join('')}
+              </ol>
+            </div>
+          ` : ''}
+        </div>
+      `;
+      
+      // Add regeneration controls
+      previewHtml += `
+        <div id="regenerate-section" style="margin-top: 24px;">
+          <div style="padding: 16px; background: #f9fafb; border: 2px solid #e2e8f0; border-radius: 8px;">
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">🔄 Regenereer Afbeelding</h4>
+            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
+            <textarea id="regenerate-feedback" 
+                      placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
+                      rows="3"
+                      style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
+              <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">${generationNumber}</span> van 3 ${generationNumber >= 3 ? '(Maximum bereikt)' : ''}</span>
+              <button id="regenerate-btn" 
+                      onclick="regenerateImage()"
+                      class="btn btn-primary"
+                      ${generationNumber >= 3 ? 'disabled' : ''}
+                      style="display: inline-flex; align-items: center; gap: 8px;">
+                <span>${generationNumber >= 3 ? '✓ Maximum bereikt' : '🔄 Regenereer'}</span>
+              </button>
+            </div>
+            <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
+          </div>
+        </div>
       `;
     }
     
@@ -921,3 +1005,110 @@ async function checkHealth() {
     showAlert('API niet bereikbaar. Controleer of de server draait.', 'error', 0);
   }
 }
+
+// Regenerate image with feedback
+async function regenerateImage() {
+  const feedbackTextarea = document.getElementById('regenerate-feedback');
+  const regenerateBtn = document.getElementById('regenerate-btn');
+  const statusDiv = document.getElementById('regenerate-status');
+  
+  if (!feedbackTextarea || !regenerateBtn) {
+    console.error('Regenerate controls not found');
+    return;
+  }
+  
+  const feedback = feedbackTextarea.value.trim();
+  
+  if (!feedback) {
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Voer feedback in om de afbeelding te regenereren.</div>';
+    return;
+  }
+  
+  if (feedback.length < 5) {
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Feedback moet minimaal 5 karakters bevatten.</div>';
+    return;
+  }
+  
+  // Get selected image ID
+  const draft = window._currentDraftWithImages;
+  if (!draft || !draft.image || !draft.image.imageId) {
+    statusDiv.style.display = 'block';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Geen afbeelding geselecteerd voor regeneratie.</div>';
+    return;
+  }
+  
+  const parentId = draft.image.imageId;
+  
+  // Disable button and show loading
+  regenerateBtn.disabled = true;
+  regenerateBtn.innerHTML = '<span>⏳ Regenereren...</span>';
+  statusDiv.style.display = 'block';
+  statusDiv.innerHTML = '<div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; border-radius: 4px;">🔄 Afbeelding wordt gegenereerd met je feedback...</div>';
+  
+  try {
+    const response = await fetch('/api/image/regenerate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        parentId: parentId,
+        feedback: feedback
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Regeneratie mislukt');
+    }
+    
+    const data = await response.json();
+    
+    // Update draft with new image
+    draft.image = data.image;
+    
+    // If multiple variations, replace the selected one
+    if (draft.images) {
+      const selectedIndex = draft.images.findIndex(img => img.imageId === parentId);
+      if (selectedIndex >= 0) {
+        draft.images[selectedIndex] = data.image;
+      } else {
+        // Add as new variation
+        draft.images.push(data.image);
+      }
+    }
+    
+    // Update in global state and sessionStorage
+    window._currentDraftWithImages = draft;
+    sessionStorage.setItem('currentDraft', JSON.stringify(draft));
+    
+    // Clear feedback textarea
+    feedbackTextarea.value = '';
+    
+    // Show success and refresh preview
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; color: #047857; border-radius: 4px;">✓ Afbeelding succesvol geregenereerd!</div>';
+    
+    // Refresh the preview immediately
+    showDraftPreview(draft);
+    showAlert('Afbeelding geregenereerd met je feedback!', 'success', 3000);
+    
+  } catch (error) {
+    console.error('Regeneration error:', error);
+    statusDiv.innerHTML = `<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">❌ ${error.message}</div>`;
+    regenerateBtn.disabled = false;
+    regenerateBtn.innerHTML = '<span>🔄 Regenereer</span>';
+  }
+}
+
+// HTML escape utility
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Make functions globally available
+window.regenerateImage = regenerateImage;
+window.escapeHtml = escapeHtml;
