@@ -87,9 +87,9 @@ def ingest_website(
 
     for page_data in crawled_pages:
         try:
-            # Extract colors from HTML
+            # Extract colors from HTML (pass base_url for external CSS fetching)
             from src.context.extractor import extract_colors_from_html
-            page_colors = extract_colors_from_html(page_data["html"])
+            page_colors = extract_colors_from_html(page_data["html"], base_url=base_url)
             all_colors.extend(page_colors)
 
             # Extract clean content
