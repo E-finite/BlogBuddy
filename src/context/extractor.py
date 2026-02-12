@@ -415,17 +415,17 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
 
     # Pattern for hex colors
     hex_pattern = re.compile(r'#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{3})\b')
-    
+
     # Collect all classes and IDs actually used in the HTML (only from visible elements)
     used_classes = set()
     used_ids = set()
     hidden_classes = set()  # Track classes of hidden elements
     hidden_ids = set()  # Track IDs of hidden elements
-    
+
     for tag in soup.find_all(True):  # All tags
         classes = tag.get('class', [])
         tag_id = tag.get('id')
-        
+
         # Check if element is hidden
         style = tag.get('style', '')
         is_hidden = False
@@ -433,7 +433,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             style_lower = style.lower().replace(' ', '')
             if 'display:none' in style_lower or 'visibility:hidden' in style_lower:
                 is_hidden = True
-        
+
         if is_hidden:
             # Track hidden elements separately
             hidden_classes.update(classes)
@@ -444,9 +444,11 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             used_classes.update(classes)
             if tag_id:
                 used_ids.add(tag_id)
-    
-    logger.info(f"Found {len(used_classes)} visible classes and {len(used_ids)} visible IDs in HTML")
-    logger.info(f"Found {len(hidden_classes)} hidden classes that will be ignored")
+
+    logger.info(
+        f"Found {len(used_classes)} visible classes and {len(used_ids)} visible IDs in HTML")
+    logger.info(
+        f"Found {len(hidden_classes)} hidden classes that will be ignored")
 
     def add_color_with_score(color: str, score: float):
         """Add or update color with specificity score."""
@@ -454,7 +456,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             color_scores[color] += score
         else:
             color_scores[color] = score
-    
+
     def is_selector_used(css_line: str) -> bool:
         """Check if a CSS selector is actually used in the HTML."""
         # Extract class names from CSS selector (e.g., ".btn-primary" or "button.btn-primary")
@@ -462,22 +464,23 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
         for cls in class_matches:
             if cls in used_classes:
                 return True
-        
+
         # Extract ID from CSS selector (e.g., "#header")
         id_matches = re.findall(r'#([a-zA-Z0-9_-]+)(?:\s|{|:|,|$)', css_line)
         for id_name in id_matches:
             if id_name in used_ids:
                 return True
-        
+
         # Check for element selectors (header, nav, button, etc.)
-        element_tags = ['header', 'nav', 'footer', 'button', 'a', 'body', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'section', 'article']
+        element_tags = ['header', 'nav', 'footer', 'button', 'a', 'body',
+                        'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'section', 'article']
         for tag in element_tags:
             # Match tag at start or after space/comma (e.g., "header {" or "div, header")
             if re.search(rf'\b{tag}\b', css_line):
                 return True
-        
+
         return False
-    
+
     def is_element_visible(tag) -> bool:
         """Check if an HTML element is visible (not hidden via style)."""
         style = tag.get('style', '')
@@ -488,25 +491,25 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             if 'visibility:hidden' in style_lower.replace(' ', '') or 'visibility: hidden' in style_lower:
                 return False
         return True
-    
+
     def should_skip_css_line(selector_line: str, property_line: str) -> Tuple[bool, float]:
         """Check if CSS should be skipped or penalized. Returns (skip, penalty_multiplier)."""
         selector_lower = selector_line.lower()
         property_lower = property_line.lower()
-        
+
         # Skip hover, focus, active, visited states (not default visible colors)
         if any(state in selector_lower for state in [':hover', ':focus', ':active', ':visited', ':checked']):
             return True, 0.0
-        
+
         # Skip media queries for non-desktop (we want desktop brand colors)
         # Note: This is a simplified check, full media query parsing would be more complex
-        
+
         # Heavily penalize display:none and visibility:hidden
         if 'display' in property_lower and 'none' in property_lower:
             return True, 0.0
         if 'visibility' in property_lower and 'hidden' in property_lower:
             return True, 0.0
-        
+
         return False, 1.0
 
     # Extract from inline styles with element-based scoring
@@ -514,21 +517,21 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
         # Skip hidden elements
         if not is_element_visible(tag):
             continue
-        
+
         style = tag.get('style', '')
         matches = hex_pattern.findall(style)
-        
+
         # Calculate specificity based on element type and classes
         score = 1.0
         tag_name = tag.name.lower()
         classes = tag.get('class', [])
-        
+
         # Higher score for prominent elements
         if tag_name in ['header', 'nav', 'button', 'a']:
             score *= 3.0
         if tag_name in ['h1', 'h2', 'h3']:
             score *= 2.5
-        
+
         # Higher score for brand-related classes
         for cls in classes:
             cls_lower = cls.lower()
@@ -539,7 +542,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             if any(social in cls_lower for social in ['facebook', 'twitter', 'instagram', 'linkedin', 'social', 'share']):
                 score *= 0.1
                 break
-        
+
         for match in matches:
             add_color_with_score(match, score)
 
@@ -547,14 +550,14 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
     for style_tag in soup.find_all('style'):
         if style_tag.string:
             css_content = style_tag.string
-            
+
             # Parse CSS line by line to check if selectors are used
             lines = css_content.split('\n')
             for i, line in enumerate(lines):
                 matches = hex_pattern.findall(line)
                 if not matches:
                     continue
-                
+
                 # Find the selector for this line by looking backwards
                 selector_line = ""
                 for j in range(i, max(0, i-10), -1):  # Look back up to 10 lines
@@ -562,34 +565,34 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
                         # Found the selector line
                         selector_line = lines[j].split('{')[0]
                         break
-                
+
                 # Only process colors if the selector is actually used in HTML
                 if selector_line and is_selector_used(selector_line):
                     # Check if this CSS should be skipped (hover states, hidden elements)
                     skip, penalty = should_skip_css_line(selector_line, line)
                     if skip:
                         continue
-                    
+
                     for match in matches:
                         score = 2.0  # Base score for internal CSS
-                        
+
                         line_lower = line.lower()
                         selector_lower = selector_line.lower()
-                        
+
                         # Boost brand-related selectors
-                        if any(brand_word in selector_lower or brand_word in line_lower 
+                        if any(brand_word in selector_lower or brand_word in line_lower
                                for brand_word in ['brand', 'primary', 'accent', 'hero', 'cta', 'btn', 'header', 'nav']):
                             score *= 3.0
-                        
+
                         # Heavily penalize social media selectors
                         if any(social in selector_lower or social in line_lower
                                for social in ['facebook', 'twitter', 'instagram', 'linkedin', 'social', 'share', 'youtube', 'pinterest']):
                             score *= 0.05
-                        
+
                         # Penalize utility/border/shadow colors
                         if any(util in line_lower for util in ['border', 'shadow', 'outline', 'divider']):
                             score *= 0.3
-                        
+
                         add_color_with_score(match, score)
 
     # Fetch and parse external CSS files
@@ -600,60 +603,62 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
                 try:
                     # Resolve relative URL
                     css_url = urljoin(base_url, href)
-                    
+
                     # Only fetch CSS from same domain (security)
                     if urlparse(css_url).netloc == urlparse(base_url).netloc or not urlparse(css_url).netloc:
                         logger.info(f"Fetching external CSS: {css_url}")
                         response = requests.get(css_url, timeout=5)
-                        
+
                         if response.status_code == 200:
                             css_content = response.text
-                            
+
                             # Parse CSS line by line to check if selectors are used
                             lines = css_content.split('\n')
                             for i, line in enumerate(lines):
                                 matches = hex_pattern.findall(line)
                                 if not matches:
                                     continue
-                                
+
                                 # Find the selector for this line by looking backwards
                                 selector_line = ""
-                                for j in range(i, max(0, i-10), -1):  # Look back up to 10 lines
+                                # Look back up to 10 lines
+                                for j in range(i, max(0, i-10), -1):
                                     if '{' in lines[j]:
                                         # Found the selector line
                                         selector_line = lines[j].split('{')[0]
                                         break
-                                
+
                                 # Only process colors if the selector is actually used in HTML
                                 if selector_line and is_selector_used(selector_line):
                                     # Check if this CSS should be skipped (hover states, hidden elements)
-                                    skip, penalty = should_skip_css_line(selector_line, line)
+                                    skip, penalty = should_skip_css_line(
+                                        selector_line, line)
                                     if skip:
                                         continue
-                                    
+
                                     for match in matches:
                                         score = 5.0  # High base score for external CSS
-                                        
+
                                         line_lower = line.lower()
                                         selector_lower = selector_line.lower()
-                                        
+
                                         # Boost brand-related selectors
-                                        if any(brand_word in selector_lower or brand_word in line_lower 
+                                        if any(brand_word in selector_lower or brand_word in line_lower
                                                for brand_word in ['brand', 'primary', 'accent', 'hero', 'cta', 'btn', 'header', 'nav', 'logo']):
                                             score *= 3.0
-                                        
+
                                         # Heavily penalize social media selectors
                                         if any(social in selector_lower or social in line_lower
                                                for social in ['facebook', 'twitter', 'instagram', 'linkedin', 'social', 'share', 'youtube', 'pinterest']):
                                             score *= 0.05
-                                        
+
                                         # Penalize utility colors
-                                        if any(util in line_lower for util in 
+                                        if any(util in line_lower for util in
                                                ['border', 'shadow', 'outline', 'divider', 'gray', 'grey']):
                                             score *= 0.2
-                                        
+
                                         add_color_with_score(match, score)
-                        
+
                 except Exception as e:
                     logger.warning(f"Failed to fetch CSS from {css_url}: {e}")
                     continue
@@ -665,7 +670,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             # Expand #abc to #aabbcc
             color = ''.join([c*2 for c in color])
         hex_color = f"#{color.upper()}"
-        
+
         # Accumulate scores for the same normalized color
         if hex_color in normalized_colors:
             normalized_colors[hex_color] += score
@@ -682,7 +687,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
         r = int(hex_val[0:2], 16)
         g = int(hex_val[2:4], 16)
         b = int(hex_val[4:6], 16)
-        
+
         # Filter out known social media brand colors (not site brand colors)
         social_media_colors = {
             '#3B5998', '#3B5999',  # Facebook blue
@@ -701,7 +706,7 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             '#0088CC', '#0088CD',  # Telegram blue
             '#25D366', '#25D365',  # WhatsApp green
         }
-        
+
         if hex_color.upper() in social_media_colors:
             logger.info(f"Filtering out social media color: {hex_color}")
             return False
@@ -752,42 +757,43 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
         """Cluster similar colors and combine their scores."""
         clustered = {}
         processed = set()
-        
+
         for color1, score1 in colors_with_scores.items():
             if color1 in processed:
                 continue
-            
+
             # This color becomes the representative of its cluster
             cluster_score = score1
             processed.add(color1)
-            
+
             # Find similar colors and merge them
             hex_val1 = color1.lstrip('#')
             r1 = int(hex_val1[0:2], 16)
             g1 = int(hex_val1[2:4], 16)
             b1 = int(hex_val1[4:6], 16)
-            
+
             for color2, score2 in colors_with_scores.items():
                 if color2 in processed or color2 == color1:
                     continue
-                
+
                 # Calculate color distance
                 hex_val2 = color2.lstrip('#')
                 r2 = int(hex_val2[0:2], 16)
                 g2 = int(hex_val2[2:4], 16)
                 b2 = int(hex_val2[4:6], 16)
-                
+
                 # Euclidean distance in RGB space
-                distance = ((r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2) ** 0.5
-                
+                distance = ((r1 - r2) ** 2 + (g1 - g2)
+                            ** 2 + (b1 - b2) ** 2) ** 0.5
+
                 # If colors are very similar (distance < 80), merge them
                 # Higher threshold to better group similar shades (e.g., multiple blues, greens)
                 if distance < 80:
                     cluster_score += score2
                     processed.add(color2)
-            
+
             clustered[color1] = cluster_score
-        
+
         return clustered
 
     # Cluster similar colors to avoid duplicates
@@ -801,9 +807,9 @@ def extract_colors_from_html(html: str, base_url: str = None) -> List[str]:
             # Combine specificity score with vibrancy
             combined_score = score * vibrancy
             brand_colors.append((color, combined_score))
-    
+
     # Sort by combined score
     brand_colors.sort(key=lambda x: x[1], reverse=True)
-    
+
     # Return top 10 colors (without scores)
     return [color for color, score in brand_colors[:10]]
