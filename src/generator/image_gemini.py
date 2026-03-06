@@ -50,7 +50,7 @@ def _try_dalle3_image(
     feedback_chain: list[str]
 ) -> Tuple[Optional[bytes], str, str, Optional[str]]:
     """Try DALL-E 3 API with customizable settings.
-    
+
     Returns:
         Tuple of (image_bytes, mime_type, filename, error_message)
         If successful, error_message is None
@@ -126,8 +126,10 @@ Requirements:
             for i, feedback in enumerate(feedback_chain, 1):
                 prompt += f"{i}. {feedback}\n"
 
-        logger.info(f"Generating image variation {variation_index} with DALL-E 3 for: {topic}")
-        logger.info(f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
+        logger.info(
+            f"Generating image variation {variation_index} with DALL-E 3 for: {topic}")
+        logger.info(
+            f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
         if feedback_chain:
             logger.info(f"Feedback chain: {feedback_chain}")
 
@@ -141,7 +143,7 @@ Requirements:
 
         # DALL-E 3 API request
         url = "https://api.openai.com/v1/images/generations"
-        
+
         headers = {
             "Authorization": f"Bearer {config.OPENAI_API_KEY}",
             "Content-Type": "application/json"
@@ -158,23 +160,25 @@ Requirements:
 
         logger.info(f"Sending request to DALL-E 3 API...")
         logger.info(f"Size: {size}, Prompt length: {len(prompt)} characters")
-        
-        response = requests.post(url, json=payload, headers=headers, timeout=120)
+
+        response = requests.post(
+            url, json=payload, headers=headers, timeout=120)
 
         logger.info(f"DALL-E 3 API response status: {response.status_code}")
-        
+
         if response.status_code == 200:
             result = response.json()
-            
+
             if "data" in result and len(result["data"]) > 0:
                 image_data = result["data"][0]
-                
+
                 # Extract base64 image
                 import base64
                 if "b64_json" in image_data:
                     image_bytes = base64.b64decode(image_data["b64_json"])
                     filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.png"
-                    logger.info(f"DALL-E 3 image generated successfully ({len(image_bytes)} bytes)")
+                    logger.info(
+                        f"DALL-E 3 image generated successfully ({len(image_bytes)} bytes)")
                     return image_bytes, "image/png", filename, None
                 else:
                     error_msg = f"No b64_json in response data: {list(image_data.keys())}"
@@ -187,9 +191,9 @@ Requirements:
         else:
             error_detail = response.text[:1000] if response.text else "No error details"
             error_msg = f"DALL-E 3 API error {response.status_code}"
-            
+
             logger.error(f"{error_msg}: {error_detail}")
-            
+
             # Parse OpenAI error message
             try:
                 error_json = response.json()
@@ -201,7 +205,7 @@ Requirements:
                     logger.error(f"Structured error: {error_msg}")
             except:
                 pass
-            
+
             return None, "", "", error_msg
 
     except Exception as e:

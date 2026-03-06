@@ -78,7 +78,8 @@ def ingest_website(
 
     # Step 2: Extract and chunk content
     logger.info("Step 2/4: Extracting and chunking content...")
-    extractor = ContentExtractor(max_chunk_tokens=500)  # Reduced from 1000 to avoid MySQL packet size issues
+    # Reduced from 1000 to avoid MySQL packet size issues
+    extractor = ContentExtractor(max_chunk_tokens=500)
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -141,9 +142,10 @@ def ingest_website(
                 # Hard cap chunk text to avoid MySQL max_allowed_packet errors
                 chunk_text = chunk["chunk_text"]
                 if len(chunk_text) > 10000:  # 10KB max per chunk
-                    logger.warning(f"Truncating large chunk from {page_data['url']} (size: {len(chunk_text)})")
+                    logger.warning(
+                        f"Truncating large chunk from {page_data['url']} (size: {len(chunk_text)})")
                     chunk_text = chunk_text[:10000]
-                
+
                 cursor.execute("""
                     INSERT INTO page_chunks (
                         page_id, site_id, site_type, chunk_index, section_heading,

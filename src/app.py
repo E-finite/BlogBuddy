@@ -79,13 +79,15 @@ def strip_base64_from_draft(draft):
                         result[key] = {
                             'imageId': value.get('imageId'),
                             'mime_type': value.get('mime_type'),
-                            'mime': value.get('mime'),  # Some use 'mime' instead of 'mime_type'
+                            # Some use 'mime' instead of 'mime_type'
+                            'mime': value.get('mime'),
                             'filename': value.get('filename'),
                             'feedbackChain': value.get('feedbackChain', []),
                             'generationNumber': value.get('generationNumber', 1)
                         }
                         # Remove None values
-                        result[key] = {k: v for k, v in result[key].items() if v is not None}
+                        result[key] = {
+                            k: v for k, v in result[key].items() if v is not None}
                     elif isinstance(value, list):
                         result[key] = [strip_recursive(item) for item in value]
                     else:
@@ -97,7 +99,7 @@ def strip_base64_from_draft(draft):
             return [strip_recursive(item) for item in obj]
         else:
             return obj
-    
+
     draft_copy = copy.deepcopy(draft)
     return strip_recursive(draft_copy)
 
@@ -417,26 +419,30 @@ def regenerate_image():
 
         # Build cumulative feedback chain
         import json
-        
+
         try:
-            previous_feedback = json.loads(parent['all_feedback_json']) if parent.get('all_feedback_json') else []
+            previous_feedback = json.loads(parent['all_feedback_json']) if parent.get(
+                'all_feedback_json') else []
         except (json.JSONDecodeError, TypeError) as e:
-            logger.warning(f"Failed to parse all_feedback_json: {e}, using empty list")
+            logger.warning(
+                f"Failed to parse all_feedback_json: {e}, using empty list")
             previous_feedback = []
-        
+
         all_feedback = previous_feedback + [user_feedback]
 
         # Parse parent settings with error handling
         topic = parent['topic']
-        
+
         try:
-            brand = json.loads(parent['brand_json']) if parent['brand_json'] else {}
+            brand = json.loads(parent['brand_json']
+                               ) if parent['brand_json'] else {}
         except (json.JSONDecodeError, TypeError) as e:
             logger.warning(f"Failed to parse brand_json: {e}")
             brand = {}
-        
+
         try:
-            image_settings = json.loads(parent['image_settings_json']) if parent['image_settings_json'] else {}
+            image_settings = json.loads(
+                parent['image_settings_json']) if parent['image_settings_json'] else {}
         except (json.JSONDecodeError, TypeError) as e:
             logger.error(f"Failed to parse image_settings_json: {e}")
             return jsonify({"error": "Invalid image settings in parent generation"}), 500
@@ -458,7 +464,7 @@ def regenerate_image():
             logger.error(
                 f"Image generation failed for regeneration. Topic: {topic}, Feedback: {all_feedback}")
             logger.error(f"Error from Gemini: {error_msg}")
-            
+
             # Return the specific error from Gemini API
             user_error_msg = error_msg if error_msg else "Image generation failed. The prompt may be too complex or contain invalid content. Try simpler feedback."
             return jsonify({"error": user_error_msg}), 500
@@ -621,13 +627,13 @@ def list_context_sites():
     """Get all context sites for the current user with DNA info - MULTI-TENANT."""
     try:
         sites = db.get_user_context_sites(current_user.id)
-        
+
         # Enrich with site DNA info
         result = []
         for site in sites:
             from context.site_dna import get_site_dna
             dna = get_site_dna(site["id"], user_id=current_user.id)
-            
+
             # Only show sites that have DNA
             if dna:
                 result.append({
@@ -637,9 +643,9 @@ def list_context_sites():
                     "brandName": dna.get("brand_name", ""),
                     "hasDna": True
                 })
-        
+
         return jsonify({"sites": result}), 200
-    
+
     except Exception as e:
         logger.error(f"Error listing context sites: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -654,30 +660,30 @@ def get_context_site_details(site_id: str):
         site = db.get_context_site(site_id, user_id=current_user.id)
         if not site:
             return jsonify({"error": "Site not found"}), 404
-        
+
         # Get page and chunk counts
         conn = db.get_db_connection()
         cursor = conn.cursor()
-        
+
         cursor.execute("""
             SELECT COUNT(*) FROM scraped_pages 
             WHERE site_id = %s AND site_type = 'context'
         """, (site_id,))
         pages_count = cursor.fetchone()[0]
-        
+
         cursor.execute("""
             SELECT COUNT(*) FROM page_chunks 
             WHERE site_id = %s AND site_type = 'context'
         """, (site_id,))
         chunks_count = cursor.fetchone()[0]
-        
+
         cursor.close()
         conn.close()
-        
+
         # Get Site DNA
         from context.site_dna import get_site_dna
         dna = get_site_dna(site_id, user_id=current_user.id)
-        
+
         return jsonify({
             "id": site["id"],
             "baseUrl": site["base_url"],
@@ -687,7 +693,7 @@ def get_context_site_details(site_id: str):
             "hasDna": dna is not None,
             "brandName": dna.get("brand_name", "") if dna else ""
         }), 200
-    
+
     except Exception as e:
         logger.error(f"Error getting context site details: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -786,11 +792,12 @@ def get_image(image_id: int):
             "feedbackChain": json.loads(image['all_feedback_json']) if image.get('all_feedback_json') else [],
             "generationNumber": image['generation_number']
         }
-        
+
         # Add base64 data if available
         if image.get('image_data'):
-            response_data['bytes_base64'] = base64.b64encode(image['image_data']).decode('utf-8')
-        
+            response_data['bytes_base64'] = base64.b64encode(
+                image['image_data']).decode('utf-8')
+
         return jsonify(response_data), 200
 
     except Exception as e:
@@ -930,7 +937,8 @@ def get_site_dna_api(site_id):
 
         # Get Site DNA (works for both WP and context sites)
         from src.context.site_dna import get_site_dna
-        dna = get_site_dna(site_id, user_id=current_user.id)  # Pass user_id for filtering
+        # Pass user_id for filtering
+        dna = get_site_dna(site_id, user_id=current_user.id)
 
         if not dna:
             return jsonify({"error": "No Site DNA found for this site"}), 404
