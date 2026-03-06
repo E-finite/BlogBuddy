@@ -1,4 +1,5 @@
-"""Image generation using Gemini only."""
+"""Image generation using DALL-E 3 (OpenAI)."""
+import json
 import logging
 from typing import Tuple, Optional, Dict, Any
 import requests
@@ -14,9 +15,9 @@ def generate_featured_image(
     image_settings: Dict[str, Any] = None,
     variation_index: int = 0,
     feedback_chain: list[str] = None
-) -> Tuple[Optional[bytes], str, str]:
+) -> Tuple[Optional[bytes], str, str, Optional[str]]:
     """
-    Generate a featured image using Gemini Imagen.
+    Generate a featured image using DALL-E 3 (OpenAI).
 
     Args:
         topic: Blog post topic
@@ -27,7 +28,9 @@ def generate_featured_image(
         feedback_chain: List of cumulative user feedback for regeneration
 
     Returns:
-        Tuple of (image_bytes, mime_type, filename) or (None, "", "") on failure
+        Tuple of (image_bytes, mime_type, filename, error_message)
+        On success: (bytes, mime_type, filename, None)
+        On failure: (None, "", "", error_message)
     """
     if brand is None:
         brand = {}
@@ -36,17 +39,23 @@ def generate_featured_image(
     if feedback_chain is None:
         feedback_chain = []
 
-    return _try_gemini_image(topic, brand, image_settings, variation_index, feedback_chain)
+    return _try_dalle3_image(topic, brand, image_settings, variation_index, feedback_chain)
 
 
-def _try_gemini_image(
+def _try_dalle3_image(
     topic: str,
     brand: Dict[str, Any],
     image_settings: Dict[str, Any],
     variation_index: int,
     feedback_chain: list[str]
-) -> Tuple[Optional[bytes], str, str]:
-    """Try Gemini Imagen API with customizable settings."""
+) -> Tuple[Optional[bytes], str, str, Optional[str]]:
+    """Try DALL-E 3 API with customizable settings.
+    
+    Returns:
+        Tuple of (image_bytes, mime_type, filename, error_message)
+        If successful, error_message is None
+        If failed, image_bytes is None and error_message contains the error
+    """
     try:
         # Extract settings
         preset = image_settings.get("preset", "minimal-tech")
@@ -56,8 +65,6 @@ def _try_gemini_image(
         brand_colors = brand.get("colors", [])
         composition = image_settings.get("composition", "auto")
         lighting = image_settings.get("lighting", "soft-studio")
-        negative_prompt = image_settings.get(
-            "negativePrompt", "blurry, low quality, watermark, text overlay")
 
         # Build style description from preset
         style_presets = {
@@ -118,92 +125,86 @@ Requirements:
             prompt += "Apply ALL of the following refinements to the image:\n"
             for i, feedback in enumerate(feedback_chain, 1):
                 prompt += f"{i}. {feedback}\n"
-            prompt += "\nThese refinements MUST all be visible in the final image."
 
-        logger.info(
-            f"Generating image variation {variation_index} with Imagen 4.0 for: {topic}")
-        logger.info(
-            f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
+        logger.info(f"Generating image variation {variation_index} with DALL-E 3 for: {topic}")
+        logger.info(f"Settings: preset={preset}, aspect_ratio={aspect_ratio}, colors={brand_colors if use_brand_colors else 'default'}")
         if feedback_chain:
             logger.info(f"Feedback chain: {feedback_chain}")
 
-        # Log the full prompt for debugging
-        logger.debug(f"Full prompt being sent: {prompt[:500]}...")
+        # Convert aspect ratio to DALL-E 3 format
+        size_map = {
+            "1:1": "1024x1024",
+            "16:9": "1792x1024",
+            "9:16": "1024x1792"
+        }
+        size = size_map.get(aspect_ratio, "1792x1024")
 
-        # Use correct Imagen API endpoint
-        url = "https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict"
-
+        # DALL-E 3 API request
+        url = "https://api.openai.com/v1/images/generations"
+        
         headers = {
-            "x-goog-api-key": config.GEMINI_API_KEY,
+            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
             "Content-Type": "application/json"
         }
 
         payload = {
-            "instances": [{"prompt": prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": aspect_ratio
-            }
+            "model": "dall-e-3",
+            "prompt": prompt,
+            "n": 1,
+            "size": size,
+            "quality": "standard",
+            "response_format": "b64_json"
         }
 
-        # Note: negativePrompt is no longer supported by Imagen API
+        logger.info(f"Sending request to DALL-E 3 API...")
+        logger.info(f"Size: {size}, Prompt length: {len(prompt)} characters")
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
 
-        # Add seed if locked
-        if image_settings.get("lockSeed") and image_settings.get("seedValue"):
-            # Vary seed slightly per variation
-            payload["parameters"]["seed"] = image_settings["seedValue"] + \
-                variation_index
-
-        response = requests.post(
-            url, json=payload, headers=headers, timeout=120)
-
-        logger.info(f"Imagen API response status: {response.status_code}")
-
+        logger.info(f"DALL-E 3 API response status: {response.status_code}")
+        
         if response.status_code == 200:
             result = response.json()
-            logger.info(f"Response structure: {result.keys()}")
-
-            # Extract image from predictions
-            if "predictions" in result and len(result["predictions"]) > 0:
-                prediction = result["predictions"][0]
-                logger.info(f"Prediction keys: {prediction.keys()}")
-
-                # Try different possible image data locations
-                image_bytes = None
-
-                if "bytesBase64Encoded" in prediction:
-                    import base64
-                    image_bytes = base64.b64decode(
-                        prediction["bytesBase64Encoded"])
-                elif "image" in prediction:
-                    if isinstance(prediction["image"], str):
-                        # Base64 string
-                        import base64
-                        image_bytes = base64.b64decode(prediction["image"])
-                    elif "bytesBase64Encoded" in prediction["image"]:
-                        import base64
-                        image_bytes = base64.b64decode(
-                            prediction["image"]["bytesBase64Encoded"])
-
-                if image_bytes:
+            
+            if "data" in result and len(result["data"]) > 0:
+                image_data = result["data"][0]
+                
+                # Extract base64 image
+                import base64
+                if "b64_json" in image_data:
+                    image_bytes = base64.b64decode(image_data["b64_json"])
                     filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.png"
-                    logger.info(
-                        f"Imagen image generated successfully ({len(image_bytes)} bytes)")
-                    return image_bytes, "image/png", filename
+                    logger.info(f"DALL-E 3 image generated successfully ({len(image_bytes)} bytes)")
+                    return image_bytes, "image/png", filename, None
                 else:
-                    logger.warning(
-                        f"Could not extract image from prediction: {prediction}")
-                    return None, "", ""
+                    error_msg = f"No b64_json in response data: {list(image_data.keys())}"
+                    logger.warning(error_msg)
+                    return None, "", "", error_msg
             else:
-                logger.warning(f"No predictions in response: {result}")
-                # Log the full response for debugging
-                logger.warning(f"Full response text: {response.text[:1000]}")
-                return None, "", ""
+                error_msg = f"No data in API response. Response keys: {list(result.keys())}"
+                logger.warning(error_msg)
+                return None, "", "", error_msg
         else:
-            logger.warning(
-                f"Imagen API error {response.status_code}: {response.text[:500]}")
-            return None, "", ""
+            error_detail = response.text[:1000] if response.text else "No error details"
+            error_msg = f"DALL-E 3 API error {response.status_code}"
+            
+            logger.error(f"{error_msg}: {error_detail}")
+            
+            # Parse OpenAI error message
+            try:
+                error_json = response.json()
+                if "error" in error_json:
+                    if isinstance(error_json['error'], dict) and 'message' in error_json['error']:
+                        error_msg = f"OpenAI: {error_json['error']['message']}"
+                    else:
+                        error_msg = f"OpenAI: {str(error_json['error'])[:200]}"
+                    logger.error(f"Structured error: {error_msg}")
+            except:
+                pass
+            
+            return None, "", "", error_msg
 
     except Exception as e:
-        logger.warning(f"Imagen generation failed: {e}", exc_info=True)
-        return None, "", ""
+        error_msg = f"Exception during image generation: {str(e)}"
+        logger.warning(error_msg, exc_info=True)
+        return None, "", "", error_msg

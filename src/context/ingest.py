@@ -16,7 +16,8 @@ def ingest_website(
     seed_urls: Optional[List[str]] = None,
     max_depth: int = 3,
     max_pages: int = 50,
-    site_type: str = 'wp'
+    site_type: str = 'wp',
+    user_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """
     Ingest website content: crawl, extract, chunk, and generate Site DNA.
@@ -27,6 +28,7 @@ def ingest_website(
         max_depth: Maximum crawl depth
         max_pages: Maximum pages to crawl
         site_type: Type of site ('wp' or 'context')
+        user_id: User ID for multi-tenant support
 
     Returns:
         Dictionary with ingest statistics
@@ -76,7 +78,7 @@ def ingest_website(
 
     # Step 2: Extract and chunk content
     logger.info("Step 2/4: Extracting and chunking content...")
-    extractor = ContentExtractor(max_chunk_tokens=1000)
+    extractor = ContentExtractor(max_chunk_tokens=500)  # Reduced from 1000 to avoid MySQL packet size issues
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -136,6 +138,12 @@ def ingest_website(
             )
 
             for chunk in chunks:
+                # Hard cap chunk text to avoid MySQL max_allowed_packet errors
+                chunk_text = chunk["chunk_text"]
+                if len(chunk_text) > 10000:  # 10KB max per chunk
+                    logger.warning(f"Truncating large chunk from {page_data['url']} (size: {len(chunk_text)})")
+                    chunk_text = chunk_text[:10000]
+                
                 cursor.execute("""
                     INSERT INTO page_chunks (
                         page_id, site_id, site_type, chunk_index, section_heading,
@@ -147,7 +155,7 @@ def ingest_website(
                     site_type,
                     chunk["chunk_index"],
                     chunk["section_heading"],
-                    chunk["chunk_text"],
+                    chunk_text,
                     chunk["chunk_tokens"],
                     chunk["url"]
                 ))
@@ -180,7 +188,7 @@ def ingest_website(
         logger.info(f"Extracted {len(unique_colors)} unique colors from pages")
 
         site_dna = refresh_site_dna(
-            site_id, site_type=site_type, extracted_colors=unique_colors)
+            site_id, site_type=site_type, extracted_colors=unique_colors, user_id=user_id)
         logger.info("Site DNA generated successfully")
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")

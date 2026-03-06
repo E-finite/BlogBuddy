@@ -90,6 +90,25 @@ export const api = {
     return apiRequest(`/api/jobs/${jobId}`);
   },
 
+  // Drafts
+  async getDrafts() {
+    return apiRequest('/api/drafts');
+  },
+
+  async getDraft(draftId) {
+    return apiRequest(`/api/drafts/${draftId}`);
+  },
+
+  async deleteDraft(draftId) {
+    return apiRequest(`/api/drafts/${draftId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getImage(imageId) {
+    return apiRequest(`/api/images/${imageId}`);
+  },
+
   // Health
   async health() {
     return apiRequest('/health');

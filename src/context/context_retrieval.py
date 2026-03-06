@@ -81,7 +81,7 @@ class ContextRetriever:
 
         # Get all chunks
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         cursor.execute("""
             SELECT 
@@ -100,7 +100,7 @@ class ContextRetriever:
             logger.warning(f"No chunks found for site {self.site_id}")
             return []
 
-        chunks = [dict(row) for row in rows]
+        chunks = rows  # rows are already dictionaries with dictionary=True cursor
 
         # Score chunks
         scored_chunks = []

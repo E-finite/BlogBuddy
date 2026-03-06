@@ -204,7 +204,7 @@ CONTENT:
     return "\n\n".join(context_parts)
 
 
-def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List[str] = None) -> Dict[str, Any]:
+def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List[str] = None, user_id: Optional[int] = None) -> Dict[str, Any]:
     """
     Refresh Site DNA for a site by re-analyzing scraped pages.
 
@@ -212,6 +212,7 @@ def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List
         site_id: Site identifier
         site_type: Type of site ('wp' or 'context')
         extracted_colors: Pre-extracted color hex codes from HTML
+        user_id: User ID for multi-tenant support
 
     Returns:
         Generated Site DNA dictionary
@@ -274,12 +275,13 @@ def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List
 
     cursor.execute("""
         INSERT INTO site_dna (
-            site_id, site_type, brand_name, brand_colors_json, brand_summary, target_audiences_json, pain_points_json,
+            site_id, user_id, site_type, brand_name, brand_colors_json, brand_summary, target_audiences_json, pain_points_json,
             solutions_themes_json, tone_keywords_json, avoid_words_json,
             proof_points_json, compliance_notes_json, generated_at, source_pages_json
-        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
     """, (
         site_id,
+        user_id,
         site_type,
         dna.get("brand_name", ""),
         json.dumps(dna.get("brand_colors", [])),
@@ -302,12 +304,13 @@ def refresh_site_dna(site_id: str, site_type: str = 'wp', extracted_colors: List
     return dna
 
 
-def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
+def get_site_dna(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """
     Get the latest Site DNA for a site.
 
     Args:
         site_id: Site identifier
+        user_id: Optional user ID for multi-tenant filtering
 
     Returns:
         Site DNA dictionary or None if not found
@@ -317,13 +320,24 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT *
-        FROM site_dna
-        WHERE site_id = %s
-        ORDER BY generated_at DESC
-        LIMIT 1
-    """, (site_id,))
+    if user_id is not None:
+        # Filter by user_id for multi-tenant
+        cursor.execute("""
+            SELECT *
+            FROM site_dna
+            WHERE site_id = %s AND (user_id = %s OR user_id IS NULL)
+            ORDER BY generated_at DESC
+            LIMIT 1
+        """, (site_id, user_id))
+    else:
+        # Backwards compatible - no user filter
+        cursor.execute("""
+            SELECT *
+            FROM site_dna
+            WHERE site_id = %s
+            ORDER BY generated_at DESC
+            LIMIT 1
+        """, (site_id,))
 
     row = cursor.fetchone()
     conn.close()
@@ -342,5 +356,5 @@ def get_site_dna(site_id: str) -> Optional[Dict[str, Any]]:
         "avoid_words": json.loads(row["avoid_words_json"]),
         "proof_points": json.loads(row["proof_points_json"]),
         "compliance_notes": json.loads(row["compliance_notes_json"]),
-        "generated_at": row["generated_at"]
+        "generated_at": row["generated_at"].isoformat() if row["generated_at"] else None
     }

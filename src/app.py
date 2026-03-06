@@ -3,6 +3,7 @@ from src.jobs.worker import start_worker
 import uuid
 import json
 import logging
+import copy
 from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from datetime import datetime
@@ -54,6 +55,51 @@ db.init_db()
 
 # Start background worker
 start_worker()
+
+
+# Helper functions
+def strip_base64_from_draft(draft):
+    """
+    Remove base64 image data from draft to avoid MySQL packet size issues.
+    Recursively removes all 'bytes_base64' keys from the draft structure.
+    Keeps only image metadata (imageId, mime_type, filename).
+    """
+    def strip_recursive(obj):
+        """Recursively remove bytes_base64 from any nested structure."""
+        if isinstance(obj, dict):
+            # Create new dict without bytes_base64
+            result = {}
+            for key, value in obj.items():
+                if key == 'bytes_base64':
+                    # Skip this key entirely
+                    continue
+                elif key in ('image', 'images', '_image'):
+                    # For image fields, strip recursively and keep only metadata
+                    if isinstance(value, dict):
+                        result[key] = {
+                            'imageId': value.get('imageId'),
+                            'mime_type': value.get('mime_type'),
+                            'mime': value.get('mime'),  # Some use 'mime' instead of 'mime_type'
+                            'filename': value.get('filename'),
+                            'feedbackChain': value.get('feedbackChain', []),
+                            'generationNumber': value.get('generationNumber', 1)
+                        }
+                        # Remove None values
+                        result[key] = {k: v for k, v in result[key].items() if v is not None}
+                    elif isinstance(value, list):
+                        result[key] = [strip_recursive(item) for item in value]
+                    else:
+                        result[key] = value
+                else:
+                    result[key] = strip_recursive(value)
+            return result
+        elif isinstance(obj, list):
+            return [strip_recursive(item) for item in obj]
+        else:
+            return obj
+    
+    draft_copy = copy.deepcopy(draft)
+    return strip_recursive(draft_copy)
 
 
 # Authentication routes
@@ -327,7 +373,16 @@ def generate_post():
             if req.scheduleDateGmt:
                 draft["scheduleDateGmt"] = req.scheduleDateGmt
 
-            return jsonify({"draft": draft}), 200
+            # Save draft to database for persistence (without base64 image data to avoid MySQL packet size issues)
+            draft_for_db = strip_base64_from_draft(draft)
+            draft_id = db.create_draft(
+                user_id=current_user.id,
+                site_id=req.siteId,
+                draft_data=draft_for_db
+            )
+            logger.info(f"Draft saved to database with ID: {draft_id}")
+
+            return jsonify({"draft": draft, "draftId": draft_id}), 200
 
     except Exception as e:
         logger.error(f"Error generating post: {e}", exc_info=True)
@@ -362,21 +417,36 @@ def regenerate_image():
 
         # Build cumulative feedback chain
         import json
-        previous_feedback = json.loads(parent['all_feedback_json'] or '[]')
+        
+        try:
+            previous_feedback = json.loads(parent['all_feedback_json']) if parent.get('all_feedback_json') else []
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse all_feedback_json: {e}, using empty list")
+            previous_feedback = []
+        
         all_feedback = previous_feedback + [user_feedback]
 
-        # Parse parent settings
+        # Parse parent settings with error handling
         topic = parent['topic']
-        brand = json.loads(parent['brand_json']
-                           ) if parent['brand_json'] else {}
-        image_settings = json.loads(parent['image_settings_json'])
+        
+        try:
+            brand = json.loads(parent['brand_json']) if parent['brand_json'] else {}
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.warning(f"Failed to parse brand_json: {e}")
+            brand = {}
+        
+        try:
+            image_settings = json.loads(parent['image_settings_json']) if parent['image_settings_json'] else {}
+        except (json.JSONDecodeError, TypeError) as e:
+            logger.error(f"Failed to parse image_settings_json: {e}")
+            return jsonify({"error": "Invalid image settings in parent generation"}), 500
 
         # Generate new image with cumulative feedback
         from src.generator.image_gemini import generate_featured_image
 
         logger.info(f"Regenerating image with feedback: {all_feedback}")
 
-        image_bytes, mime_type, filename = generate_featured_image(
+        image_bytes, mime_type, filename, error_msg = generate_featured_image(
             topic=topic,
             brand=brand,
             image_settings=image_settings,
@@ -387,7 +457,11 @@ def regenerate_image():
         if not image_bytes:
             logger.error(
                 f"Image generation failed for regeneration. Topic: {topic}, Feedback: {all_feedback}")
-            return jsonify({"error": "Image generation failed. The prompt may be too complex or contain invalid content. Try simpler feedback."}), 500
+            logger.error(f"Error from Gemini: {error_msg}")
+            
+            # Return the specific error from Gemini API
+            user_error_msg = error_msg if error_msg else "Image generation failed. The prompt may be too complex or contain invalid content. Try simpler feedback."
+            return jsonify({"error": user_error_msg}), 500
 
         # Build prompt for storage
         prompt = f"Topic: {topic}, Settings: {json.dumps(image_settings)}, Feedback: {all_feedback}"
@@ -451,7 +525,8 @@ def crawl_site(site_id: str):
             site_id=site_id,
             seed_urls=seed_urls,
             max_depth=max_depth,
-            max_pages=max_pages
+            max_pages=max_pages,
+            user_id=site.get("user_id")  # Pass user_id from site
         )
 
         return jsonify(result), 200
@@ -505,7 +580,8 @@ def crawl_for_context():
             seed_urls=[website_url],
             max_depth=data.get("maxDepth", 2),
             max_pages=data.get("maxPages", 30),
-            site_type='context'  # Pass site_type to ingest
+            site_type='context',  # Pass site_type to ingest
+            user_id=current_user.id  # Pass user_id for multi-tenant
         )
 
         result["siteId"] = site_id
@@ -536,6 +612,84 @@ def crawl_for_context():
 
     except Exception as e:
         logger.error(f"Error crawling for context: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/context-sites", methods=["GET"])
+@login_required
+def list_context_sites():
+    """Get all context sites for the current user with DNA info - MULTI-TENANT."""
+    try:
+        sites = db.get_user_context_sites(current_user.id)
+        
+        # Enrich with site DNA info
+        result = []
+        for site in sites:
+            from context.site_dna import get_site_dna
+            dna = get_site_dna(site["id"], user_id=current_user.id)
+            
+            # Only show sites that have DNA
+            if dna:
+                result.append({
+                    "id": site["id"],
+                    "baseUrl": site["base_url"],
+                    "createdAt": site["created_at"].isoformat() if site["created_at"] else None,
+                    "brandName": dna.get("brand_name", ""),
+                    "hasDna": True
+                })
+        
+        return jsonify({"sites": result}), 200
+    
+    except Exception as e:
+        logger.error(f"Error listing context sites: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/context-sites/<site_id>/details", methods=["GET"])
+@login_required
+def get_context_site_details(site_id: str):
+    """Get detailed information about a context site - MULTI-TENANT."""
+    try:
+        # Verify site belongs to user
+        site = db.get_context_site(site_id, user_id=current_user.id)
+        if not site:
+            return jsonify({"error": "Site not found"}), 404
+        
+        # Get page and chunk counts
+        conn = db.get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM scraped_pages 
+            WHERE site_id = %s AND site_type = 'context'
+        """, (site_id,))
+        pages_count = cursor.fetchone()[0]
+        
+        cursor.execute("""
+            SELECT COUNT(*) FROM page_chunks 
+            WHERE site_id = %s AND site_type = 'context'
+        """, (site_id,))
+        chunks_count = cursor.fetchone()[0]
+        
+        cursor.close()
+        conn.close()
+        
+        # Get Site DNA
+        from context.site_dna import get_site_dna
+        dna = get_site_dna(site_id, user_id=current_user.id)
+        
+        return jsonify({
+            "id": site["id"],
+            "baseUrl": site["base_url"],
+            "createdAt": site["created_at"].isoformat() if site["created_at"] else None,
+            "pagesCount": pages_count,
+            "chunksCount": chunks_count,
+            "hasDna": dna is not None,
+            "brandName": dna.get("brand_name", "") if dna else ""
+        }), 200
+    
+    except Exception as e:
+        logger.error(f"Error getting context site details: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
@@ -612,6 +766,81 @@ def get_ingest_stats_endpoint(site_id: str):
     except Exception as e:
         logger.error(f"Error getting ingest stats: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/images/<int:image_id>", methods=["GET"])
+@login_required
+def get_image(image_id: int):
+    """Get a specific image by ID with full data - MULTI-TENANT."""
+    try:
+        image = db.get_image_generation(image_id, current_user.id)
+        if not image:
+            return jsonify({"error": "Image not found or access denied"}), 404
+
+        # Build response with base64 data
+        import base64
+        response_data = {
+            "imageId": image['id'],
+            "mime_type": image['mime_type'],
+            "filename": image['filename'],
+            "feedbackChain": json.loads(image['all_feedback_json']) if image.get('all_feedback_json') else [],
+            "generationNumber": image['generation_number']
+        }
+        
+        # Add base64 data if available
+        if image.get('image_data'):
+            response_data['bytes_base64'] = base64.b64encode(image['image_data']).decode('utf-8')
+        
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        logger.error(f"Error getting image: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/drafts", methods=["GET"])
+@login_required
+def get_drafts():
+    """Get all drafts for the current user - MULTI-TENANT."""
+    try:
+        drafts = db.get_user_drafts(current_user.id)
+        return jsonify({"drafts": drafts}), 200
+
+    except Exception as e:
+        logger.error(f"Error getting drafts: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/drafts/<int:draft_id>", methods=["GET"])
+@login_required
+def get_draft(draft_id: int):
+    """Get a specific draft - MULTI-TENANT."""
+    try:
+        draft = db.get_draft(draft_id, current_user.id)
+        if not draft:
+            return jsonify({"error": "Draft not found or access denied"}), 404
+
+        return jsonify(draft), 200
+
+    except Exception as e:
+        logger.error(f"Error getting draft: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/drafts/<int:draft_id>", methods=["DELETE"])
+@login_required
+def delete_draft(draft_id: int):
+    """Delete a draft - MULTI-TENANT."""
+    try:
+        deleted = db.delete_draft(draft_id, current_user.id)
+        if not deleted:
+            return jsonify({"error": "Draft not found or access denied"}), 404
+
+        return jsonify({"ok": True, "message": "Draft deleted successfully"}), 200
+
+    except Exception as e:
+        logger.error(f"Error deleting draft: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
 
 
 @app.route("/api/posts/publish", methods=["POST"])
@@ -701,7 +930,7 @@ def get_site_dna_api(site_id):
 
         # Get Site DNA (works for both WP and context sites)
         from src.context.site_dna import get_site_dna
-        dna = get_site_dna(site_id)
+        dna = get_site_dna(site_id, user_id=current_user.id)  # Pass user_id for filtering
 
         if not dna:
             return jsonify({"error": "No Site DNA found for this site"}), 404

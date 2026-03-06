@@ -111,7 +111,7 @@ def build_draft(
 
         # Generate multiple variations
         for i in range(variations_count):
-            image_bytes, mime_type, filename = generate_featured_image(
+            image_bytes, mime_type, filename, error_msg = generate_featured_image(
                 topic=topic,
                 brand=brand,
                 language=language,

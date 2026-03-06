@@ -148,17 +148,6 @@
             <h2 class="section-title">Blog Post Genereren</h2>
             <div class="card">
               <form id="generate-post-form">
-                <div class="form-group">
-                  <label class="form-label" for="siteId">Site ID</label>
-                  <input
-                    type="text"
-                    id="siteId"
-                    name="siteId"
-                    class="form-input"
-                    placeholder="Laat leeg om laatste verbonden site te gebruiken"
-                  />
-                </div>
-
                 <!-- Website Context Sectie -->
                 <div
                   class="form-group"
@@ -173,8 +162,31 @@
                     class="form-label"
                     style="display: flex; align-items: center; gap: 8px"
                   >
-                    <span>🧬 Website URL voor Context (optioneel)</span>
+                    <span>🧬 Website Context (optioneel)</span>
                   </label>
+                  
+                  <!-- Existing crawled sites dropdown -->
+                  <div id="existing-sites-section" style="margin-bottom: 12px; display: none;">
+                    <label class="form-label" style="font-size: 14px;">Gebruik eerder gecrawlde website:</label>
+                    <select id="existingSiteSelect" class="form-select">
+                      <option value="">-- Kies een website --</option>
+                    </select>
+                    <button
+                      type="button"
+                      id="confirm-site-btn"
+                      class="btn btn-primary"
+                      style="margin-top: 12px; display: none"
+                    >
+                      ✓ Gebruik deze website
+                    </button>
+                  </div>
+                  
+                  <div style="text-align: center; margin: 12px 0; color: #94a3b8; font-size: 14px;">
+                    of
+                  </div>
+                  
+                  <!-- New URL input -->
+                  <label class="form-label" style="font-size: 14px;">Crawl nieuwe website:</label>
                   <input
                     type="url"
                     id="contextWebsiteUrl"
@@ -212,6 +224,20 @@
                     name="topic"
                     class="form-input"
                     placeholder="Hoe maak je een WordPress blog?"
+                    required
+                  />
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label" for="focusKeyword"
+                    >SEO Focus Keyword</label
+                  >
+                  <input
+                    type="text"
+                    id="focusKeyword"
+                    name="focusKeyword"
+                    class="form-input"
+                    placeholder="wordpress blog maken"
                     required
                   />
                 </div>
@@ -258,20 +284,6 @@
                     name="painPoints"
                     class="form-input"
                     placeholder="geen technische kennis, tijd tekort"
-                  />
-                </div>
-
-                <div class="form-group">
-                  <label class="form-label" for="focusKeyword"
-                    >SEO Focus Keyword</label
-                  >
-                  <input
-                    type="text"
-                    id="focusKeyword"
-                    name="focusKeyword"
-                    class="form-input"
-                    placeholder="wordpress blog maken"
-                    required
                   />
                 </div>
 
@@ -878,6 +890,19 @@ blurry, low quality, watermark, text overlay, jpeg artifacts, deformed, pixelate
         <section id="publish" class="page-section hidden">
           <div class="section">
             <h2 class="section-title">Post Publiceren naar WordPress</h2>
+
+            <!-- Saved Drafts List -->
+            <div class="card" style="margin-bottom: 2rem;">
+              <div class="card-header">
+                <h3>Opgeslagen Concepten</h3>
+              </div>
+              <div class="card-body">
+                <div id="drafts-list">
+                  <!-- Drafts worden hier geladen via JavaScript -->
+                  <p class="text-muted">Laden...</p>
+                </div>
+              </div>
+            </div>
 
             <div class="card">
               <form id="publish-post-form">

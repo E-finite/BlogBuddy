@@ -2,9 +2,12 @@
 import mysql.connector
 from mysql.connector import Error
 import json
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, List
 from src import config
+
+logger = logging.getLogger(__name__)
 
 
 def get_db_connection():
@@ -186,6 +189,7 @@ def init_db():
         CREATE TABLE IF NOT EXISTS site_dna (
             id INT AUTO_INCREMENT PRIMARY KEY,
             site_id VARCHAR(36) NOT NULL,
+            user_id INT NULL,
             site_type ENUM('wp', 'context') DEFAULT 'wp',
             brand_name VARCHAR(255),
             brand_colors_json TEXT,
@@ -200,10 +204,29 @@ def init_db():
             generated_at DATETIME NOT NULL,
             source_pages_json TEXT,
             INDEX idx_site_id (site_id),
-            INDEX idx_site_type (site_type)
+            INDEX idx_user_id (user_id),
+            INDEX idx_site_type (site_type),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
+    
+    # Migration: Add user_id column if it doesn't exist
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'site_dna'
+            AND column_name = 'user_id'
+        """, (config.MYSQL_DATABASE,))
 
+        result = cursor.fetchone()
+        if result[0] == 0:
+            cursor.execute(
+                "ALTER TABLE site_dna ADD COLUMN user_id INT NULL AFTER site_id, ADD INDEX idx_user_id (user_id), ADD FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE")
+            print("✅ Added user_id column to site_dna table")
+    except Exception as e:
+        print(f"⚠️ Migration note (site_dna): {e}")
     # Image generations table - stores generated images with regeneration chains
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS image_generations (
@@ -335,6 +358,22 @@ def init_db():
                 "✅ Dropped foreign key constraint site_dna_ibfk_1 to support context_sites")
     except Exception as e:
         print(f"⚠️ Migration note (site_dna FK): {e}")
+
+    # Drafts table - stores generated blog drafts that are ready to publish
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS drafts (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            site_id VARCHAR(36) NULL,
+            draft_json LONGTEXT NOT NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_site_id (site_id),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
 
     conn.commit()
     cursor.close()
@@ -806,6 +845,80 @@ def save_image_generation(
     Save a generated image to database.
     Returns the new image_generation id.
     """
+    # ALWAYS compress images to ensure they fit in MySQL packet size
+    # MySQL default max_allowed_packet is often 4MB, but can be as low as 1MB
+    # We target 1MB to be safe across all MySQL configurations
+    TARGET_SIZE = 1 * 1024 * 1024  # 1MB target
+    MAX_SIZE = 1.5 * 1024 * 1024   # 1.5MB hard limit
+    
+    original_size = len(image_data)
+    logger.info(f"Original image size: {original_size} bytes ({original_size/1024/1024:.2f}MB)")
+    
+    # ALWAYS compress/optimize images, even if under limit
+    try:
+        from PIL import Image
+        import io
+        
+        # Load image
+        img = Image.open(io.BytesIO(image_data))
+        original_format = img.format
+        original_size_tuple = img.size
+        
+        # Determine target dimensions based on current size
+        max_width = 1600  # Good balance between quality and file size
+        max_height = 1200
+        
+        # Resize if needed
+        if img.size[0] > max_width or img.size[1] > max_height:
+            logger.info(f"Resizing image from {img.size}")
+            img.thumbnail((max_width, max_height), Image.Resampling.LANCZOS)
+            logger.info(f"Resized to {img.size}")
+        
+        # Start with quality 85 and reduce until we hit target
+        quality = 85
+        compressed_data = None
+        
+        while quality >= 30:
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=quality, optimize=True)
+            compressed_data = buffer.getvalue()
+            size_mb = len(compressed_data) / 1024 / 1024
+            
+            logger.info(f"Quality {quality}: {len(compressed_data)} bytes ({size_mb:.2f}MB)")
+            
+            if len(compressed_data) <= TARGET_SIZE:
+                break
+            
+            quality -= 5
+        
+        # If still too large after minimum quality, resize more aggressively
+        if len(compressed_data) > MAX_SIZE:
+            logger.warning(f"Still too large ({len(compressed_data)} bytes), aggressive resize")
+            img.thumbnail((1200, 900), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            img.save(buffer, format='JPEG', quality=75, optimize=True)
+            compressed_data = buffer.getvalue()
+            
+            # Final check - if STILL too large, go nuclear
+            if len(compressed_data) > MAX_SIZE:
+                logger.error("Extreme case: resizing to 800px")
+                img.thumbnail((800, 600), Image.Resampling.LANCZOS)
+                buffer = io.BytesIO()
+                img.save(buffer, format='JPEG', quality=70, optimize=True)
+                compressed_data = buffer.getvalue()
+        
+        image_data = compressed_data
+        mime_type = 'image/jpeg'
+        final_size_mb = len(image_data) / 1024 / 1024
+        compression_ratio = (1 - len(image_data) / original_size) * 100
+        logger.info(f"✅ Final image: {len(image_data)} bytes ({final_size_mb:.2f}MB), {compression_ratio:.1f}% compression")
+        
+    except Exception as e:
+        logger.error(f"Failed to compress image: {e}", exc_info=True)
+        # Last resort: truncate (will corrupt image but prevents crash)
+        logger.error("CRITICAL: Truncating image as last resort")
+        image_data = image_data[:TARGET_SIZE]
+    
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -954,3 +1067,126 @@ def cleanup_job_images(job_id: str) -> int:
     conn.close()
 
     return deleted_count
+
+
+# ============================================
+# DRAFTS
+# ============================================
+
+def create_draft(user_id: int, site_id: Optional[str], draft_data: dict) -> int:
+    """
+    Save a generated draft to the database.
+    Returns the draft ID.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    now = datetime.utcnow()
+    draft_json = json.dumps(draft_data)
+    
+    # Log size to help diagnose issues
+    draft_size_mb = len(draft_json.encode('utf-8')) / 1024 / 1024
+    logger.info(f"Draft JSON size: {draft_size_mb:.2f}MB")
+    
+    # Warn if draft is getting large (MySQL default max_allowed_packet is 4MB)
+    if draft_size_mb > 3:
+        logger.warning(f"Draft size ({draft_size_mb:.2f}MB) is very large. Consider removing large data.")
+    
+    cursor.execute("""
+        INSERT INTO drafts (user_id, site_id, draft_json, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (user_id, site_id, draft_json, now, now))
+    
+    draft_id = cursor.lastrowid
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return draft_id
+
+
+def get_user_drafts(user_id: int) -> List[Dict[str, Any]]:
+    """
+    Get all drafts for a specific user.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT id, user_id, site_id, draft_json, created_at, updated_at
+        FROM drafts
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+    """, (user_id,))
+    
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    
+    # Parse JSON data
+    drafts = []
+    for row in rows:
+        draft = {
+            'id': row['id'],
+            'user_id': row['user_id'],
+            'site_id': row['site_id'],
+            'draft': json.loads(row['draft_json']) if row['draft_json'] else {},
+            'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+            'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
+        }
+        drafts.append(draft)
+    
+    return drafts
+
+
+def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
+    """
+    Get a specific draft by ID, ensuring it belongs to the user.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    cursor.execute("""
+        SELECT id, user_id, site_id, draft_json, created_at, updated_at
+        FROM drafts
+        WHERE id = %s AND user_id = %s
+    """, (draft_id, user_id))
+    
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    
+    if not row:
+        return None
+    
+    draft = {
+        'id': row['id'],
+        'user_id': row['user_id'],
+        'site_id': row['site_id'],
+        'draft': json.loads(row['draft_json']) if row['draft_json'] else {},
+        'created_at': row['created_at'].isoformat() if row['created_at'] else None,
+        'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
+    }
+    
+    return draft
+
+
+def delete_draft(draft_id: int, user_id: int) -> bool:
+    """
+    Delete a draft, ensuring it belongs to the user.
+    Returns True if deleted, False if not found.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        DELETE FROM drafts
+        WHERE id = %s AND user_id = %s
+    """, (draft_id, user_id))
+    
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return deleted

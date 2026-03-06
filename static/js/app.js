@@ -45,6 +45,7 @@ function initNavigation() {
       // Restore publish preview when navigating to publish section
       if (target === 'publish') {
         restorePublishPreview();
+        loadDrafts(); // Load saved drafts from database
       }
     });
   });
@@ -154,50 +155,192 @@ function initGeneratePost() {
   const contextUrlInput = document.getElementById('contextWebsiteUrl');
   const contextStatusDiv = document.getElementById('context-status');
   const crawlBtn = document.getElementById('crawl-context-btn');
-  const siteIdInput = document.getElementById('siteId');
+  const existingSitesSection = document.getElementById('existing-sites-section');
+  const existingSiteSelect = document.getElementById('existingSiteSelect');
   
   let contextSiteId = null;
+  
+  // Load existing context sites
+  async function loadContextSites() {
+    try {
+      const response = await fetch('/api/context-sites');
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      if (data.sites && data.sites.length > 0) {
+        existingSitesSection.style.display = 'block';
+        
+        // Clear existing options except first
+        existingSiteSelect.innerHTML = '<option value="">-- Kies een website --</option>';
+        
+        // Add sites to dropdown (only sites with DNA are returned from API)
+        data.sites.forEach(site => {
+          const option = document.createElement('option');
+          option.value = site.id;
+          option.textContent = `${site.brandName || site.baseUrl} ✓`;
+          existingSiteSelect.appendChild(option);
+        });
+        
+        console.log(`Loaded ${data.sites.length} sites with DNA`);
+      } else {
+        console.log('No sites with DNA found');
+      }
+    } catch (error) {
+      console.error('Error loading context sites:', error);
+    }
+  }
+  
+  // Load sites on page load
+  if (existingSiteSelect) {
+    loadContextSites();
+  }
+  
+  // Handle existing site selection
+  const confirmSiteBtn = document.getElementById('confirm-site-btn');
+  
+  if (existingSiteSelect) {
+    existingSiteSelect.addEventListener('change', () => {
+      const selectedSiteId = existingSiteSelect.value;
+      if (selectedSiteId) {
+        // Show confirmation button
+        if (confirmSiteBtn) {
+          confirmSiteBtn.style.display = 'block';
+          confirmSiteBtn.disabled = false;
+          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+        }
+        contextUrlInput.value = ''; // Clear URL input
+        crawlBtn.style.display = 'none';
+        contextStatusDiv.style.display = 'none';
+        contextSiteId = null; // Don't set yet, wait for confirmation
+      } else {
+        // Hide confirmation button if no selection
+        if (confirmSiteBtn) {
+          confirmSiteBtn.style.display = 'none';
+        }
+        contextStatusDiv.style.display = 'none';
+        contextSiteId = null;
+      }
+    });
+  }
+  
+  // Handle site confirmation
+  if (confirmSiteBtn) {
+    confirmSiteBtn.addEventListener('click', async () => {
+      const selectedSiteId = existingSiteSelect.value;
+      if (!selectedSiteId) return;
+      
+      // Disable button during loading
+      confirmSiteBtn.disabled = true;
+      confirmSiteBtn.textContent = '⏳ Laden...';
+      
+      contextSiteId = selectedSiteId;
+      
+      // Show loading status
+      contextStatusDiv.style.display = 'block';
+      contextStatusDiv.querySelector('.alert').textContent = '⏳ Website gegevens laden...';
+      contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
+      
+      try {
+        // Get site details (pages, chunks count)
+        const detailsResponse = await fetch(`/api/context-sites/${selectedSiteId}/details`);
+        if (detailsResponse.ok) {
+          const details = await detailsResponse.json();
+          
+          // Show detailed status like after crawl
+          contextStatusDiv.querySelector('.alert').textContent = 
+            `✅ ${details.baseUrl} geselecteerd! ${details.pagesCount} pagina's, ${details.chunksCount} chunks. ${details.hasDna ? 'Site DNA beschikbaar.' : 'Geen Site DNA.'}`;
+          contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
+        } else {
+          // Fallback to simple message
+          contextStatusDiv.querySelector('.alert').textContent = '✅ Website geselecteerd!';
+          contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
+        }
+        
+        // Auto-fill from Site DNA
+        await autoFillFromSiteDNA(selectedSiteId);
+        
+        // Update button to show success
+        confirmSiteBtn.textContent = '✅ Geladen';
+        confirmSiteBtn.disabled = true;
+      } catch (error) {
+        console.error('Error loading site details:', error);
+        contextStatusDiv.querySelector('.alert').textContent = '❌ Fout bij laden site gegevens';
+        contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
+        
+        // Re-enable button
+        confirmSiteBtn.textContent = '✓ Gebruik deze website';
+        confirmSiteBtn.disabled = false;
+      }
+    });
+  }
+  
+  // Auto-fill SEO Focus Keyword from topic field
+  const topicInput = document.getElementById('topic');
+  const focusKeywordInput = document.getElementById('focusKeyword');
+  
+  if (topicInput && focusKeywordInput) {
+    topicInput.addEventListener('input', () => {
+      const topic = topicInput.value.trim();
+      if (topic) {
+        // Replace spaces with hyphens and convert to lowercase
+        focusKeywordInput.value = topic.replace(/\s+/g, '-').toLowerCase();
+      } else {
+        focusKeywordInput.value = '';
+      }
+    });
+  }
   
   // Auto-fill form from Site DNA
   async function autoFillFromSiteDNA(siteId) {
     try {
       const response = await fetch(`/api/sites/${siteId}/dna`);
       if (!response.ok) {
-        console.log('No Site DNA found for this site');
+        const errorText = await response.text();
+        console.log('No Site DNA found for this site:', errorText);
         return;
       }
       
       const dna = await response.json();
       console.log('Site DNA loaded:', dna);
       
+      let fieldsFilledCount = 0;
+      
       // Fill brand name
       if (dna.brand_name && document.getElementById('brandName')) {
         document.getElementById('brandName').value = dna.brand_name;
-      }
-      
-      // Fill brand colors
-      if (dna.brand_colors && dna.brand_colors.length > 0 && document.getElementById('brandColors')) {
-        document.getElementById('brandColors').value = dna.brand_colors.join(', ');
+        fieldsFilledCount++;
+        console.log('Filled brandName:', dna.brand_name);
       }
       
       // Fill audience (eerste target audience)
       if (dna.target_audiences && dna.target_audiences.length > 0 && document.getElementById('audienceMarket')) {
         document.getElementById('audienceMarket').value = dna.target_audiences[0];
+        fieldsFilledCount++;
+        console.log('Filled audienceMarket:', dna.target_audiences[0]);
       }
       
       // Fill pain points
       if (dna.pain_points && dna.pain_points.length > 0 && document.getElementById('painPoints')) {
         document.getElementById('painPoints').value = dna.pain_points.join(', ');
+        fieldsFilledCount++;
+        console.log('Filled painPoints:', dna.pain_points);
       }
       
       // Fill tone keywords
       if (dna.tone_keywords && dna.tone_keywords.length > 0 && document.getElementById('toneStyle')) {
         document.getElementById('toneStyle').value = dna.tone_keywords.slice(0, 5).join(', ');
+        fieldsFilledCount++;
+        console.log('Filled toneStyle:', dna.tone_keywords);
       }
       
-      showAlert('✅ Formulier automatisch ingevuld met Site DNA', 'success', 3000);
+      if (fieldsFilledCount > 0) {
+        showAlert(`✅ ${fieldsFilledCount} velden automatisch ingevuld met Site DNA`, 'success', 3000);
+      } else {
+        console.warn('No fields were filled - DNA data may be empty');
+      }
     } catch (error) {
       console.error('Error loading Site DNA:', error);
+      showAlert('❌ Fout bij laden Site DNA', 'error', 3000);
     }
   }
   
@@ -207,6 +350,16 @@ function initGeneratePost() {
       const url = contextUrlInput.value.trim();
       if (url) {
         crawlBtn.style.display = 'block';
+        // Reset dropdown selection when typing new URL
+        if (existingSiteSelect) {
+          existingSiteSelect.value = '';
+        }
+        // Hide and reset confirmation button
+        if (confirmSiteBtn) {
+          confirmSiteBtn.style.display = 'none';
+          confirmSiteBtn.disabled = false;
+          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+        }
       } else {
         crawlBtn.style.display = 'none';
         contextStatusDiv.style.display = 'none';
@@ -253,9 +406,6 @@ function initGeneratePost() {
         const data = await response.json();
         contextSiteId = data.siteId;
         
-        // Update site ID input
-        siteIdInput.value = contextSiteId;
-        
         // Check if crawl was successful
         if (data.pages_stored === 0) {
           if (data.is_js_site) {
@@ -280,6 +430,9 @@ function initGeneratePost() {
           
           // Store for use in generation
           sessionStorage.setItem('contextSiteId', contextSiteId);
+          
+          // Refresh the dropdown with newly crawled site
+          await loadContextSites();
           
           // Auto-fill form with Site DNA
           if (data.site_dna_generated) {
@@ -307,8 +460,8 @@ function initGeneratePost() {
     
     const formData = new FormData(form);
     
-    // Use context site ID if available, otherwise use siteId input or session
-    let siteId = contextSiteId || formData.get('siteId') || sessionStorage.getItem('currentSiteId');
+    // Use context site ID if available, otherwise use session
+    let siteId = contextSiteId || sessionStorage.getItem('currentSiteId');
     
     if (!siteId) {
       showAlert('Geen site geselecteerd. Verbind eerst een WordPress site of vul een website URL in voor context.', 'error');
@@ -478,18 +631,19 @@ function initPublishPost() {
       console.log('Using form values as draft:', draft);
     }
     
-    // Add image data - try sessionStorage first, then global variable
-    if (imageData) {
-      try {
-        draft.image = JSON.parse(imageData);
-        console.log('Added image from sessionStorage');
-      } catch (e) {
-        console.error('Failed to parse image data:', e);
-      }
-    } else if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
-      // Fallback to global variable
+    // Add image data - always use global variable if available (has full base64 data)
+    if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
       draft.image = window._currentDraftWithImages.image;
-      console.log('Added image from global variable');
+      console.log('Added image from global variable (with base64 data)');
+    } else if (imageData) {
+      // Fallback: try sessionStorage (but this only has metadata now)
+      try {
+        const imageMetadata = JSON.parse(imageData);
+        console.warn('Only image metadata available from sessionStorage:', imageMetadata);
+        draft.image = imageMetadata;
+      } catch (e) {
+        console.error('Failed to parse image metadata:', e);
+      }
     }
     
     // Build payload with correct structure - draft as nested object
@@ -631,12 +785,18 @@ function fillPublishForm(result, siteId) {
     renderPreview(draft, previewDiv);
   }
   
-  // Store ONLY the selected image (not all variations) for publishing
+  // Store ONLY image metadata (not base64 data) to avoid quota issues
   if (draft.image || draft._image) {
     try {
-      sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image || draft._image));
+      const selectedImage = draft.image || draft._image;
+      const imageMetadata = {
+        imageId: selectedImage.imageId,
+        mime_type: selectedImage.mime_type,
+        filename: selectedImage.filename
+      };
+      sessionStorage.setItem('currentDraftImage', JSON.stringify(imageMetadata));
     } catch (e) {
-      console.warn('Could not store image in sessionStorage:', e);
+      console.warn('Could not store image metadata:', e);
     }
   }
 }
@@ -652,22 +812,23 @@ function switchToPublishTab() {
 // Restore publish preview from sessionStorage
 function restorePublishPreview() {
   const draftData = sessionStorage.getItem('currentDraft');
-  const imageData = sessionStorage.getItem('currentDraftImage');
   const previewDiv = document.getElementById('publish-preview');
   
-  console.log('Restoring preview - draftData:', draftData);
-  console.log('Restoring preview - imageData:', imageData);
+  console.log('Restoring preview - using window._currentDraftWithImages');
   
-  if (!previewDiv || !draftData) return;
+  if (!previewDiv) return;
   
   try {
-    const draft = JSON.parse(draftData);
-    
-    console.log('Parsed draft:', draft);
-    
-    // Add image data if available
-    if (imageData) {
-      draft.image = JSON.parse(imageData);
+    // Prefer full draft with images from memory
+    let draft;
+    if (window._currentDraftWithImages) {
+      draft = window._currentDraftWithImages;
+      console.log('Using full draft from memory with images');
+    } else if (draftData) {
+      draft = JSON.parse(draftData);
+      console.log('Using draft from sessionStorage (no images)');
+    } else {
+      return;
     }
     
     renderPreview(draft, previewDiv);
@@ -681,7 +842,6 @@ function updatePublishPreviewFromForm() {
   const titleInput = document.getElementById('title');
   const contentInput = document.getElementById('content');
   const previewDiv = document.getElementById('publish-preview');
-  const imageData = sessionStorage.getItem('currentDraftImage');
   const draftData = sessionStorage.getItem('currentDraft');
   
   if (!previewDiv || !titleInput || !contentInput) return;
@@ -704,13 +864,9 @@ function updatePublishPreviewFromForm() {
     }
   }
   
-  // Add image data if available
-  if (imageData) {
-    try {
-      draft.image = JSON.parse(imageData);
-    } catch (e) {
-      // Ignore parse errors
-    }
+  // Add image data from memory (has full base64 data)
+  if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
+    draft.image = window._currentDraftWithImages.image;
   }
   
   renderPreview(draft, previewDiv);
@@ -904,11 +1060,16 @@ function selectImageVariation(index) {
     if (draft.images && draft.images[index]) {
       draft.image = draft.images[index];
       
-      // Store ONLY the selected image in sessionStorage (much smaller)
+      // Store ONLY image metadata (without base64 data) to avoid quota issues
       try {
-        sessionStorage.setItem('currentDraftImage', JSON.stringify(draft.image));
+        const imageMetadata = {
+          imageId: draft.image.imageId,
+          mime_type: draft.image.mime_type,
+          filename: draft.image.filename
+        };
+        sessionStorage.setItem('currentDraftImage', JSON.stringify(imageMetadata));
       } catch (e) {
-        console.warn('Could not store image in sessionStorage:', e);
+        console.warn('Could not store image metadata in sessionStorage:', e);
       }
       
       // Update visual feedback - remove all selected badges first
@@ -1080,9 +1241,28 @@ async function regenerateImage() {
       }
     }
     
-    // Update in global state and sessionStorage
+    // Update in global state (with full image data)
     window._currentDraftWithImages = draft;
-    sessionStorage.setItem('currentDraft', JSON.stringify(draft));
+    
+    // Store draft WITHOUT base64 image data to avoid quota issues
+    try {
+      const draftMetadata = {
+        ...draft,
+        image: draft.image ? {
+          imageId: draft.image.imageId,
+          mime_type: draft.image.mime_type,
+          filename: draft.image.filename
+        } : undefined,
+        images: draft.images ? draft.images.map(img => ({
+          imageId: img.imageId,
+          mime_type: img.mime_type,
+          filename: img.filename
+        })) : undefined
+      };
+      sessionStorage.setItem('currentDraft', JSON.stringify(draftMetadata));
+    } catch (e) {
+      console.warn('Could not store draft metadata:', e);
+    }
     
     // Clear feedback textarea
     feedbackTextarea.value = '';
@@ -1109,6 +1289,171 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+// Load drafts from database
+async function loadDrafts() {
+  const draftsListDiv = document.getElementById('drafts-list');
+  if (!draftsListDiv) return;
+
+  try {
+    draftsListDiv.innerHTML = '<p class="text-muted">Laden...</p>';
+    
+    const response = await api.getDrafts();
+    const drafts = response.drafts || [];
+
+    if (drafts.length === 0) {
+      draftsListDiv.innerHTML = '<p class="text-muted">Geen opgeslagen concepten gevonden.</p>';
+      return;
+    }
+
+    // Render drafts list
+    let html = '<div style="display: flex; flex-direction: column; gap: 1rem;">';
+    
+    for (const item of drafts) {
+      const draft = item.draft;
+      const createdAt = new Date(item.created_at);
+      const title = draft.title || 'Geen titel';
+      const excerpt = draft.excerpt || '';
+      const truncatedExcerpt = excerpt.length > 150 
+        ? excerpt.substring(0, 150) + '...' 
+        : excerpt;
+
+      html += `
+        <div class="draft-item" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary);">
+          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
+            <div style="flex: 1;">
+              <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-primary);">${escapeHtml(title)}</h4>
+              ${truncatedExcerpt ? `<p style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(truncatedExcerpt)}</p>` : ''}
+              <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
+                Aangemaakt: ${formatDate(createdAt)}
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button 
+                class="btn btn-primary btn-sm" 
+                onclick="loadDraft(${item.id})"
+                style="white-space: nowrap;"
+              >
+                Laden
+              </button>
+              <button 
+                class="btn btn-secondary btn-sm" 
+                onclick="deleteDraftById(${item.id})"
+                style="white-space: nowrap; background: var(--error); color: white;"
+              >
+                Verwijderen
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+    
+    html += '</div>';
+    draftsListDiv.innerHTML = html;
+
+  } catch (error) {
+    console.error('Error loading drafts:', error);
+    draftsListDiv.innerHTML = '<p class="text-muted" style="color: var(--error);">Fout bij laden van concepten.</p>';
+  }
+}
+
+// Load a specific draft
+async function loadDraft(draftId) {
+  try {
+    const draftData = await api.getDraft(draftId);
+    const draft = draftData.draft;
+
+    // Fetch full image data if we have imageId but not bytes_base64
+    if (draft.image && draft.image.imageId && !draft.image.bytes_base64) {
+      try {
+        console.log('Fetching full image data for imageId:', draft.image.imageId);
+        const fullImage = await api.getImage(draft.image.imageId);
+        draft.image = fullImage;
+      } catch (e) {
+        console.warn('Could not load full image data:', e);
+      }
+    }
+
+    // Fetch full image data for multiple variations
+    if (draft.images && Array.isArray(draft.images)) {
+      const imagePromises = draft.images.map(async (img) => {
+        if (img.imageId && !img.bytes_base64) {
+          try {
+            return await api.getImage(img.imageId);
+          } catch (e) {
+            console.warn('Could not load full image data for variation:', e);
+            return img;
+          }
+        }
+        return img;
+      });
+      draft.images = await Promise.all(imagePromises);
+    }
+
+    // Store in sessionStorage and global variable
+    window._currentDraftWithImages = draft;
+    
+    // Store draft WITHOUT base64 image data to avoid quota issues
+    try {
+      const draftMetadata = {
+        ...draft,
+        image: draft.image ? {
+          imageId: draft.image.imageId,
+          mime_type: draft.image.mime_type,
+          filename: draft.image.filename
+        } : undefined,
+        images: draft.images ? draft.images.map(img => ({
+          imageId: img.imageId,
+          mime_type: img.mime_type,
+          filename: img.filename
+        })) : undefined
+      };
+      sessionStorage.setItem('currentDraft', JSON.stringify(draftMetadata));
+    } catch (e) {
+      console.warn('Could not store draft metadata:', e);
+    }
+
+    // Fill form fields
+    const titleInput = document.getElementById('title');
+    const contentInput = document.getElementById('content');
+    
+    if (titleInput && draft.title) {
+      titleInput.value = draft.title;
+    }
+    if (contentInput && draft.contentHtml) {
+      contentInput.value = draft.contentHtml;
+    }
+
+    // Restore preview
+    restorePublishPreview();
+
+    showAlert('Concept geladen!', 'success');
+  } catch (error) {
+    console.error('Error loading draft:', error);
+    showAlert('Fout bij laden van concept: ' + error.message, 'error');
+  }
+}
+
+// Delete a draft
+async function deleteDraftById(draftId) {
+  if (!confirm('Weet je zeker dat je dit concept wilt verwijderen?')) {
+    return;
+  }
+
+  try {
+    await api.deleteDraft(draftId);
+    showAlert('Concept verwijderd!', 'success');
+    
+    // Reload drafts list
+    await loadDrafts();
+  } catch (error) {
+    console.error('Error deleting draft:', error);
+    showAlert('Fout bij verwijderen van concept: ' + error.message, 'error');
+  }
+}
+
 // Make functions globally available
 window.regenerateImage = regenerateImage;
 window.escapeHtml = escapeHtml;
+window.loadDraft = loadDraft;
+window.deleteDraftById = deleteDraftById;
