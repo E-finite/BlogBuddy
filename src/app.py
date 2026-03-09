@@ -834,6 +834,30 @@ def get_draft(draft_id: int):
         return jsonify({"error": str(e)}), 400
 
 
+@app.route("/api/drafts/<int:draft_id>", methods=["PUT"])
+@login_required
+def update_draft(draft_id: int):
+    """Update a specific draft - MULTI-TENANT."""
+    try:
+        data = request.get_json() or {}
+        draft_payload = data.get("draft", data)
+
+        if not isinstance(draft_payload, dict):
+            return jsonify({"error": "Invalid draft payload"}), 400
+
+        draft_for_db = strip_base64_from_draft(draft_payload)
+        updated = db.update_draft(draft_id, current_user.id, draft_for_db)
+        if not updated:
+            return jsonify({"error": "Draft not found or access denied"}), 404
+
+        draft = db.get_draft(draft_id, current_user.id)
+        return jsonify({"ok": True, "draft": draft}), 200
+
+    except Exception as e:
+        logger.error(f"Error updating draft: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
 @app.route("/api/drafts/<int:draft_id>", methods=["DELETE"])
 @login_required
 def delete_draft(draft_id: int):

@@ -1176,6 +1176,31 @@ def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     return draft
 
 
+def update_draft(draft_id: int, user_id: int, draft_data: dict) -> bool:
+    """
+    Update an existing draft, ensuring it belongs to the user.
+    Returns True if updated, False if not found.
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    draft_json = json.dumps(draft_data)
+
+    cursor.execute("""
+        UPDATE drafts
+        SET draft_json = %s, updated_at = %s
+        WHERE id = %s AND user_id = %s
+    """, (draft_json, now, draft_id, user_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return updated
+
+
 def delete_draft(draft_id: int, user_id: int) -> bool:
     """
     Delete a draft, ensuring it belongs to the user.

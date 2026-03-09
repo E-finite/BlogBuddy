@@ -5,8 +5,14 @@
 import { api, pollJob } from './api.js';
 import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus } from './ui.js';
 
+let activeDraftId = null;
+let draftAutosaveTimeout = null;
+let draftSaveInFlight = false;
+let lastSavedDraftSignature = null;
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
+  initializeActiveDraftId();
   initNavigation();
   loadSitesDropdowns(); // Load sites into dropdowns
   initConnectSite();
@@ -20,6 +26,205 @@ document.addEventListener('DOMContentLoaded', () => {
   // Restore publish preview if available
   restorePublishPreview();
 });
+
+function initializeActiveDraftId() {
+  const storedDraftId = sessionStorage.getItem('currentDraftId');
+  if (!storedDraftId) {
+    sessionStorage.removeItem('currentDraft');
+    sessionStorage.removeItem('currentDraftImage');
+    return;
+  }
+
+  const parsedDraftId = Number(storedDraftId);
+  if (Number.isFinite(parsedDraftId) && parsedDraftId > 0) {
+    activeDraftId = parsedDraftId;
+  }
+}
+
+function setActiveDraftId(draftId) {
+  const parsedDraftId = Number(draftId);
+  if (Number.isFinite(parsedDraftId) && parsedDraftId > 0) {
+    activeDraftId = parsedDraftId;
+    sessionStorage.setItem('currentDraftId', String(parsedDraftId));
+    return;
+  }
+
+  activeDraftId = null;
+  sessionStorage.removeItem('currentDraftId');
+  sessionStorage.removeItem('currentDraft');
+  sessionStorage.removeItem('currentDraftImage');
+  window._currentDraftWithImages = null;
+  lastSavedDraftSignature = null;
+  clearPublishPreview();
+}
+
+function clearPublishPreview() {
+  const previewDiv = document.getElementById('publish-preview');
+  if (!previewDiv) return;
+
+  previewDiv.innerHTML = '';
+  previewDiv.style.display = 'none';
+}
+
+function toDraftMetadata(draft) {
+  return {
+    ...draft,
+    image: draft.image ? {
+      imageId: draft.image.imageId,
+      mime_type: draft.image.mime_type,
+      filename: draft.image.filename,
+      url: draft.image.url,
+      sourceUrl: draft.image.sourceUrl
+    } : undefined,
+    images: draft.images ? draft.images.map(img => ({
+      imageId: img.imageId,
+      mime_type: img.mime_type,
+      filename: img.filename,
+      url: img.url,
+      sourceUrl: img.sourceUrl
+    })) : undefined
+  };
+}
+
+function persistDraftState(draft) {
+  window._currentDraftWithImages = draft;
+
+  try {
+    sessionStorage.setItem('currentDraft', JSON.stringify(toDraftMetadata(draft)));
+  } catch (e) {
+    console.warn('Could not store draft metadata:', e);
+    const minimalDraft = {
+      title: draft.title,
+      contentHtml: draft.contentHtml,
+      excerpt: draft.excerpt,
+      slug: draft.slug
+    };
+    sessionStorage.setItem('currentDraft', JSON.stringify(minimalDraft));
+  }
+
+  if (draft.image) {
+    try {
+      const imageMetadata = {
+        imageId: draft.image.imageId,
+        mime_type: draft.image.mime_type,
+        filename: draft.image.filename,
+        url: draft.image.url,
+        sourceUrl: draft.image.sourceUrl
+      };
+      sessionStorage.setItem('currentDraftImage', JSON.stringify(imageMetadata));
+    } catch (e) {
+      console.warn('Could not store image metadata:', e);
+    }
+  }
+}
+
+function buildDraftFromPublishForm(publishForm) {
+  const formData = new FormData(publishForm);
+
+  let baseDraft = {};
+  if (window._currentDraftWithImages) {
+    baseDraft = { ...window._currentDraftWithImages };
+  } else {
+    const draftData = sessionStorage.getItem('currentDraft');
+    if (draftData) {
+      try {
+        baseDraft = JSON.parse(draftData);
+      } catch (e) {
+        console.warn('Could not parse currentDraft from sessionStorage:', e);
+      }
+    }
+  }
+
+  const draft = {
+    ...baseDraft,
+    title: formData.get('title') || '',
+    contentHtml: formData.get('content') || '',
+    status: formData.get('isDraft') === 'on' ? 'draft' : 'publish'
+  };
+
+  if (window._currentDraftWithImages?.image) {
+    draft.image = window._currentDraftWithImages.image;
+  }
+  if (window._currentDraftWithImages?.images) {
+    draft.images = window._currentDraftWithImages.images;
+  }
+
+  return draft;
+}
+
+function getDraftSignature(draft) {
+  const signaturePayload = {
+    title: draft.title || '',
+    contentHtml: draft.contentHtml || '',
+    status: draft.status || 'draft',
+    imageId: draft.image?.imageId || '',
+    imageUrl: draft.image?.url || draft.image?.sourceUrl || '',
+    imageFilename: draft.image?.filename || ''
+  };
+
+  return JSON.stringify(signaturePayload);
+}
+
+async function saveCurrentDraft({ showSuccess = false, silent = false, button = null } = {}) {
+  if (!activeDraftId) {
+    if (showSuccess && !silent) {
+      showAlert('Laad eerst een bestaand concept om op te slaan.', 'error');
+    }
+    return false;
+  }
+
+  const publishForm = document.getElementById('publish-post-form');
+  if (!publishForm) {
+    return false;
+  }
+
+  const draft = buildDraftFromPublishForm(publishForm);
+  const draftSignature = getDraftSignature(draft);
+  if (!showSuccess && draftSignature === lastSavedDraftSignature) {
+    return true;
+  }
+
+  if (draftSaveInFlight) {
+    return false;
+  }
+
+  draftSaveInFlight = true;
+  if (button) {
+    setButtonLoading(button, true);
+  }
+
+  try {
+    const response = await api.updateDraft(activeDraftId, draft);
+    const savedDraft = response?.draft?.draft || draft;
+    persistDraftState(savedDraft);
+    lastSavedDraftSignature = getDraftSignature(savedDraft);
+
+    if (showSuccess && !silent) {
+      showAlert('Concept opgeslagen!', 'success', 2000);
+    }
+    return true;
+  } catch (error) {
+    console.error('Save draft error:', error);
+    if (!silent) {
+      showAlert('Fout bij opslaan van concept: ' + error.message, 'error');
+    }
+    return false;
+  } finally {
+    draftSaveInFlight = false;
+    if (button) {
+      setButtonLoading(button, false);
+    }
+  }
+}
+
+function queueDraftAutosave() {
+  if (!activeDraftId) return;
+
+  clearTimeout(draftAutosaveTimeout);
+  draftAutosaveTimeout = setTimeout(() => {
+    saveCurrentDraft({ silent: true });
+  }, 1200);
+}
 
 // Navigation
 function initNavigation() {
@@ -561,13 +766,18 @@ function initGeneratePost() {
         };
         sessionStorage.setItem('currentDraft', JSON.stringify(minimalDraft));
       }
+
+      if (result.draftId) {
+        setActiveDraftId(result.draftId);
+      }
+      lastSavedDraftSignature = getDraftSignature(draft);
       
       console.log('Stored draft:', draft);
       console.log('Draft has images array:', draft.images);
       console.log('Draft has single image:', draft.image);
       
       // Store the full draft with images in a module-level variable
-      window._currentDraftWithImages = draft;
+      persistDraftState(draft);
       
       showAlert('Blog post gegenereerd!' + (contextSiteId ? ' (met website context)' : ''), 'success');
       
@@ -588,6 +798,8 @@ function initGeneratePost() {
 function initPublishPost() {
   const publishForm = document.getElementById('publish-post-form');
   if (!publishForm) return;
+  const saveDraftBtn = document.getElementById('save-draft-btn');
+  const deleteActiveDraftBtn = document.getElementById('delete-active-draft-btn');
   
   // Setup real-time preview sync
   const titleInput = document.getElementById('title');
@@ -595,17 +807,43 @@ function initPublishPost() {
   
   if (titleInput && contentInput) {
     // Update preview when title or content changes
-    titleInput.addEventListener('input', updatePublishPreviewFromForm);
-    contentInput.addEventListener('input', updatePublishPreviewFromForm);
+    titleInput.addEventListener('input', () => {
+      updatePublishPreviewFromForm();
+      queueDraftAutosave();
+    });
+    contentInput.addEventListener('input', () => {
+      updatePublishPreviewFromForm();
+      queueDraftAutosave();
+    });
+  }
+
+  if (saveDraftBtn) {
+    saveDraftBtn.addEventListener('click', async () => {
+      await saveCurrentDraft({ showSuccess: true, button: saveDraftBtn });
+    });
+  }
+
+  if (deleteActiveDraftBtn) {
+    deleteActiveDraftBtn.addEventListener('click', async () => {
+      if (!activeDraftId) {
+        showAlert('Laad eerst een concept om te verwijderen.', 'error');
+        return;
+      }
+
+      const warningMessage = '⚠️ WAARSCHUWING: Dit verwijdert het geladen concept permanent.\n\nDeze actie kan niet ongedaan worden gemaakt.\n\nWeet je zeker dat je wilt doorgaan?';
+      const confirmed = confirm(warningMessage);
+      if (!confirmed) {
+        return;
+      }
+
+      await deleteDraftById(activeDraftId, { skipConfirm: true });
+    });
   }
   
   publishForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const submitBtn = publishForm.querySelector('button[type="submit"]');
-    const draftData = sessionStorage.getItem('currentDraft');
-    const imageData = sessionStorage.getItem('currentDraftImage');
-    
     // Get form data
     const formData = new FormData(publishForm);
     const pubSiteId = formData.get('pubSiteId');
@@ -616,34 +854,11 @@ function initPublishPost() {
       return;
     }
     
-    // Get draft or use form values
-    let draft;
-    if (draftData) {
-      draft = JSON.parse(draftData);
-      console.log('Using stored draft:', draft);
-    } else {
-      // Fallback: use form values if no draft stored
-      draft = {
-        title: formData.get('title'),
-        contentHtml: formData.get('content'),
-        status: formData.get('isDraft') === 'on' ? 'draft' : 'publish'
-      };
-      console.log('Using form values as draft:', draft);
-    }
-    
-    // Add image data - always use global variable if available (has full base64 data)
-    if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
-      draft.image = window._currentDraftWithImages.image;
-      console.log('Added image from global variable (with base64 data)');
-    } else if (imageData) {
-      // Fallback: try sessionStorage (but this only has metadata now)
-      try {
-        const imageMetadata = JSON.parse(imageData);
-        console.warn('Only image metadata available from sessionStorage:', imageMetadata);
-        draft.image = imageMetadata;
-      } catch (e) {
-        console.error('Failed to parse image metadata:', e);
-      }
+    const draft = buildDraftFromPublishForm(publishForm);
+    persistDraftState(draft);
+
+    if (activeDraftId) {
+      await saveCurrentDraft({ silent: true });
     }
     
     // Build payload with correct structure - draft as nested object
@@ -779,6 +994,7 @@ function fillPublishForm(result, siteId) {
   if (titleInput) titleInput.value = draft.title || '';
   if (contentInput) contentInput.value = draft.contentHtml || '';
   if (pubSiteIdSelect && siteId) pubSiteIdSelect.value = siteId;
+  if (result.draftId) setActiveDraftId(result.draftId);
   
   // Render preview using the renderPreview function (which uses global _currentDraftWithImages)
   if (previewDiv) {
@@ -813,10 +1029,17 @@ function switchToPublishTab() {
 function restorePublishPreview() {
   const draftData = sessionStorage.getItem('currentDraft');
   const previewDiv = document.getElementById('publish-preview');
+  const titleInput = document.getElementById('title');
+  const contentInput = document.getElementById('content');
   
   console.log('Restoring preview - using window._currentDraftWithImages');
   
   if (!previewDiv) return;
+
+  if (!activeDraftId) {
+    clearPublishPreview();
+    return;
+  }
   
   try {
     // Prefer full draft with images from memory
@@ -828,12 +1051,23 @@ function restorePublishPreview() {
       draft = JSON.parse(draftData);
       console.log('Using draft from sessionStorage (no images)');
     } else {
+      clearPublishPreview();
       return;
+    }
+
+    if (titleInput && contentInput) {
+      draft = {
+        ...draft,
+        title: titleInput.value || draft.title || 'Geen titel',
+        contentHtml: contentInput.value || draft.contentHtml || 'Geen content'
+      };
     }
     
     renderPreview(draft, previewDiv);
+    lastSavedDraftSignature = getDraftSignature(draft);
   } catch (error) {
     console.error('Error restoring publish preview:', error);
+    clearPublishPreview();
   }
 }
 
@@ -845,6 +1079,11 @@ function updatePublishPreviewFromForm() {
   const draftData = sessionStorage.getItem('currentDraft');
   
   if (!previewDiv || !titleInput || !contentInput) return;
+
+  if (!activeDraftId) {
+    clearPublishPreview();
+    return;
+  }
   
   // Build draft from current form values
   const draft = {
@@ -875,15 +1114,19 @@ function updatePublishPreviewFromForm() {
 // Render preview HTML
 function renderPreview(draft, previewDiv) {
   console.log('renderPreview called with draft:', draft);
-  
-  // Use the full draft with images if available
-  const fullDraft = window._currentDraftWithImages || draft;
+
+  const imageSourceDraft = window._currentDraftWithImages || draft;
+  const previewDraft = {
+    ...draft,
+    title: draft.title || 'Geen titel',
+    contentHtml: draft.contentHtml || 'Geen content'
+  };
   
   let previewHtml = '';
   
   // Featured image(s) - handle single or multiple variations
-  const images = fullDraft.images || (fullDraft.image ? [fullDraft.image] : []);
-  const imageToDisplay = fullDraft.image || fullDraft._image;
+  const images = imageSourceDraft.images || (imageSourceDraft.image ? [imageSourceDraft.image] : []);
+  const imageToDisplay = imageSourceDraft.image || imageSourceDraft._image;
   
   console.log('Images to render:', images);
   console.log('Images array length:', images.length);
@@ -1020,12 +1263,12 @@ function renderPreview(draft, previewDiv) {
   previewHtml += '<div class="card" style="margin-bottom: var(--spacing-lg);">';
   previewHtml += '<div class="card-header"><h3>Content Preview</h3></div>';
   previewHtml += '<div class="card-body">';
-  previewHtml += `<h2>${fullDraft.title || 'Geen titel'}</h2>`;
-  if (fullDraft.excerpt) {
-    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${fullDraft.excerpt}</p>`;
+  previewHtml += `<h2>${previewDraft.title}</h2>`;
+  if (previewDraft.excerpt) {
+    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${previewDraft.excerpt}</p>`;
   }
   previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-  previewHtml += `<div style="line-height: 1.6;">${fullDraft.contentHtml || 'Geen content'}</div>`;
+  previewHtml += `<div style="line-height: 1.6;">${previewDraft.contentHtml}</div>`;
   previewHtml += '</div></div>';
   
   previewDiv.innerHTML = previewHtml;
@@ -1336,9 +1579,9 @@ async function loadDrafts() {
                 Laden
               </button>
               <button 
-                class="btn btn-secondary btn-sm" 
+                class="btn btn-sm" 
                 onclick="deleteDraftById(${item.id})"
-                style="white-space: nowrap; background: var(--error); color: white;"
+                style="white-space: nowrap; background: var(--color-error); border-color: var(--color-error); color: white;"
               >
                 Verwijderen
               </button>
@@ -1391,27 +1634,9 @@ async function loadDraft(draftId) {
     }
 
     // Store in sessionStorage and global variable
-    window._currentDraftWithImages = draft;
-    
-    // Store draft WITHOUT base64 image data to avoid quota issues
-    try {
-      const draftMetadata = {
-        ...draft,
-        image: draft.image ? {
-          imageId: draft.image.imageId,
-          mime_type: draft.image.mime_type,
-          filename: draft.image.filename
-        } : undefined,
-        images: draft.images ? draft.images.map(img => ({
-          imageId: img.imageId,
-          mime_type: img.mime_type,
-          filename: img.filename
-        })) : undefined
-      };
-      sessionStorage.setItem('currentDraft', JSON.stringify(draftMetadata));
-    } catch (e) {
-      console.warn('Could not store draft metadata:', e);
-    }
+    setActiveDraftId(draftId);
+    persistDraftState(draft);
+    lastSavedDraftSignature = getDraftSignature(draft);
 
     // Fill form fields
     const titleInput = document.getElementById('title');
@@ -1434,14 +1659,34 @@ async function loadDraft(draftId) {
   }
 }
 
+function clearPublishFormInputs() {
+  const titleInput = document.getElementById('title');
+  const contentInput = document.getElementById('content');
+
+  if (titleInput) {
+    titleInput.value = '';
+  }
+  if (contentInput) {
+    contentInput.value = '';
+  }
+}
+
 // Delete a draft
-async function deleteDraftById(draftId) {
-  if (!confirm('Weet je zeker dat je dit concept wilt verwijderen?')) {
+async function deleteDraftById(draftId, options = {}) {
+  const { skipConfirm = false } = options;
+
+  if (!skipConfirm && !confirm('Weet je zeker dat je dit concept wilt verwijderen?')) {
     return;
   }
 
   try {
     await api.deleteDraft(draftId);
+
+    if (activeDraftId === Number(draftId)) {
+      setActiveDraftId(null);
+      clearPublishFormInputs();
+    }
+
     showAlert('Concept verwijderd!', 'success');
     
     // Reload drafts list

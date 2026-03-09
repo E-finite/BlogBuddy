@@ -99,6 +99,13 @@ export const api = {
     return apiRequest(`/api/drafts/${draftId}`);
   },
 
+  async updateDraft(draftId, draft) {
+    return apiRequest(`/api/drafts/${draftId}`, {
+      method: 'PUT',
+      body: { draft },
+    });
+  },
+
   async deleteDraft(draftId) {
     return apiRequest(`/api/drafts/${draftId}`, {
       method: 'DELETE',
