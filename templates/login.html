@@ -13,13 +13,14 @@
         max-width: 400px;
         margin: 100px auto;
         padding: 30px;
-        background: white;
-        border-radius: 10px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        background: var(--bg-primary);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-md);
+        border: 1px solid var(--border-color);
       }
       .auth-container h1 {
         text-align: center;
-        color: #333;
+        color: var(--text-primary);
         margin-bottom: 30px;
       }
       .form-group {
@@ -28,42 +29,42 @@
       .form-group label {
         display: block;
         margin-bottom: 5px;
-        color: #555;
+        color: var(--text-secondary);
         font-weight: 500;
       }
       .form-group input {
         width: 100%;
         padding: 12px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
         font-size: 14px;
         box-sizing: border-box;
       }
       .form-group input:focus {
         outline: none;
-        border-color: #4caf50;
+        border-color: var(--border-color-hover);
       }
       .btn-primary {
         width: 100%;
         padding: 12px;
-        background: #4caf50;
+        background: var(--color-accent-500);
         color: white;
         border: none;
-        border-radius: 5px;
+        border-radius: var(--radius-md);
         font-size: 16px;
         font-weight: 600;
         cursor: pointer;
         transition: background 0.3s;
       }
       .btn-primary:hover {
-        background: #45a049;
+        background: var(--color-accent-600);
       }
       .flash-messages {
         margin-bottom: 20px;
       }
       .flash {
         padding: 12px;
-        border-radius: 5px;
+        border-radius: var(--radius-md);
         margin-bottom: 10px;
       }
       .flash.success {
@@ -84,10 +85,10 @@
       .auth-links {
         text-align: center;
         margin-top: 20px;
-        color: #666;
+        color: var(--text-secondary);
       }
       .auth-links a {
-        color: #4caf50;
+        color: var(--color-accent-500);
         text-decoration: none;
       }
       .auth-links a:hover {

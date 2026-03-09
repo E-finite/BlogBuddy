@@ -86,6 +86,10 @@ export const api = {
   },
 
   // Jobs
+  async getJobs(limit = 50) {
+    return apiRequest(`/api/jobs?limit=${encodeURIComponent(limit)}`);
+  },
+
   async getJob(jobId) {
     return apiRequest(`/api/jobs/${jobId}`);
   },

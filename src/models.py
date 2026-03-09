@@ -72,6 +72,7 @@ class GeneratePostRequest(BaseModel):
 
 class PublishPostRequest(BaseModel):
     siteId: str
+    draftId: Optional[int] = None
     draft: Optional[Dict[str, Any]] = None
     drafts: Optional[Dict[str, Dict[str, Any]]] = None
 

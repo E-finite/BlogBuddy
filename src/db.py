@@ -366,14 +366,75 @@ def init_db():
             user_id INT NOT NULL,
             site_id VARCHAR(36) NULL,
             draft_json LONGTEXT NOT NULL,
+            publish_job_id VARCHAR(36) NULL,
+            publish_site_id VARCHAR(36) NULL,
+            publish_sent_at DATETIME NULL,
             created_at DATETIME NOT NULL,
             updated_at DATETIME NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
             INDEX idx_user_id (user_id),
             INDEX idx_site_id (site_id),
+            INDEX idx_publish_job_id (publish_job_id),
+            INDEX idx_publish_site_id (publish_site_id),
             INDEX idx_created (created_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
+
+    # Migration: Add publish marker columns to drafts table if missing
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'drafts'
+            AND column_name = 'publish_job_id'
+        """, (config.MYSQL_DATABASE,))
+        has_publish_job_id = cursor.fetchone()[0] > 0
+
+        if not has_publish_job_id:
+            cursor.execute(
+                "ALTER TABLE drafts ADD COLUMN publish_job_id VARCHAR(36) NULL AFTER draft_json")
+            cursor.execute(
+                "ALTER TABLE drafts ADD INDEX idx_publish_job_id (publish_job_id)")
+            print("✅ Added publish_job_id column to drafts table")
+    except Exception as e:
+        print(f"⚠️ Migration note (drafts publish_job_id): {e}")
+
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'drafts'
+            AND column_name = 'publish_site_id'
+        """, (config.MYSQL_DATABASE,))
+        has_publish_site_id = cursor.fetchone()[0] > 0
+
+        if not has_publish_site_id:
+            cursor.execute(
+                "ALTER TABLE drafts ADD COLUMN publish_site_id VARCHAR(36) NULL AFTER publish_job_id")
+            cursor.execute(
+                "ALTER TABLE drafts ADD INDEX idx_publish_site_id (publish_site_id)")
+            print("✅ Added publish_site_id column to drafts table")
+    except Exception as e:
+        print(f"⚠️ Migration note (drafts publish_site_id): {e}")
+
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'drafts'
+            AND column_name = 'publish_sent_at'
+        """, (config.MYSQL_DATABASE,))
+        has_publish_sent_at = cursor.fetchone()[0] > 0
+
+        if not has_publish_sent_at:
+            cursor.execute(
+                "ALTER TABLE drafts ADD COLUMN publish_sent_at DATETIME NULL AFTER publish_job_id")
+            print("✅ Added publish_sent_at column to drafts table")
+    except Exception as e:
+        print(f"⚠️ Migration note (drafts publish_sent_at): {e}")
 
     conn.commit()
     cursor.close()
@@ -1118,10 +1179,14 @@ def get_user_drafts(user_id: int) -> List[Dict[str, Any]]:
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT id, user_id, site_id, draft_json, created_at, updated_at
-        FROM drafts
-        WHERE user_id = %s
-        ORDER BY created_at DESC
+        SELECT d.id, d.user_id, d.site_id, d.draft_json,
+               d.publish_job_id, d.publish_site_id, d.publish_sent_at,
+               d.created_at, d.updated_at,
+               s.wp_base_url AS publish_site_url
+        FROM drafts d
+        LEFT JOIN sites s ON s.id = d.publish_site_id AND s.user_id = d.user_id
+        WHERE d.user_id = %s
+        ORDER BY d.created_at DESC
     """, (user_id,))
 
     rows = cursor.fetchall()
@@ -1136,6 +1201,10 @@ def get_user_drafts(user_id: int) -> List[Dict[str, Any]]:
             'user_id': row['user_id'],
             'site_id': row['site_id'],
             'draft': json.loads(row['draft_json']) if row['draft_json'] else {},
+            'publish_job_id': row.get('publish_job_id'),
+            'publish_site_id': row.get('publish_site_id'),
+            'publish_site_url': row.get('publish_site_url'),
+            'publish_sent_at': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
             'created_at': row['created_at'].isoformat() if row['created_at'] else None,
             'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
         }
@@ -1152,9 +1221,13 @@ def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT id, user_id, site_id, draft_json, created_at, updated_at
-        FROM drafts
-        WHERE id = %s AND user_id = %s
+        SELECT d.id, d.user_id, d.site_id, d.draft_json,
+               d.publish_job_id, d.publish_site_id, d.publish_sent_at,
+               d.created_at, d.updated_at,
+               s.wp_base_url AS publish_site_url
+        FROM drafts d
+        LEFT JOIN sites s ON s.id = d.publish_site_id AND s.user_id = d.user_id
+        WHERE d.id = %s AND d.user_id = %s
     """, (draft_id, user_id))
 
     row = cursor.fetchone()
@@ -1169,6 +1242,10 @@ def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
         'user_id': row['user_id'],
         'site_id': row['site_id'],
         'draft': json.loads(row['draft_json']) if row['draft_json'] else {},
+        'publish_job_id': row.get('publish_job_id'),
+        'publish_site_id': row.get('publish_site_id'),
+        'publish_site_url': row.get('publish_site_url'),
+        'publish_sent_at': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
         'created_at': row['created_at'].isoformat() if row['created_at'] else None,
         'updated_at': row['updated_at'].isoformat() if row['updated_at'] else None
     }
@@ -1220,3 +1297,22 @@ def delete_draft(draft_id: int, user_id: int) -> bool:
     conn.close()
 
     return deleted
+
+
+def mark_draft_sent_for_publish(draft_id: int, user_id: int, job_id: str, publish_site_id: str) -> bool:
+    """Mark a draft as sent to WordPress by storing publish job reference and timestamp."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        UPDATE drafts
+        SET publish_job_id = %s, publish_site_id = %s, publish_sent_at = %s, updated_at = %s
+        WHERE id = %s AND user_id = %s
+    """, (job_id, publish_site_id, datetime.utcnow(), datetime.utcnow(), draft_id, user_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return updated

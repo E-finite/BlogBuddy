@@ -2,10 +2,9 @@
  * Color System for SME Blog Platform
  * 
  * Philosophy:
- * - Primary: Fresh green (#E8F5E9) - Growth, vitality, business success
- * - Secondary: Deep forest (#091E16) - Trust, professionalism, stability
- * - Text: Charcoal (#333333) - Readability, professional
- * - Accent: Vivid green (#00C853) - Action, energy, conversion
+ * - Primary: Bright cyan (#3ECFFF) - Friendly, modern, energetic
+ * - Secondary: Deep slate blue (#355176) - Trust and professionalism
+ * - Tertiary: Soft gray (#E2E2E2) - Clean, neutral foundation
  * 
  * Target Audience: Small businesses (MKB/SMEs)
  * Design Principles:
@@ -15,46 +14,46 @@
  */
 
 :root {
-  /* Primary Palette - Fresh Green */
-  --color-primary-50: #f1f8f4;
-  --color-primary-100: #E8F5E9; /* Main primary - Light green */
-  --color-primary-200: #c8e6c9;
-  --color-primary-300: #a5d6a7;
-  --color-primary-400: #81c784;
-  --color-primary-500: #66bb6a;
-  --color-primary-600: #4caf50;
-  --color-primary-700: #43a047;
-  --color-primary-800: #388e3c;
-  --color-primary-900: #2e7d32;
+  /* Primary Palette - Cyan */
+  --color-primary-50: #eefcff;
+  --color-primary-100: #d9f6ff;
+  --color-primary-200: #b7eeff;
+  --color-primary-300: #8de4ff;
+  --color-primary-400: #62d9ff;
+  --color-primary-500: #3ECFFF; /* Main primary */
+  --color-primary-600: #21b5e6;
+  --color-primary-700: #1891b8;
+  --color-primary-800: #146f8c;
+  --color-primary-900: #114f63;
   
-  /* Secondary Palette - Deep Forest */
-  --color-secondary-50: #e8eae9;
-  --color-secondary-100: #b8bcba;
-  --color-secondary-200: #8a8f8c;
-  --color-secondary-300: #5c625e;
-  --color-secondary-400: #2e3530;
-  --color-secondary-500: #091E16; /* Main secondary - Dark forest */
-  --color-secondary-600: #081b14;
-  --color-secondary-700: #071711;
-  --color-secondary-800: #06140f;
-  --color-secondary-900: #040f0a;
+  /* Secondary Palette - Deep slate blue */
+  --color-secondary-50: #edf1f6;
+  --color-secondary-100: #d6e0eb;
+  --color-secondary-200: #b8cadb;
+  --color-secondary-300: #97b0c8;
+  --color-secondary-400: #7592b2;
+  --color-secondary-500: #355176;
+  --color-secondary-600: #2f4869;
+  --color-secondary-700: #273b57;
+  --color-secondary-800: #1f2f45;
+  --color-secondary-900: #172235;
   
-  /* Accent Palette - Vivid Green */
-  --color-accent-50: #e0f8ed;
-  --color-accent-100: #b3ecd3;
-  --color-accent-200: #80e0b7;
-  --color-accent-300: #4dd49a;
-  --color-accent-400: #26ca84;
-  --color-accent-500: #00C853; /* Main accent - Bright green */
-  --color-accent-600: #00c34d;
-  --color-accent-700: #00bc44;
-  --color-accent-800: #00b63c;
-  --color-accent-900: #00aa2d;
+  /* Tertiary Palette - Neutral gray */
+  --color-accent-50: #f9f9f9;
+  --color-accent-100: #f3f3f3;
+  --color-accent-200: #ececec;
+  --color-accent-300: #e6e6e6;
+  --color-accent-400: #e2e2e2;
+  --color-accent-500: #d4d4d4;
+  --color-accent-600: #b5b5b5;
+  --color-accent-700: #8f8f8f;
+  --color-accent-800: #6e6e6e;
+  --color-accent-900: #515151;
   
   /* Text Palette */
-  --color-text-primary: #333333; /* Main text */
-  --color-text-secondary: #666666;
-  --color-text-tertiary: #999999;
+  --color-text-primary: #1f2937; /* Main text */
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #6b7280;
   --color-text-light: #cccccc;
   
   /* Neutral Palette */
@@ -70,7 +69,7 @@
   --color-neutral-900: #212121;
   
   /* Semantic Colors */
-  --color-success: #00C853;
+  --color-success: #2f9e73;
   --color-success-light: #26ca84;
   --color-success-dark: #00aa2d;
   --color-error: #d32f2f;
@@ -84,37 +83,38 @@
   --color-info-dark: #1565c0;
   
   /* Background System - Light Theme (Business-friendly) */
-  --bg-primary: #ffffff;
-  --bg-secondary: #E8F5E9;
-  --bg-tertiary: #f1f8f4;
+  --bg-primary: #fbfcfd;
+  --bg-secondary: #f1f4f7;
+  --bg-tertiary: #E2E2E2;
   --bg-elevated: #ffffff;
   --bg-overlay: rgba(255, 255, 255, 0.95);
-  --bg-dark: #091E16;
+  --bg-dark: #172235;
   
   /* Text System */
-  --text-primary: #333333;
-  --text-secondary: #666666;
-  --text-tertiary: #999999;
+  --text-primary: #1f2f45;
+  --text-secondary: #355176;
+  --text-tertiary: #64748b;
   --text-inverse: #ffffff;
   
   /* Border & Divider */
-  --border-color: #e0e0e0;
-  --border-color-hover: #00C853;
+  --border-color: #d8e0e8;
+  --border-color-hover: #3ECFFF;
   --divider-color: rgba(0, 0, 0, 0.08);
   
   /* Shadow System */
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.12);
+  --shadow-sm: 0 1px 4px rgba(36, 54, 79, 0.08);
+  --shadow-md: 0 2px 10px rgba(36, 54, 79, 0.14);
+  --shadow-lg: 0 4px 16px rgba(36, 54, 79, 0.18);
   --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.15);
-  --shadow-glow: 0 0 20px rgba(0, 200, 83, 0.2);
-  --shadow-glow-strong: 0 0 30px rgba(0, 200, 83, 0.3);
+  --shadow-glow: 0 0 20px rgba(62, 207, 255, 0.25);
+  --shadow-glow-strong: 0 0 30px rgba(62, 207, 255, 0.35);
   
   /* Gradient System */
-  --gradient-primary: linear-gradient(135deg, #E8F5E9 0%, #a5d6a7 100%);
-  --gradient-accent: linear-gradient(135deg, #00C853 0%, #00aa2d 100%);
-  --gradient-hero: linear-gradient(135deg, #E8F5E9 0%, #c8e6c9 100%);
-  --gradient-overlay: linear-gradient(180deg, rgba(9, 30, 22, 0.7) 0%, rgba(9, 30, 22, 0.9) 100%);
+  --gradient-primary: linear-gradient(135deg, #f1fbff 0%, #e7f7ff 100%);
+  --gradient-accent: linear-gradient(135deg, #355176 0%, #273b57 100%);
+  --gradient-card: linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
+  --gradient-hero: linear-gradient(135deg, #f5fbff 0%, #f1f4f7 100%);
+  --gradient-overlay: linear-gradient(180deg, rgba(53, 81, 118, 0.72) 0%, rgba(23, 34, 53, 0.9) 100%);
   
   /* Spacing System */
   --spacing-xs: 0.25rem;
@@ -126,14 +126,14 @@
   --spacing-3xl: 4rem;
   
   /* Typography */
-  --font-family-primary: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-primary: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-family-mono: 'Roboto Mono', 'Courier New', monospace;
   
   /* Border Radius */
-  --radius-sm: 5px;
-  --radius-md: 5px;
-  --radius-lg: 5px;
-  --radius-xl: 5px;
+  --radius-sm: 15px;
+  --radius-md: 15px;
+  --radius-lg: 15px;
+  --radius-xl: 15px;
   --radius-full: 9999px;
   
   /* Transitions */
@@ -146,25 +146,25 @@
 .hero-pattern-bg,
 .page-title-bg,
 .footer-pattern-bg {
-  background-color: #E8F5E9;
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C853' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-color: #eefcff;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23355176' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
 
 /* Dark Theme Override (optional) */
 [data-theme="dark"] {
-  --bg-primary: #091E16;
-  --bg-secondary: #0f2620;
-  --bg-tertiary: #152f28;
-  --bg-elevated: #1a3830;
-  --bg-overlay: rgba(9, 30, 22, 0.95);
+  --bg-primary: #172235;
+  --bg-secondary: #1f2f45;
+  --bg-tertiary: #273b57;
+  --bg-elevated: #2f4869;
+  --bg-overlay: rgba(23, 34, 53, 0.95);
   
   --text-primary: #ffffff;
-  --text-secondary: #c8e6c9;
-  --text-tertiary: #a5d6a7;
-  --text-inverse: #091E16;
+  --text-secondary: #d6e0eb;
+  --text-tertiary: #b8cadb;
+  --text-inverse: #172235;
   
-  --border-color: rgba(0, 200, 83, 0.2);
-  --border-color-hover: rgba(0, 200, 83, 0.4);
+  --border-color: rgba(62, 207, 255, 0.25);
+  --border-color-hover: rgba(62, 207, 255, 0.45);
   --divider-color: rgba(255, 255, 255, 0.08);
   
   --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
@@ -176,8 +176,8 @@
   .hero-pattern-bg,
   .page-title-bg,
   .footer-pattern-bg {
-    background-color: #091E16;
-    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C853' fill-opacity='0.06'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background-color: #172235;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233ECFFF' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
   }
 }
 

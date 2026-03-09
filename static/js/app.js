@@ -118,6 +118,91 @@ function persistDraftState(draft) {
   }
 }
 
+function toWpGmtDate(localDateTimeValue) {
+  if (!localDateTimeValue) return null;
+  const localDate = new Date(localDateTimeValue);
+  if (Number.isNaN(localDate.getTime())) {
+    return null;
+  }
+
+  const year = localDate.getUTCFullYear();
+  const month = String(localDate.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(localDate.getUTCDate()).padStart(2, '0');
+  const hours = String(localDate.getUTCHours()).padStart(2, '0');
+  const minutes = String(localDate.getUTCMinutes()).padStart(2, '0');
+  const seconds = String(localDate.getUTCSeconds()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+}
+
+function fromWpGmtDateToLocalInput(gmtDateValue) {
+  if (!gmtDateValue) return '';
+
+  const withTimezone = gmtDateValue.endsWith('Z')
+    ? gmtDateValue
+    : `${gmtDateValue}Z`;
+
+  const utcDate = new Date(withTimezone);
+  if (Number.isNaN(utcDate.getTime())) {
+    return '';
+  }
+
+  const year = utcDate.getFullYear();
+  const month = String(utcDate.getMonth() + 1).padStart(2, '0');
+  const day = String(utcDate.getDate()).padStart(2, '0');
+  const hours = String(utcDate.getHours()).padStart(2, '0');
+  const minutes = String(utcDate.getMinutes()).padStart(2, '0');
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+function setPublishSchedulingFields(draft = {}) {
+  const isDraftCheckbox = document.getElementById('isDraft');
+  const isScheduledCheckbox = document.getElementById('isScheduled');
+  const scheduleDateGroup = document.getElementById('schedule-date-group');
+  const scheduleDateInput = document.getElementById('scheduleDateLocal');
+
+  if (!isDraftCheckbox || !isScheduledCheckbox || !scheduleDateGroup || !scheduleDateInput) {
+    return;
+  }
+
+  const status = draft.status || 'draft';
+  const isScheduled = status === 'future';
+
+  isScheduledCheckbox.checked = isScheduled;
+  isDraftCheckbox.checked = status === 'draft';
+  isDraftCheckbox.disabled = isScheduled;
+
+  scheduleDateGroup.style.display = isScheduled ? 'block' : 'none';
+  scheduleDateInput.required = isScheduled;
+  scheduleDateInput.value = isScheduled
+    ? fromWpGmtDateToLocalInput(draft.scheduleDateGmt)
+    : '';
+}
+
+function syncPublishStatusControls() {
+  const isDraftCheckbox = document.getElementById('isDraft');
+  const isScheduledCheckbox = document.getElementById('isScheduled');
+  const scheduleDateGroup = document.getElementById('schedule-date-group');
+  const scheduleDateInput = document.getElementById('scheduleDateLocal');
+
+  if (!isDraftCheckbox || !isScheduledCheckbox || !scheduleDateGroup || !scheduleDateInput) {
+    return;
+  }
+
+  if (isScheduledCheckbox.checked) {
+    isDraftCheckbox.checked = false;
+    isDraftCheckbox.disabled = true;
+    scheduleDateGroup.style.display = 'block';
+    scheduleDateInput.required = true;
+  } else {
+    isDraftCheckbox.disabled = false;
+    scheduleDateGroup.style.display = 'none';
+    scheduleDateInput.required = false;
+    scheduleDateInput.value = '';
+  }
+}
+
 function buildDraftFromPublishForm(publishForm) {
   const formData = new FormData(publishForm);
 
@@ -135,12 +220,28 @@ function buildDraftFromPublishForm(publishForm) {
     }
   }
 
+  const isScheduled = formData.get('isScheduled') === 'on';
+  const scheduleDateLocal = formData.get('scheduleDateLocal');
+
+  let status = 'publish';
+  if (isScheduled) {
+    status = 'future';
+  } else if (formData.get('isDraft') === 'on') {
+    status = 'draft';
+  }
+
   const draft = {
     ...baseDraft,
     title: formData.get('title') || '',
     contentHtml: formData.get('content') || '',
-    status: formData.get('isDraft') === 'on' ? 'draft' : 'publish'
+    status
   };
+
+  if (isScheduled) {
+    draft.scheduleDateGmt = toWpGmtDate(scheduleDateLocal);
+  } else {
+    delete draft.scheduleDateGmt;
+  }
 
   if (window._currentDraftWithImages?.image) {
     draft.image = window._currentDraftWithImages.image;
@@ -157,6 +258,7 @@ function getDraftSignature(draft) {
     title: draft.title || '',
     contentHtml: draft.contentHtml || '',
     status: draft.status || 'draft',
+    scheduleDateGmt: draft.scheduleDateGmt || '',
     imageId: draft.image?.imageId || '',
     imageUrl: draft.image?.url || draft.image?.sourceUrl || '',
     imageFilename: draft.image?.filename || ''
@@ -800,6 +902,22 @@ function initPublishPost() {
   if (!publishForm) return;
   const saveDraftBtn = document.getElementById('save-draft-btn');
   const deleteActiveDraftBtn = document.getElementById('delete-active-draft-btn');
+  const isScheduledCheckbox = document.getElementById('isScheduled');
+  const isDraftCheckbox = document.getElementById('isDraft');
+
+  if (isScheduledCheckbox) {
+    isScheduledCheckbox.addEventListener('change', () => {
+      syncPublishStatusControls();
+      queueDraftAutosave();
+    });
+  }
+  if (isDraftCheckbox) {
+    isDraftCheckbox.addEventListener('change', () => {
+      queueDraftAutosave();
+    });
+  }
+
+  syncPublishStatusControls();
   
   // Setup real-time preview sync
   const titleInput = document.getElementById('title');
@@ -853,6 +971,15 @@ function initPublishPost() {
       showAlert('Selecteer een WordPress site.', 'error');
       return;
     }
+
+    if (formData.get('isScheduled') === 'on') {
+      const scheduleDateLocal = formData.get('scheduleDateLocal');
+      const scheduleDateGmt = toWpGmtDate(scheduleDateLocal);
+      if (!scheduleDateLocal || !scheduleDateGmt) {
+        showAlert('Kies een geldige datum/tijd voor geplande publicatie.', 'error');
+        return;
+      }
+    }
     
     const draft = buildDraftFromPublishForm(publishForm);
     persistDraftState(draft);
@@ -866,6 +993,10 @@ function initPublishPost() {
       siteId: pubSiteId,
       draft: draft
     };
+
+    if (activeDraftId) {
+      payload.draftId = activeDraftId;
+    }
     
     console.log('Publishing payload:', payload);
     
@@ -875,6 +1006,8 @@ function initPublishPost() {
       const result = await api.publishPost(payload);
       
       showAlert(`Publish job gestart! Job ID: ${result.jobId}`, 'success');
+      loadDrafts();
+      loadJobs();
       
       // Start polling
       pollJob(
@@ -916,13 +1049,45 @@ function initJobsView() {
 }
 
 async function loadJobs() {
-  // This would require a list endpoint - for now, we'll show a placeholder
   const jobsContainer = document.getElementById('jobs-list');
   if (!jobsContainer) return;
-  
-  // In a real implementation, you'd fetch a list of jobs
-  // For now, we'll just show a message
-  jobsContainer.innerHTML = '<p class="text-secondary">Gebruik de Job ID om een specifieke job te bekijken.</p>';
+
+  try {
+    const response = await api.getJobs(50);
+    const jobs = response.jobs || [];
+
+    if (jobs.length === 0) {
+      jobsContainer.innerHTML = '<p class="text-secondary">Nog geen jobs gevonden.</p>';
+      return;
+    }
+
+    jobsContainer.innerHTML = jobs.map((job) => {
+      const draftId = job.payload?.draftId;
+      const siteId = job.payload?.siteId || '-';
+      const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
+      const statusBadge = formatJobStatus(job.status);
+
+      return `
+        <div class="card" style="margin-bottom: 0.75rem;">
+          <div class="card-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+              <div>
+                <div><strong>Job:</strong> ${job.jobId}</div>
+                <div><strong>Type:</strong> ${job.type}</div>
+                <div><strong>Site:</strong> ${siteId}</div>
+                <div><strong>Draft:</strong> ${draftId || '-'}</div>
+                <div><strong>Aangemaakt:</strong> ${createdAt}</div>
+              </div>
+              <div>${statusBadge}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  } catch (error) {
+    console.error('Error loading jobs:', error);
+    jobsContainer.innerHTML = '<p class="text-secondary" style="color: var(--color-error);">Fout bij laden van jobs.</p>';
+  }
 }
 
 function updateJobStatus(job) {
@@ -994,6 +1159,7 @@ function fillPublishForm(result, siteId) {
   if (titleInput) titleInput.value = draft.title || '';
   if (contentInput) contentInput.value = draft.contentHtml || '';
   if (pubSiteIdSelect && siteId) pubSiteIdSelect.value = siteId;
+  setPublishSchedulingFields(draft);
   if (result.draftId) setActiveDraftId(result.draftId);
   
   // Render preview using the renderPreview function (which uses global _currentDraftWithImages)
@@ -1564,11 +1730,17 @@ async function loadDrafts() {
         <div class="draft-item" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary);">
           <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
             <div style="flex: 1;">
-              <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-primary);">${escapeHtml(title)}</h4>
+              <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-primary); display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+                <span>${escapeHtml(title)}</span>
+                ${item.publish_job_id ? '<span class="badge badge-success">Naar WP verstuurd</span>' : ''}
+              </h4>
               ${truncatedExcerpt ? `<p style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(truncatedExcerpt)}</p>` : ''}
               <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
                 Aangemaakt: ${formatDate(createdAt)}
               </p>
+              ${item.publish_site_url ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website: ${escapeHtml(item.publish_site_url)}</p>` : (item.publish_site_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website ID: ${escapeHtml(String(item.publish_site_id))}</p>` : '')}
+              ${item.publish_sent_at ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Verstuurd: ${formatDate(item.publish_sent_at)}</p>` : ''}
+              ${item.publish_job_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Job: ${item.publish_job_id}</p>` : ''}
             </div>
             <div style="display: flex; gap: 0.5rem;">
               <button 
@@ -1648,6 +1820,7 @@ async function loadDraft(draftId) {
     if (contentInput && draft.contentHtml) {
       contentInput.value = draft.contentHtml;
     }
+    setPublishSchedulingFields(draft);
 
     // Restore preview
     restorePublishPreview();

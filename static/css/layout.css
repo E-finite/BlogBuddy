@@ -23,7 +23,7 @@
 .logo {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--color-accent-500);
+  color: var(--color-primary-600);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
@@ -54,13 +54,13 @@
   left: 0;
   width: 0;
   height: 2px;
-  background: var(--color-accent-500);
+  background: var(--color-primary-500);
   transition: width var(--transition-base);
 }
 
 .nav-link:hover,
 .nav-link.active {
-  color: var(--color-accent-500);
+  color: var(--color-primary-700);
 }
 
 .nav-link:hover::after,
@@ -70,8 +70,7 @@
 
 /* Hero Section */
 .hero {
-  background-color: var(--bg-secondary);
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C853' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background: var(--gradient-hero);
   padding: var(--spacing-3xl) 0;
   border-radius: var(--radius-md);
   margin-bottom: var(--spacing-3xl);
@@ -87,8 +86,7 @@
   text-align: center;
   margin-bottom: var(--spacing-3xl);
   padding: var(--spacing-3xl) var(--spacing-lg);
-  background-color: var(--bg-secondary);
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C853' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background: var(--gradient-hero);
   border-radius: var(--radius-md);
 }
 
@@ -137,14 +135,13 @@
   content: '';
   width: 4px;
   height: 2rem;
-  background: var(--color-accent-500);
+  background: var(--color-primary-500);
   border-radius: var(--radius-full);
 }
 
 /* Footer */
 .footer {
-  background-color: var(--bg-secondary);
-  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%2300C853' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   padding: var(--spacing-xl) 0;
   text-align: center;

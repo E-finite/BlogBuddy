@@ -6,7 +6,7 @@ import logging
 import copy
 from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
-from datetime import datetime
+from datetime import datetime, timezone
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from src import db
@@ -102,6 +102,40 @@ def strip_base64_from_draft(draft):
 
     draft_copy = copy.deepcopy(draft)
     return strip_recursive(draft_copy)
+
+
+def validate_publish_draft_scheduling(draft: dict) -> None:
+    """Validate and normalize scheduling fields for publish draft payloads."""
+    status = draft.get("status", "publish")
+    schedule_date_gmt = draft.get("scheduleDateGmt")
+
+    if status not in ("draft", "publish", "future"):
+        raise ValueError(
+            "Invalid draft status. Allowed values: draft, publish, future")
+
+    if status == "future":
+        if not schedule_date_gmt:
+            raise ValueError(
+                "scheduleDateGmt is required when status is 'future'")
+
+        try:
+            normalized_input = schedule_date_gmt.replace("Z", "+00:00")
+            parsed_datetime = datetime.fromisoformat(normalized_input)
+        except ValueError:
+            raise ValueError(
+                "scheduleDateGmt must be a valid ISO datetime (e.g. 2026-03-09T15:30:00)")
+
+        if parsed_datetime.tzinfo is not None:
+            parsed_datetime = parsed_datetime.astimezone(
+                timezone.utc).replace(tzinfo=None)
+
+        if parsed_datetime <= datetime.utcnow():
+            raise ValueError("scheduleDateGmt must be in the future")
+
+        draft["scheduleDateGmt"] = parsed_datetime.strftime(
+            "%Y-%m-%dT%H:%M:%S")
+    elif schedule_date_gmt:
+        draft.pop("scheduleDateGmt", None)
 
 
 # Authentication routes
@@ -893,12 +927,27 @@ def publish_post():
             "siteId": req.siteId
         }
 
+        if req.draftId:
+            payload["draftId"] = req.draftId
+
         if req.draft:
+            validate_publish_draft_scheduling(req.draft)
             payload["draft"] = req.draft
         elif req.drafts:
+            for lang_draft in req.drafts.values():
+                validate_publish_draft_scheduling(lang_draft)
             payload["drafts"] = req.drafts
 
         db.create_job(job_id, current_user.id, "publish", payload)
+
+        if req.draftId:
+            draft = db.get_draft(req.draftId, current_user.id)
+            if not draft:
+                return jsonify({"error": "Draft not found or access denied"}), 404
+
+            db.mark_draft_sent_for_publish(
+                req.draftId, current_user.id, job_id, req.siteId)
+
         enqueue_job(job_id, "publish", payload)
 
         return jsonify({
@@ -908,6 +957,43 @@ def publish_post():
 
     except Exception as e:
         logger.error(f"Error creating publish job: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/jobs", methods=["GET"])
+@login_required
+def get_jobs():
+    """Get recent jobs for the current user."""
+    try:
+        limit = request.args.get("limit", default=50, type=int)
+        limit = max(1, min(limit or 50, 200))
+
+        jobs = db.get_user_jobs(current_user.id, limit=limit)
+        response_jobs = []
+
+        for row in jobs:
+            payload = json.loads(row["payload_json"]) if row.get(
+                "payload_json") else {}
+            result = json.loads(row["result_json"]) if row.get(
+                "result_json") else None
+            error = json.loads(row["error_json"]) if row.get(
+                "error_json") else None
+
+            response_jobs.append({
+                "jobId": row["id"],
+                "type": row["type"],
+                "status": row["status"],
+                "payload": payload,
+                "result": result,
+                "error": error,
+                "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
+                "updatedAt": row["updated_at"].isoformat() if row.get("updated_at") else None,
+            })
+
+        return jsonify({"jobs": response_jobs}), 200
+
+    except Exception as e:
+        logger.error(f"Error getting jobs list: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
 
 

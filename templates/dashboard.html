@@ -8,12 +8,6 @@
       rel="stylesheet"
       href="{{ url_for('static', filename='css/main.css') }}"
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
   </head>
   <body>
     <!-- Header -->
@@ -152,10 +146,10 @@
                 <div
                   class="form-group"
                   style="
-                    background: #f8fafc;
+                    background: var(--bg-tertiary);
                     padding: 16px;
-                    border-radius: 8px;
-                    border: 2px dashed #e2e8f0;
+                    border-radius: var(--radius-md);
+                    border: 2px dashed var(--border-color);
                   "
                 >
                   <label
@@ -190,7 +184,7 @@
                     style="
                       text-align: center;
                       margin: 12px 0;
-                      color: #94a3b8;
+                      color: var(--text-tertiary);
                       font-size: 14px;
                     "
                   >
@@ -377,15 +371,11 @@
                   id="image-settings-panel"
                   class="form-group"
                   style="
-                    background: linear-gradient(
-                      135deg,
-                      #667eea 0%,
-                      #764ba2 100%
-                    );
+                    background: var(--bg-secondary);
                     padding: 24px;
-                    border-radius: 12px;
-                    box-shadow: 0 8px 24px rgba(102, 126, 234, 0.15);
-                    border: none;
+                    border-radius: var(--radius-md);
+                    box-shadow: var(--shadow-md);
+                    border: 1px solid var(--border-color);
                   "
                 >
                   <h4
@@ -433,7 +423,7 @@
                       style="
                         background: white;
                         border: 2px solid rgba(255, 255, 255, 0.3);
-                        color: #2d3748;
+                        color: var(--text-primary);
                         font-weight: 500;
                       "
                     >
@@ -489,7 +479,7 @@
                         style="
                           background: white;
                           border: none;
-                          color: #2d3748;
+                          color: var(--text-primary);
                           font-weight: 500;
                           padding: 10px;
                         "
@@ -529,7 +519,7 @@
                         style="
                           background: white;
                           border: none;
-                          color: #2d3748;
+                          color: var(--text-primary);
                           font-weight: 500;
                           padding: 10px;
                         "
@@ -660,7 +650,7 @@
                             style="
                               background: white;
                               border: none;
-                              color: #2d3748;
+                              color: var(--text-primary);
                             "
                           >
                             <option value="low">💡 Low (Inspiration)</option>
@@ -690,7 +680,7 @@
                             style="
                               background: white;
                               border: none;
-                              color: #2d3748;
+                              color: var(--text-primary);
                             "
                           >
                             <option value="auto" selected>🤖 Auto</option>
@@ -724,7 +714,7 @@
                             style="
                               background: white;
                               border: none;
-                              color: #2d3748;
+                              color: var(--text-primary);
                             "
                           >
                             <option value="soft-studio" selected>
@@ -757,7 +747,7 @@
                             style="
                               background: white;
                               border: none;
-                              color: #2d3748;
+                              color: var(--text-primary);
                             "
                           >
                             <option value="1" selected>1 image</option>
@@ -786,11 +776,11 @@
                           id="brandColors"
                           name="brandColors"
                           class="form-input"
-                          placeholder="#667eea, #764ba2, #f093fb"
+                          placeholder="#3ECFFF, #355176, #E2E2E2"
                           style="
                             background: white;
                             border: none;
-                            color: #2d3748;
+                            color: var(--text-primary);
                           "
                         />
                         <div
@@ -801,7 +791,7 @@
                           "
                         >
                           Comma-gescheiden HEX codes voor jouw merk kleuren
-                          (bijv. #667eea, #764ba2)
+                          (bijv. #3ECFFF, #355176)
                         </div>
                       </div>
 
@@ -844,7 +834,7 @@
                           style="
                             background: white;
                             border: none;
-                            color: #2d3748;
+                            color: var(--text-primary);
                           "
                         />
                       </div>
@@ -872,7 +862,7 @@
                           style="
                             background: white;
                             border: none;
-                            color: #2d3748;
+                            color: var(--text-primary);
                             font-size: 13px;
                           "
                         >
@@ -970,6 +960,37 @@ blurry, low quality, watermark, text overlay, jpeg artifacts, deformed, pixelate
                     />
                     Publiceer als concept
                   </label>
+                </div>
+
+                <div class="form-group">
+                  <label class="form-label">
+                    <input
+                      type="checkbox"
+                      id="isScheduled"
+                      name="isScheduled"
+                    />
+                    Inplannen voor later
+                  </label>
+                </div>
+
+                <div
+                  class="form-group"
+                  id="schedule-date-group"
+                  style="display: none"
+                >
+                  <label class="form-label" for="scheduleDateLocal"
+                    >Publicatiedatum en tijd</label
+                  >
+                  <input
+                    type="datetime-local"
+                    id="scheduleDateLocal"
+                    name="scheduleDateLocal"
+                    class="form-input"
+                  />
+                  <div class="form-help">
+                    Wordt opgeslagen als GMT en gepubliceerd door WordPress op
+                    het gekozen moment.
+                  </div>
                 </div>
 
                 <div style="display: flex; gap: 0.75rem; flex-wrap: wrap">
