@@ -16,7 +16,9 @@
     <div class="card">
       <form id="publish-post-form">
         <div class="form-group">
-          <label class="form-label" for="pubSiteId">Selecteer WordPress Site</label>
+          <label class="form-label" for="pubSiteId"
+            >Selecteer WordPress Site</label
+          >
           <select id="pubSiteId" name="pubSiteId" class="form-input" required>
             <option value="">-- Kies een site --</option>
           </select>
@@ -61,7 +63,9 @@
         </div>
 
         <div class="form-group" id="schedule-date-group" style="display: none">
-          <label class="form-label" for="scheduleDateLocal">Publicatiedatum en tijd</label>
+          <label class="form-label" for="scheduleDateLocal"
+            >Publicatiedatum en tijd</label
+          >
           <input
             type="datetime-local"
             id="scheduleDateLocal"
@@ -69,7 +73,8 @@
             class="form-input"
           />
           <div class="form-help">
-            Wordt opgeslagen als GMT en gepubliceerd door WordPress op het gekozen moment.
+            Wordt opgeslagen als GMT en gepubliceerd door WordPress op het
+            gekozen moment.
           </div>
         </div>
 
@@ -78,11 +83,17 @@
             type="button"
             id="delete-active-draft-btn"
             class="btn"
-            style="background: var(--color-error); border-color: var(--color-error); color: white"
+            style="
+              background: var(--color-error);
+              border-color: var(--color-error);
+              color: white;
+            "
           >
             Draft verwijderen
           </button>
-          <button type="button" id="save-draft-btn" class="btn btn-secondary">Draft opslaan</button>
+          <button type="button" id="save-draft-btn" class="btn btn-secondary">
+            Draft opslaan
+          </button>
           <button type="submit" class="btn btn-primary">Publiceren</button>
         </div>
       </form>
