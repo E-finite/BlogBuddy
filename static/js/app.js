@@ -832,10 +832,23 @@ function initGeneratePost() {
     
     console.log('Image Settings:', payload.imageSettings);
     
+    let loadingCleared = false;
+    const clearGenerateLoading = () => {
+      if (loadingCleared) return;
+      loadingCleared = true;
+      setButtonLoading(submitBtn, false);
+    };
+
     setButtonLoading(submitBtn, true);
     
     try {
       const result = await api.generatePost(payload);
+
+      // Stop loading as soon as the API call completes.
+      clearGenerateLoading();
+
+      // Allow browser paint before potentially heavy preview rendering.
+      await new Promise((resolve) => requestAnimationFrame(resolve));
       
       console.log('Generate Post Result:', result);
       
@@ -891,7 +904,7 @@ function initGeneratePost() {
       console.error('Generate error:', error);
       showAlert(error.message || 'Fout bij genereren van blog post', 'error');
     } finally {
-      setButtonLoading(submitBtn, false);
+      clearGenerateLoading();
     }
   });
 }
@@ -1635,52 +1648,40 @@ async function regenerateImage() {
     }
     
     const data = await response.json();
+
+    const regeneratedImage = {
+      ...(data.image || {}),
+      feedbackChain: data.feedbackChain || [],
+      generationNumber: data.generationNumber || ((draft.image?.generationNumber || 1) + 1)
+    };
     
     // Update draft with new image
-    draft.image = data.image;
+    draft.image = regeneratedImage;
     
     // If multiple variations, replace the selected one
     if (draft.images) {
       const selectedIndex = draft.images.findIndex(img => img.imageId === parentId);
       if (selectedIndex >= 0) {
-        draft.images[selectedIndex] = data.image;
+        draft.images[selectedIndex] = regeneratedImage;
       } else {
         // Add as new variation
-        draft.images.push(data.image);
+        draft.images.push(regeneratedImage);
       }
     }
     
-    // Update in global state (with full image data)
-    window._currentDraftWithImages = draft;
-    
-    // Store draft WITHOUT base64 image data to avoid quota issues
-    try {
-      const draftMetadata = {
-        ...draft,
-        image: draft.image ? {
-          imageId: draft.image.imageId,
-          mime_type: draft.image.mime_type,
-          filename: draft.image.filename
-        } : undefined,
-        images: draft.images ? draft.images.map(img => ({
-          imageId: img.imageId,
-          mime_type: img.mime_type,
-          filename: img.filename
-        })) : undefined
-      };
-      sessionStorage.setItem('currentDraft', JSON.stringify(draftMetadata));
-    } catch (e) {
-      console.warn('Could not store draft metadata:', e);
-    }
+    persistDraftState(draft);
     
     // Clear feedback textarea
     feedbackTextarea.value = '';
     
-    // Show success and refresh preview
+    // Show success and refresh the publish preview in-place.
     statusDiv.innerHTML = '<div style="padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; color: #047857; border-radius: 4px;">✓ Afbeelding succesvol geregenereerd!</div>';
-    
-    // Refresh the preview immediately
-    showDraftPreview(draft);
+
+    const previewDiv = document.getElementById('publish-preview');
+    if (previewDiv) {
+      renderPreview(draft, previewDiv);
+    }
+
     showAlert('Afbeelding geregenereerd met je feedback!', 'success', 3000);
     
   } catch (error) {

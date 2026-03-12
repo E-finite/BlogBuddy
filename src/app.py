@@ -491,7 +491,9 @@ def regenerate_image():
             brand=brand,
             image_settings=image_settings,
             variation_index=0,
-            feedback_chain=all_feedback
+            feedback_chain=all_feedback,
+            reference_image_bytes=parent.get('image_data'),
+            reference_image_mime_type=parent.get('mime_type'),
         )
 
         if not image_bytes:
