@@ -309,7 +309,8 @@ def _try_openai_image_edit(
         logger.info(
             f"Sending request to OpenAI image edits API with reference image ({len(reference_image_bytes)} bytes, size={edit_size})..."
         )
-        response = requests.post(url, headers=headers, data=data, files=files, timeout=180)
+        response = requests.post(url, headers=headers,
+                                 data=data, files=files, timeout=180)
 
         logger.info(f"Image edits API response status: {response.status_code}")
         if response.status_code != 200:
@@ -330,10 +331,12 @@ def _try_openai_image_edit(
             return None, "", "", error_msg
 
         result = response.json()
-        image_bytes, output_mime_type, output_extension = _extract_openai_image_bytes(result)
+        image_bytes, output_mime_type, output_extension = _extract_openai_image_bytes(
+            result)
         if not image_bytes:
             error_msg = "No image data in OpenAI image edit response"
-            logger.warning(f"{error_msg}. Response keys: {list(result.keys())}")
+            logger.warning(
+                f"{error_msg}. Response keys: {list(result.keys())}")
             return None, "", "", error_msg
 
         filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{output_extension}"
@@ -365,7 +368,8 @@ def _extract_openai_image_bytes(result: Dict[str, Any]) -> Tuple[Optional[bytes]
     if image_url:
         download = requests.get(image_url, timeout=60)
         if download.status_code == 200 and download.content:
-            response_mime_type = download.headers.get("Content-Type", "image/png").split(";")[0]
+            response_mime_type = download.headers.get(
+                "Content-Type", "image/png").split(";")[0]
             extension = _extension_for_mime_type(response_mime_type)
             return download.content, response_mime_type, extension
 
