@@ -1,0 +1,93 @@
+<section id="publish" class="page-section hidden">
+  <div class="section">
+    <h2 class="section-title">Post Publiceren naar WordPress</h2>
+
+    <div class="card" style="margin-bottom: 2rem">
+      <div class="card-header">
+        <h3>Opgeslagen Concepten</h3>
+      </div>
+      <div class="card-body">
+        <div id="drafts-list">
+          <p class="text-muted">Laden...</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <form id="publish-post-form">
+        <div class="form-group">
+          <label class="form-label" for="pubSiteId">Selecteer WordPress Site</label>
+          <select id="pubSiteId" name="pubSiteId" class="form-input" required>
+            <option value="">-- Kies een site --</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="title">Post Titel</label>
+          <input
+            type="text"
+            id="title"
+            name="title"
+            class="form-input"
+            placeholder="bijv. '10 Tips voor Betere Productiviteit'"
+            required
+          />
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="content">Post Content (HTML)</label>
+          <textarea
+            id="content"
+            name="content"
+            class="form-input"
+            rows="10"
+            placeholder="<p>Je HTML content hier...</p>"
+            required
+          ></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <input type="checkbox" id="isDraft" name="isDraft" checked />
+            Publiceer als concept
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            <input type="checkbox" id="isScheduled" name="isScheduled" />
+            Inplannen voor later
+          </label>
+        </div>
+
+        <div class="form-group" id="schedule-date-group" style="display: none">
+          <label class="form-label" for="scheduleDateLocal">Publicatiedatum en tijd</label>
+          <input
+            type="datetime-local"
+            id="scheduleDateLocal"
+            name="scheduleDateLocal"
+            class="form-input"
+          />
+          <div class="form-help">
+            Wordt opgeslagen als GMT en gepubliceerd door WordPress op het gekozen moment.
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap">
+          <button
+            type="button"
+            id="delete-active-draft-btn"
+            class="btn"
+            style="background: var(--color-error); border-color: var(--color-error); color: white"
+          >
+            Draft verwijderen
+          </button>
+          <button type="button" id="save-draft-btn" class="btn btn-secondary">Draft opslaan</button>
+          <button type="submit" class="btn btn-primary">Publiceren</button>
+        </div>
+      </form>
+    </div>
+
+    <div id="publish-preview" style="display: none; margin-top: 2rem"></div>
+  </div>
+</section>
