@@ -62,25 +62,26 @@ pip install -r requirements.txt
 
 ### 2. Configuratie
 
-Maak een `src/config.py` bestand met je credentials:
+Gebruik `.env` bestanden voor secrets:
 
-```python
-# Database configuratie
-DB_HOST = "localhost"
-DB_USER = "your_db_user"
-DB_PASSWORD = "your_db_password"
-DB_NAME = "blogplatform"
+```bash
+# Maak lokale env file
+copy .env.example .env
+```
 
-# API Keys
-OPENAI_API_KEY = "sk-..."
-GEMINI_API_KEY = "..."
+Vul daarna je credentials in `.env`:
 
-# Applicatie
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-
-# Security - minimaal 32 karakters
-MASTER_KEY = "your-secure-master-key-here"
+```env
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+MASTER_KEY=your-secure-master-key-min-32-chars
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=blogbot
+APP_HOST=0.0.0.0
+APP_PORT=8000
 ```
 
 ### 3. Applicatie starten

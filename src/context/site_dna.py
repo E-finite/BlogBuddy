@@ -4,6 +4,7 @@ import json
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 from src import config
+from src.prompt_templates import load_prompt_template, render_prompt_template
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -43,60 +44,29 @@ def generate_site_dna(
     # Build context from pages
     pages_context = _build_pages_context(priority_pages)
 
-    # Generate DNA with GPT
-    system_prompt = """Je bent een expert brand analyst en content strategist.
-Je analyseert website content en extraheert de kern-identiteit, positionering, en tone of voice.
+    # Generate DNA with GPT using prompt templates
+    system_prompt = load_prompt_template("site_dna_system_prompt.txt")
 
-Je taak is om een "Site DNA" te creëren: een compacte maar complete beschrijving van:
-- Wat de organisatie doet en belooft
-- Voor wie (doelgroepen)
-- Welke problemen ze oplossen
-- Hoe ze communiceren (tone of voice)
-- Wat wel/niet te zeggen (woordenlijst)
-- Feitelijke bewijspunten die op de site staan
-- Brand informatie (naam en kleuren)
-
-BELANGRIJK:
-- Gebruik alleen informatie die LETTERLIJK op de website staat
-- Verzin geen claims, features, of cijfers die er niet staan
-- Wees specifiek maar compact
-- Focus op wat uniek of karakteristiek is
-- Let op tone of voice: formeel/informeel, zakelijk/toegankelijk, etc.
-"""
-
-    user_prompt = f"""Analyseer deze website content en genereer een Site DNA.
-
-WEBSITE: {site_url}
-
-PAGINA'S:
-{pages_context}
-
-{f"GEËXTRAHEERDE KLEUREN UIT HTML: {', '.join(extracted_colors[:10])}" if extracted_colors else ""}
-
-Genereer een JSON object met deze structuur:
-{{
-  "brand_name": "De merknaam zoals genoemd op de website (bijv. 'Acme Inc', 'Tech Solutions')",
-  "brand_colors": ["#hex1", "#hex2", ...],
-  "brand_summary": "Korte beschrijving (2-3 zinnen) van wat de organisatie doet en belooft",
-  "target_audiences": ["primaire doelgroep 1", "doelgroep 2", ...],
-  "pain_points": ["pijnpunt/probleem dat klanten hebben", ...],
-  "solutions_themes": ["kernoplossing/thema 1", "thema 2", ...],
-  "tone_keywords": ["stijlwoord 1", "stijlwoord 2", ...],
-  "avoid_words": ["woord om te vermijden", ...],
-  "proof_points": ["feitelijke claim die letterlijk op de site staat", ...],
-  "compliance_notes": ["disclaimer of randvoorwaarde die de site noemt", ...]
-}}
-
-Regels:
-- brand_name: De officiële bedrijfsnaam zoals gebruikt op de website (niet de domeinnaam)
-- brand_colors: {f"Gebruik de geëxtraheerde kleuren hierboven. Kies max 3 primaire/opvallende kleuren." if extracted_colors else "Lege array (geen kleuren beschikbaar)."}
-- tone_keywords: 5-10 woorden die de schrijfstijl beschrijven (bijv. "nuchter", "praktisch", "toegankelijk")
-- avoid_words: overdreven termen die NIET passen bij de tone (bijv. "revolutionair", "uniek", "beste")
-- proof_points: alleen claims die je letterlijk terug kunt vinden in de content (geen aannames)
-- compliance_notes: juridische disclaimers, beperkingen, voorwaarden die worden genoemd
-
-Wees kritisch en accuraat. Geen fantasie.
-"""
+    extracted_colors_line = (
+        f"GEEXTRAHEERDE KLEUREN UIT HTML: {', '.join(extracted_colors[:10])}"
+        if extracted_colors
+        else ""
+    )
+    brand_colors_rule = (
+        "Gebruik de geextraheerde kleuren hierboven. Kies max 3 primaire/opvallende kleuren."
+        if extracted_colors
+        else "Lege array (geen kleuren beschikbaar)."
+    )
+    user_prompt_template = load_prompt_template("site_dna_user_prompt.txt")
+    user_prompt = render_prompt_template(
+        user_prompt_template,
+        {
+            "site_url": site_url,
+            "pages_context": pages_context,
+            "extracted_colors_line": extracted_colors_line,
+            "brand_colors_rule": brand_colors_rule,
+        },
+    )
 
     try:
         response = client.chat.completions.create(

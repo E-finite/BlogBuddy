@@ -4,6 +4,7 @@ import logging
 from typing import Tuple, Optional, Dict, Any
 import requests
 from src import config
+from src.prompt_templates import load_prompt_template, render_prompt_template
 
 logger = logging.getLogger(__name__)
 
@@ -106,25 +107,31 @@ def _try_dalle3_image(
             "high": "bold and striking"
         }.get(style_strength, "")
 
-        prompt = f"""Create a professional blog header image about: {topic}
-
-Style: {style_desc} {strength_modifier}
-{composition_desc}
-Lighting: {lighting_desc}{color_instruction}
-
-Requirements:
-- No text or logos
-- Professional and visually appealing
-- Suitable for business blog featured image
-- High resolution
-- Modern aesthetic"""
+        prompt_template = load_prompt_template("image_gemini_base_prompt.txt")
+        prompt = render_prompt_template(
+            prompt_template,
+            {
+                "topic": topic,
+                "style_desc": style_desc,
+                "strength_modifier": strength_modifier,
+                "composition_desc": composition_desc,
+                "lighting_desc": lighting_desc,
+                "color_instruction": color_instruction,
+            },
+        )
 
         # Add cumulative feedback if regenerating
         if feedback_chain:
-            prompt += "\n\n### USER REFINEMENTS (REQUIRED):\n"
-            prompt += "Apply ALL of the following refinements to the image:\n"
-            for i, feedback in enumerate(feedback_chain, 1):
-                prompt += f"{i}. {feedback}\n"
+            feedback_template = load_prompt_template(
+                "image_gemini_feedback_appendix.txt"
+            )
+            numbered_feedback = "\n".join(
+                f"{i}. {feedback}" for i, feedback in enumerate(feedback_chain, 1)
+            )
+            prompt += "\n\n" + render_prompt_template(
+                feedback_template,
+                {"numbered_feedback_list": numbered_feedback},
+            )
 
         logger.info(
             f"Generating image variation {variation_index} with DALL-E 3 for: {topic}")

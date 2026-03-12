@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any
 from openai import OpenAI
 from src import config
+from src.prompt_templates import load_prompt_template, render_prompt_template
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=config.OPENAI_API_KEY)
@@ -38,84 +39,59 @@ def generate_post_content(
     current_angle = form_data.get('angle', 'Uitgebreide gids met tips')
     specific_question = form_data.get('customer_question', '')
 
-    # Build website context section
+    # Build website context section from template
     website_context_section = ""
     if website_context_bundle:
-        website_context_section = f"""
-### BRONMATERIAAL & HUISSTIJL:
-{json.dumps(website_context_bundle, ensure_ascii=False, indent=2)}
-REGELS:
-1. Dit materiaal is leidend boven algemene kennis.
-2. Gebruik de tone-of-voice keywords strikt.
-3. Vermijd woorden uit de 'avoid_words' lijst.
-"""
+        website_context_template = load_prompt_template(
+            "text_openai_website_context_section.txt"
+        )
+        website_context_section = render_prompt_template(
+            website_context_template,
+            {
+                "website_context_bundle_json": json.dumps(
+                    website_context_bundle, ensure_ascii=False, indent=2
+                )
+            },
+        )
 
-    # Build system prompt
-    system_prompt = f"""
-Je bent een senior contentstrateeg. Je schrijft long-form, diepgaande content voor {brand.get('name', 'het merk')} in het {language}.
-Je doel is niet alleen informeren, maar de autoriteit op het onderwerp claimen door diepgang.
-
-{website_context_section}
-
-### 1. LENGTE & DIEPGANG (STRIKT)
-Je schrijft een uitgebreid artikel (richtlijn: 600-800 woorden / 3500+ karakters).
-Om dit te bereiken moet je de volgende structuur hanteren:
-1. **Intro:** Pakkend, benoem het probleem, introduceer de oplossing.
-2. **Kern:** Minimaal **4 secties (H2)**. Elke sectie moet diepgaand zijn (minimaal 2-3 alinea's per H2).
-3. **Details:** Gebruik voorbeelden, scenario's of stappenplannen in elke sectie om body te geven.
-4. **FAQ Sectie:** Eindig de body verplicht met een H2 getiteld "Veelgestelde vragen over [Onderwerp]" met daarin 3 relevante vragen en antwoorden.
-5. **Conclusie:** Samenvatting en zachte CTA.
-
-### 2. INVALSHOEK & UNIEKHEID
-We willen GEEN generieke content die op elke andere website staat.
-- **De Invalshoek:** Je schrijft dit artikel vanuit het type: "{current_angle}". Pas de structuur hierop aan.
-- **Vermijd Herhaling:** Als je over algemene concepten schrijft, zoek dan altijd naar een specifieke nuance of een recent voorbeeld.
-- **Diepgang:** Ga verder dan de basis. Leg niet alleen uit WAT iets is, maar ook HOE je het toepast en WAAROM het vaak misgaat.
-
-### 3. SEO & GEO
-- **Focus Keyword:** {seo.get('focusKeyword', '')} (Gebruik in Titel, Intro, minstens 1x H2, en verspreid in tekst).
-- **Secondary Keywords:** {', '.join(seo.get('secondaryKeywords', []))}
-- **Snippet-ready:** Zorg dat definities helder en direct na een kopje staan.
-
-### 4. TONE OF VOICE
-- Stijl: {', '.join(tone_of_voice.get('style', []))}
-- Niveau: {audience.get('level', 'intermediate')}
-- Schrijf actief en direct. Vermijd passieve zinnen.
-
-### 5. FORMATTERING (HTML)
-- Output moet pure HTML zijn in de JSON string.
-- Gebruik <h2> voor hoofdsecties, <h3> voor subsecties.
-- Gebruik <ul>/<ol> voor opsommingen (dit breekt de tekst en leest fijn).
-- Gebruik <strong> om kernzinnen te benadrukken (max 1x per alinea).
-
-### 6. JSON OUTPUT (STRIKT)
-Geef ALLEEN de JSON terug.
-{{
-  "title": "...",
-  "slug": "...",
-  "excerpt": "...",
-  "contentHtml": "...",
-  "yoast": {{ "focuskw": "...", "seo_title": "...", "meta_desc": "..." }},
-  "tags": [],
-  "categories": []
-}}
-"""
+    # Build system prompt from template
+    system_prompt_template = load_prompt_template(
+        "text_openai_system_prompt.txt")
+    system_prompt = render_prompt_template(
+        system_prompt_template,
+        {
+            "brand_name": brand.get("name", "het merk"),
+            "language": language,
+            "website_context_section": website_context_section,
+            "current_angle": current_angle,
+            "focus_keyword": seo.get("focusKeyword", ""),
+            "secondary_keywords": ", ".join(seo.get("secondaryKeywords", [])),
+            "tone_style": ", ".join(tone_of_voice.get("style", [])),
+            "audience_level": audience.get("level", "intermediate"),
+        },
+    )
 
     # Hier voegen we de specifieke sturing toe in de user prompt
     context_injection = ""
     if specific_question:
-        context_injection = f"Behandel in dit artikel specifiek deze lezersvraag/situatie: '{specific_question}'."
+        context_injection_template = load_prompt_template(
+            "text_openai_context_injection.txt"
+        )
+        context_injection = render_prompt_template(
+            context_injection_template,
+            {"specific_question": specific_question},
+        )
 
-    user_prompt = f"""
-Schrijf het blogartikel over: "{topic}".
-
-SPECIFIEKE OPDRACHT:
-1. Invalshoek: Hanteer de stijl van een **{current_angle}**.
-2. {context_injection}
-3. Zorg voor voldoende lengte door veel voorbeelden te gebruiken.
-4. Voeg aan het eind een FAQ sectie toe met 3 vragen.
-5. Pijnpunten om te adresseren: {', '.join(audience.get('painPoints', []))}.
-"""
+    user_prompt_template = load_prompt_template("text_openai_user_prompt.txt")
+    user_prompt = render_prompt_template(
+        user_prompt_template,
+        {
+            "topic": topic,
+            "current_angle": current_angle,
+            "context_injection": context_injection,
+            "pain_points": ", ".join(audience.get("painPoints", [])),
+        },
+    )
 
     try:
         response = client.chat.completions.create(
@@ -156,8 +132,9 @@ SPECIFIEKE OPDRACHT:
         logger.error(f"Invalid JSON from OpenAI: {e}")
         # Retry once with stricter instruction
         logger.info("Retrying with stricter JSON instruction...")
-        retry_prompt = user_prompt + \
-            "\n\nBELANGRIJK: Return ALLEEN geldige JSON, geen andere tekst."
+        retry_instruction = load_prompt_template(
+            "text_openai_retry_appendix.txt")
+        retry_prompt = user_prompt + f"\n\n{retry_instruction}"
         response = client.chat.completions.create(
             model=config.OPENAI_TEXT_MODEL,
             messages=[

@@ -1,0 +1,32 @@
+Analyseer deze website content en genereer een Site DNA.
+
+WEBSITE: {site_url}
+
+PAGINA'S:
+{pages_context}
+
+{extracted_colors_line}
+
+Genereer een JSON object met deze structuur:
+{
+  "brand_name": "De merknaam zoals genoemd op de website (bijv. 'Acme Inc', 'Tech Solutions')",
+  "brand_colors": ["#hex1", "#hex2", ...],
+  "brand_summary": "Korte beschrijving (2-3 zinnen) van wat de organisatie doet en belooft",
+  "target_audiences": ["primaire doelgroep 1", "doelgroep 2", ...],
+  "pain_points": ["pijnpunt/probleem dat klanten hebben", ...],
+  "solutions_themes": ["kernoplossing/thema 1", "thema 2", ...],
+  "tone_keywords": ["stijlwoord 1", "stijlwoord 2", ...],
+  "avoid_words": ["woord om te vermijden", ...],
+  "proof_points": ["feitelijke claim die letterlijk op de site staat", ...],
+  "compliance_notes": ["disclaimer of randvoorwaarde die de site noemt", ...]
+}
+
+Regels:
+- brand_name: De officiele bedrijfsnaam zoals gebruikt op de website (niet de domeinnaam)
+- brand_colors: {brand_colors_rule}
+- tone_keywords: 5-10 woorden die de schrijfstijl beschrijven (bijv. "nuchter", "praktisch", "toegankelijk")
+- avoid_words: overdreven termen die NIET passen bij de tone (bijv. "revolutionair", "uniek", "beste")
+- proof_points: alleen claims die je letterlijk terug kunt vinden in de content (geen aannames)
+- compliance_notes: juridische disclaimers, beperkingen, voorwaarden die worden genoemd
+
+Wees kritisch en accuraat. Geen fantasie.

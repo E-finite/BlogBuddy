@@ -31,7 +31,8 @@ desktop.ini
 # Config (bevat gevoelige data)
 config.py
 .env
-.env.local
+.env.*
+!.env.example
 *.key
 
 # Database

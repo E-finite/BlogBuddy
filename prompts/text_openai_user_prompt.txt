@@ -1,0 +1,8 @@
+Schrijf het blogartikel over: "{topic}".
+
+SPECIFIEKE OPDRACHT:
+1. Invalshoek: Hanteer de stijl van een **{current_angle}**.
+2. {context_injection}
+3. Zorg voor voldoende lengte door veel voorbeelden te gebruiken.
+4. Voeg aan het eind een FAQ sectie toe met 3 vragen.
+5. Pijnpunten om te adresseren: {pain_points}.

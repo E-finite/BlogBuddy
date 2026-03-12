@@ -69,25 +69,25 @@ pip install -r requirements.txt
 
 ### 5. Configuratie
 
-Maak een `src/config.py` bestand met de volgende inhoud:
+Maak een lokale `.env` op basis van het voorbeeldbestand:
 
-```python
-# Database configuratie
-DB_HOST = "localhost"
-DB_USER = "your_db_user"
-DB_PASSWORD = "your_db_password"
-DB_NAME = "blogplatform"
+```bash
+copy .env.example .env
+```
 
-# API Keys
-OPENAI_API_KEY = "your_openai_api_key"
-GEMINI_API_KEY = "your_gemini_api_key"
+Vul daarna minimaal deze waarden in `.env`:
 
-# Applicatie configuratie
-APP_HOST = "0.0.0.0"
-APP_PORT = 5000
-
-# Security
-MASTER_KEY = "your_secure_master_key_here"  # Minimaal 32 karakters
+```env
+OPENAI_API_KEY=your_openai_api_key
+GEMINI_API_KEY=your_gemini_api_key
+MASTER_KEY=your_secure_master_key_here
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=blogbot
+APP_HOST=0.0.0.0
+APP_PORT=8000
 ```
 
 ### 6. Database setup
