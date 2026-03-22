@@ -55,6 +55,10 @@ async function apiRequest(endpoint, options = {}) {
 // API Methods
 export const api = {
   // Sites
+  async getSites() {
+    return apiRequest('/api/sites');
+  },
+
   async connectSite(wpBaseUrl, wpUsername, wpApplicationPassword) {
     return apiRequest('/api/sites/connect', {
       method: 'POST',
@@ -82,8 +86,38 @@ export const api = {
   },
 
   // Jobs
+  async getJobs(limit = 50) {
+    return apiRequest(`/api/jobs?limit=${encodeURIComponent(limit)}`);
+  },
+
   async getJob(jobId) {
     return apiRequest(`/api/jobs/${jobId}`);
+  },
+
+  // Drafts
+  async getDrafts() {
+    return apiRequest('/api/drafts');
+  },
+
+  async getDraft(draftId) {
+    return apiRequest(`/api/drafts/${draftId}`);
+  },
+
+  async updateDraft(draftId, draft) {
+    return apiRequest(`/api/drafts/${draftId}`, {
+      method: 'PUT',
+      body: { draft },
+    });
+  },
+
+  async deleteDraft(draftId) {
+    return apiRequest(`/api/drafts/${draftId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getImage(imageId) {
+    return apiRequest(`/api/images/${imageId}`);
   },
 
   // Health

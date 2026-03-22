@@ -56,16 +56,25 @@ export function showModal(title, content, footer = null) {
 
 // Set button loading state
 export function setButtonLoading(button, loading) {
+  if (!button) {
+    console.error('setButtonLoading called with null button');
+    return;
+  }
+  
   if (loading) {
+    if (button.classList.contains('btn-loading')) {
+      return;
+    }
+
     button.disabled = true;
     button.classList.add('btn-loading');
-    button.dataset.originalText = button.textContent;
-    button.innerHTML = button.innerHTML + '<span class="spinner spinner-sm"></span>';
+    button.dataset.originalHtml = button.innerHTML;
   } else {
     button.disabled = false;
     button.classList.remove('btn-loading');
-    if (button.dataset.originalText) {
-      button.textContent = button.dataset.originalText;
+    if (button.dataset.originalHtml) {
+      button.innerHTML = button.dataset.originalHtml;
+      delete button.dataset.originalHtml;
     }
   }
 }

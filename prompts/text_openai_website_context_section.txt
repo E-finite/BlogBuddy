@@ -1,0 +1,6 @@
+### BRONMATERIAAL & HUISSTIJL:
+{website_context_bundle_json}
+REGELS:
+1. Dit materiaal is leidend boven algemene kennis.
+2. Gebruik de tone-of-voice keywords strikt.
+3. Vermijd woorden uit de 'avoid_words' lijst.

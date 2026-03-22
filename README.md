@@ -1,58 +1,98 @@
-# WordPress Blog Generator MVP
+# SME Blog Platform
 
-Een Python Flask service die automatisch blog posts genereert met OpenAI en publiceert naar WordPress, inclusief Yoast SEO meta en multi-language support via Polylang.
+Een professioneel blog platform voor kleine bedrijven (MKB) met AI-gedreven content generatie en WordPress integratie.
 
-## Features
+## 🚀 Features
 
 - ✅ WordPress REST API integratie (Application Passwords / Basic Auth)
-- ✅ Blog generatie met OpenAI (GPT-4o) - doelgroep, tone of voice, SEO regels
+- ✅ AI Blog generatie met OpenAI (GPT-4o) - doelgroep, tone of voice, SEO optimalisatie
 - ✅ Automatische publicatie naar WordPress (draft/scheduled/published)
-- ✅ Yoast SEO meta via custom endpoint
-- ✅ Multi-language posts via Polylang endpoint (optioneel)
-- ✅ Featured image generatie met Gemini (optioneel)
-- ✅ Job queue met persistent storage (SQLite)
+- ✅ Yoast SEO meta integratie
+- ✅ Multi-language support via Polylang (optioneel)
+- ✅ Featured image generatie met Gemini
+- ✅ Job queue met persistent storage (MySQL)
 - ✅ Retry logic met exponential backoff
 - ✅ Encrypted credential storage
+- ✅ Website analyse en brand identity extractie
+- ✅ Gebruikersauthenticatie en sessie management
 
-## Setup
+## 📁 Projectstructuur
+
+```
+blogproject/
+├── src/                    # Applicatie broncode
+│   ├── context/           # Website analyse en content extractie
+│   ├── generator/         # Content en afbeelding generatie
+│   ├── jobs/              # Achtergrond jobs en queue systeem
+│   ├── app.py             # Flask applicatie en routes
+│   ├── auth.py            # Authenticatie
+│   ├── config.py          # Configuratie (niet in git!)
+│   ├── crypto_utils.py    # Encryptie utilities
+│   ├── db.py              # Database operaties
+│   ├── models.py          # Data modellen
+│   └── wp_client.py       # WordPress REST API client
+├── static/                # CSS, JavaScript, afbeeldingen
+├── templates/             # HTML templates
+├── tests/                 # Tests
+├── docs/                  # Documentatie
+├── run.py                 # Applicatie entry point
+└── requirements.txt       # Python dependencies
+```
+
+## 🔧 Snelle Start
 
 ### 1. Python Environment
 
 ```bash
-# Python 3.11+ vereist
+# Python 3.9+ vereist
 python --version
 
 # Maak virtual environment
-python -m venv venv
+python -m venv .venv
 
 # Activeer venv
 # Windows:
-venv\Scripts\activate
+.venv\Scripts\activate
 # Linux/Mac:
-source venv/bin/activate
+source .venv/bin/activate
 
 # Installeer dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Environment Variables
+### 2. Configuratie
 
-Maak een `.env` bestand of exporteer de volgende variabelen:
+Gebruik `.env` bestanden voor secrets:
 
 ```bash
-export OPENAI_API_KEY="sk-..."
-export GEMINI_API_KEY="..."
-export MASTER_KEY="your-secret-encryption-key-min-32-chars"
-export APP_DB_PATH="./data/app.db"
-export APP_HOST="0.0.0.0"
-export APP_PORT="8000"
-export OPENAI_TEXT_MODEL="gpt-4o"  # Optioneel, default: gpt-4o
-export GEMINI_IMAGE_MODEL="gemini-2.0-flash-exp"  # Optioneel
+# Maak lokale env file
+copy .env.example .env
 ```
 
-**BELANGRIJK**: `MASTER_KEY` moet minimaal 32 karakters zijn en wordt gebruikt voor encryptie van WordPress credentials. Gebruik een sterke, unieke key.
+Vul daarna je credentials in `.env`:
 
-### 3. WordPress Setup
+```env
+OPENAI_API_KEY=sk-...
+GEMINI_API_KEY=...
+MASTER_KEY=your-secure-master-key-min-32-chars
+MYSQL_HOST=127.0.0.1
+MYSQL_PORT=3306
+MYSQL_USER=root
+MYSQL_PASSWORD=
+MYSQL_DATABASE=blogbot
+APP_HOST=0.0.0.0
+APP_PORT=8000
+```
+
+### 3. Applicatie starten
+
+```bash
+python run.py
+```
+
+De applicatie is nu beschikbaar op `http://localhost:5000`
+
+### 4. WordPress Setup
 
 #### Application Passwords inschakelen
 
@@ -67,44 +107,24 @@ export GEMINI_IMAGE_MODEL="gemini-2.0-flash-exp"  # Optioneel
 De service verwacht de volgende custom endpoints:
 
 1. **Yoast SEO Meta API** (`/wp-json/yoast-api/v1/update-meta`)
-   - Plugin moet een endpoint registreren die accepteert:
-     ```json
-     {
-       "post_id": 123,
-       "focuskw": "keyword",
-       "seo_title": "SEO Title",
-       "meta_desc": "Meta description"
-     }
-     ```
-
 2. **Polylang Linker** (`/wp-json/my-plugin/v1/link-translations`)
-   - Plugin moet een endpoint registreren die accepteert:
-     ```json
-     {
-       "translations": {
-         "nl": 123,
-         "en": 124
-       }
-     }
-     ```
 
-**Note**: Als deze plugins niet actief zijn, zal de service een warning loggen maar doorgaan met publicatie (zonder Yoast/Polylang updates).
+**Note**: Als deze plugins niet actief zijn, zal de service een warning loggen maar doorgaan met publicatie.
 
 #### Permalink Settings
 
 Zorg dat WordPress permalinks zijn ingeschakeld (Settings → Permalinks). De REST API vereist dit.
 
-## Gebruik
+## 📖 Gebruik
 
-### API Server Starten
+Bezoek `http://localhost:5000` en log in met je account. De web interface biedt:
 
-```bash
-python app.py
-```
+- WordPress site beheer en connectie
+- Blog post generatie met AI
+- Dashboard met statistieken
+- Settings en configuratie
 
-De server draait op `http://localhost:8000` (of zoals geconfigureerd).
-
-### API Endpoints
+## 🔌 API Endpoints
 
 #### 1. Connect WordPress Site
 

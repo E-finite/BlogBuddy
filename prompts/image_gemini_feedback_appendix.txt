@@ -1,0 +1,3 @@
+### USER REFINEMENTS (REQUIRED):
+Apply ALL of the following refinements to the image:
+{numbered_feedback_list}

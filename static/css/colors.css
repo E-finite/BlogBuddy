@@ -1,58 +1,62 @@
 /**
- * Custom Color Theory: "Neon Dreams meets Deep Space"
+ * Color System for SME Blog Platform
  * 
  * Philosophy:
- * - Primary: Electric cyan/blue (trust, technology, clarity)
- * - Secondary: Vibrant purple/magenta (creativity, innovation)
- * - Accent: Golden amber (warmth, attention, highlights)
- * - Neutral: Deep space grays (sophistication, readability)
- * - Semantic: Context-aware colors with high contrast
+ * - Primary: Bright cyan (#3ECFFF) - Friendly, modern, energetic
+ * - Secondary: Deep slate blue (#355176) - Trust and professionalism
+ * - Tertiary: Soft gray (#E2E2E2) - Clean, neutral foundation
  * 
+ * Target Audience: Small businesses (MKB/SMEs)
  * Design Principles:
- * - High contrast for accessibility (WCAG AA+)
- * - Vibrant but not overwhelming
- * - Dark-first design with light mode support
- * - Smooth gradients for depth
+ * - Clean and professional
+ * - High readability for business content
+ * - Trustworthy and approachable
  */
 
 :root {
-  /* Primary Palette - Electric Cyan/Blue */
-  --color-primary-50: #e0f7fa;
-  --color-primary-100: #b2ebf2;
-  --color-primary-200: #80deea;
-  --color-primary-300: #4dd0e1;
-  --color-primary-400: #26c6da;
-  --color-primary-500: #00bcd4; /* Main primary */
-  --color-primary-600: #00acc1;
-  --color-primary-700: #0097a7;
-  --color-primary-800: #00838f;
-  --color-primary-900: #006064;
+  /* Primary Palette - Cyan */
+  --color-primary-50: #eefcff;
+  --color-primary-100: #d9f6ff;
+  --color-primary-200: #b7eeff;
+  --color-primary-300: #8de4ff;
+  --color-primary-400: #62d9ff;
+  --color-primary-500: #3ECFFF; /* Main primary */
+  --color-primary-600: #21b5e6;
+  --color-primary-700: #1891b8;
+  --color-primary-800: #146f8c;
+  --color-primary-900: #114f63;
   
-  /* Secondary Palette - Vibrant Purple/Magenta */
-  --color-secondary-50: #f3e5f5;
-  --color-secondary-100: #e1bee7;
-  --color-secondary-200: #ce93d8;
-  --color-secondary-300: #ba68c8;
-  --color-secondary-400: #ab47bc;
-  --color-secondary-500: #9c27b0; /* Main secondary */
-  --color-secondary-600: #8e24aa;
-  --color-secondary-700: #7b1fa2;
-  --color-secondary-800: #6a1b9a;
-  --color-secondary-900: #4a148c;
+  /* Secondary Palette - Deep slate blue */
+  --color-secondary-50: #edf1f6;
+  --color-secondary-100: #d6e0eb;
+  --color-secondary-200: #b8cadb;
+  --color-secondary-300: #97b0c8;
+  --color-secondary-400: #7592b2;
+  --color-secondary-500: #355176;
+  --color-secondary-600: #2f4869;
+  --color-secondary-700: #273b57;
+  --color-secondary-800: #1f2f45;
+  --color-secondary-900: #172235;
   
-  /* Accent Palette - Golden Amber */
-  --color-accent-50: #fff8e1;
-  --color-accent-100: #ffecb3;
-  --color-accent-200: #ffe082;
-  --color-accent-300: #ffd54f;
-  --color-accent-400: #ffca28;
-  --color-accent-500: #ffc107; /* Main accent */
-  --color-accent-600: #ffb300;
-  --color-accent-700: #ffa000;
-  --color-accent-800: #ff8f00;
-  --color-accent-900: #ff6f00;
+  /* Tertiary Palette - Neutral gray */
+  --color-accent-50: #f9f9f9;
+  --color-accent-100: #f3f3f3;
+  --color-accent-200: #ececec;
+  --color-accent-300: #e6e6e6;
+  --color-accent-400: #e2e2e2;
+  --color-accent-500: #d4d4d4;
+  --color-accent-600: #b5b5b5;
+  --color-accent-700: #8f8f8f;
+  --color-accent-800: #6e6e6e;
+  --color-accent-900: #515151;
   
-  /* Neutral Palette - Deep Space Grays */
+  /* Text Palette */
+  --color-text-primary: #1f2937; /* Main text */
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #6b7280;
+  --color-text-light: #cccccc;
+  
+  /* Neutral Palette */
   --color-neutral-50: #fafafa;
   --color-neutral-100: #f5f5f5;
   --color-neutral-200: #eeeeee;
@@ -65,50 +69,52 @@
   --color-neutral-900: #212121;
   
   /* Semantic Colors */
-  --color-success: #4caf50;
-  --color-success-light: #81c784;
-  --color-success-dark: #388e3c;
-  --color-error: #f44336;
-  --color-error-light: #e57373;
+  --color-success: #2f9e73;
+  --color-success-light: #26ca84;
+  --color-success-dark: #00aa2d;
+  --color-error: #d32f2f;
+  --color-error-light: #ef5350;
   --color-error-dark: #c62828;
-  --color-warning: #ff9800;
-  --color-warning-light: #ffb74d;
-  --color-warning-dark: #f57c00;
-  --color-info: #2196f3;
-  --color-info-light: #64b5f6;
-  --color-info-dark: #1976d2;
+  --color-warning: #f57c00;
+  --color-warning-light: #ff9800;
+  --color-warning-dark: #e65100;
+  --color-info: #1976d2;
+  --color-info-light: #42a5f5;
+  --color-info-dark: #1565c0;
   
-  /* Background System - Dark Theme (Default) */
-  --bg-primary: #0a0e27;
-  --bg-secondary: #141b3d;
-  --bg-tertiary: #1e2749;
-  --bg-elevated: #283155;
-  --bg-overlay: rgba(10, 14, 39, 0.95);
+  /* Background System - Light Theme (Business-friendly) */
+  --bg-primary: #fbfcfd;
+  --bg-secondary: #f1f4f7;
+  --bg-tertiary: #E2E2E2;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(255, 255, 255, 0.95);
+  --bg-dark: #172235;
   
   /* Text System */
-  --text-primary: #ffffff;
-  --text-secondary: #b0bec5;
-  --text-tertiary: #78909c;
-  --text-inverse: #0a0e27;
+  --text-primary: #1f2f45;
+  --text-secondary: #355176;
+  --text-tertiary: #64748b;
+  --text-inverse: #ffffff;
   
   /* Border & Divider */
-  --border-color: rgba(0, 188, 212, 0.2);
-  --border-color-hover: rgba(0, 188, 212, 0.4);
-  --divider-color: rgba(255, 255, 255, 0.1);
+  --border-color: #d8e0e8;
+  --border-color-hover: #3ECFFF;
+  --divider-color: rgba(0, 0, 0, 0.08);
   
   /* Shadow System */
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
-  --shadow-glow: 0 0 20px rgba(0, 188, 212, 0.3);
-  --shadow-glow-strong: 0 0 30px rgba(0, 188, 212, 0.5);
+  --shadow-sm: 0 1px 4px rgba(36, 54, 79, 0.08);
+  --shadow-md: 0 2px 10px rgba(36, 54, 79, 0.14);
+  --shadow-lg: 0 4px 16px rgba(36, 54, 79, 0.18);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.15);
+  --shadow-glow: 0 0 20px rgba(62, 207, 255, 0.25);
+  --shadow-glow-strong: 0 0 30px rgba(62, 207, 255, 0.35);
   
   /* Gradient System */
-  --gradient-primary: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-secondary-500) 100%);
-  --gradient-accent: linear-gradient(135deg, var(--color-accent-500) 0%, var(--color-accent-700) 100%);
-  --gradient-bg: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 50%, var(--bg-tertiary) 100%);
-  --gradient-card: linear-gradient(135deg, var(--bg-elevated) 0%, var(--bg-tertiary) 100%);
+  --gradient-primary: linear-gradient(135deg, #f1fbff 0%, #e7f7ff 100%);
+  --gradient-accent: linear-gradient(135deg, #355176 0%, #273b57 100%);
+  --gradient-card: linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
+  --gradient-hero: linear-gradient(135deg, #f5fbff 0%, #f1f4f7 100%);
+  --gradient-overlay: linear-gradient(180deg, rgba(53, 81, 118, 0.72) 0%, rgba(23, 34, 53, 0.9) 100%);
   
   /* Spacing System */
   --spacing-xs: 0.25rem;
@@ -120,14 +126,14 @@
   --spacing-3xl: 4rem;
   
   /* Typography */
-  --font-family-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-family-primary: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'Roboto Mono', 'Courier New', monospace;
   
   /* Border Radius */
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.75rem;
-  --radius-xl: 1rem;
+  --radius-sm: 15px;
+  --radius-md: 15px;
+  --radius-lg: 15px;
+  --radius-xl: 15px;
   --radius-full: 9999px;
   
   /* Transitions */
@@ -136,25 +142,42 @@
   --transition-slow: 500ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Light Theme Override (optional) */
-[data-theme="light"] {
-  --bg-primary: #ffffff;
-  --bg-secondary: #f5f7fa;
-  --bg-tertiary: #e8ecf1;
-  --bg-elevated: #ffffff;
-  --bg-overlay: rgba(255, 255, 255, 0.95);
-  
-  --text-primary: #0a0e27;
-  --text-secondary: #424242;
-  --text-tertiary: #757575;
-  --text-inverse: #ffffff;
-  
-  --border-color: rgba(0, 188, 212, 0.3);
-  --border-color-hover: rgba(0, 188, 212, 0.5);
-  --divider-color: rgba(0, 0, 0, 0.1);
-  
-  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.15);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.2);
-  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.25);
+/* SVG Background Patterns */
+.hero-pattern-bg,
+.page-title-bg,
+.footer-pattern-bg {
+  background-color: #eefcff;
+  background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23355176' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
 }
+
+/* Dark Theme Override (optional) */
+[data-theme="dark"] {
+  --bg-primary: #172235;
+  --bg-secondary: #1f2f45;
+  --bg-tertiary: #273b57;
+  --bg-elevated: #2f4869;
+  --bg-overlay: rgba(23, 34, 53, 0.95);
+  
+  --text-primary: #ffffff;
+  --text-secondary: #d6e0eb;
+  --text-tertiary: #b8cadb;
+  --text-inverse: #172235;
+  
+  --border-color: rgba(62, 207, 255, 0.25);
+  --border-color-hover: rgba(62, 207, 255, 0.45);
+  --divider-color: rgba(255, 255, 255, 0.08);
+  
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-xl: 0 16px 48px rgba(0, 0, 0, 0.6);
+  
+  /* Dark theme SVG pattern */
+  .hero-pattern-bg,
+  .page-title-bg,
+  .footer-pattern-bg {
+    background-color: #172235;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%233ECFFF' fill-opacity='0.08'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  }
+}
+

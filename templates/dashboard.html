@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard - WordPress Blog Generator</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/main.css') }}"
+    />
+  </head>
+  <body>
+    {% include 'dashboard/partials/_header.html' %}
+
+    <!-- Main Content -->
+    <main class="main">
+      <div class="container">
+        {% include 'dashboard/partials/_flash_messages.html' %} {% include
+        'dashboard/partials/_page_header.html' %} {% include
+        'dashboard/partials/_stats_overview.html' %} {% include
+        'dashboard/partials/_connect_section.html' %} {% include
+        'dashboard/partials/_generate_section.html' %} {% include
+        'dashboard/partials/_publish_section.html' %} {% include
+        'dashboard/partials/_jobs_section.html' %}
+      </div>
+    </main>
+
+    {% include 'dashboard/partials/_footer.html' %}
+
+    <!-- Scripts -->
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,19 @@
+<header class="header">
+  <div class="container">
+    <div class="header-content">
+      <div class="logo">Blog Generator</div>
+      <nav class="nav">
+        <a href="#" class="nav-link active" data-page="connect">Verbinden</a>
+        <a href="#" class="nav-link" data-page="generate">Genereren</a>
+        <a href="#" class="nav-link" data-page="publish">Publiceren</a>
+        <a href="#" class="nav-link" data-page="jobs">Jobs</a>
+      </nav>
+      <div class="user-info">
+        <span class="user-name">{{ user.username }}</span>
+        <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm"
+          >Uitloggen</a
+        >
+      </div>
+    </div>
+  </div>
+</header>

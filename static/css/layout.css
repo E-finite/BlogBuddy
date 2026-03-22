@@ -1,17 +1,17 @@
 /**
- * Layout Styles - Page structure and navigation
+ * Layout Styles - Page structure and navigation for SME platform
  */
 
 /* Header */
 .header {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   padding: var(--spacing-lg) 0;
   position: sticky;
   top: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
-  background: rgba(20, 27, 61, 0.8);
+  box-shadow: var(--shadow-sm);
 }
 
 .header-content {
@@ -23,17 +23,14 @@
 .logo {
   font-size: 1.5rem;
   font-weight: 700;
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-primary-600);
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
 }
 
 .logo::before {
-  content: '✨';
+  content: '📝';
   font-size: 1.75rem;
 }
 
@@ -57,18 +54,26 @@
   left: 0;
   width: 0;
   height: 2px;
-  background: var(--gradient-primary);
+  background: var(--color-primary-500);
   transition: width var(--transition-base);
 }
 
 .nav-link:hover,
 .nav-link.active {
-  color: var(--text-primary);
+  color: var(--color-primary-700);
 }
 
 .nav-link:hover::after,
 .nav-link.active::after {
   width: 100%;
+}
+
+/* Hero Section */
+.hero {
+  background: var(--gradient-hero);
+  padding: var(--spacing-3xl) 0;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-3xl);
 }
 
 /* Main Content */
@@ -80,15 +85,16 @@
 .page-header {
   text-align: center;
   margin-bottom: var(--spacing-3xl);
+  padding: var(--spacing-3xl) var(--spacing-lg);
+  background: var(--gradient-hero);
+  border-radius: var(--radius-md);
 }
 
 .page-title {
   font-size: 3rem;
   margin-bottom: var(--spacing-md);
-  background: var(--gradient-primary);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--color-secondary-500);
+  font-weight: 700;
 }
 
 .page-subtitle {
@@ -129,7 +135,7 @@
   content: '';
   width: 4px;
   height: 2rem;
-  background: var(--gradient-primary);
+  background: var(--color-primary-500);
   border-radius: var(--radius-full);
 }
 
@@ -139,8 +145,9 @@
   border-top: 1px solid var(--border-color);
   padding: var(--spacing-xl) 0;
   text-align: center;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   margin-top: var(--spacing-3xl);
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 /* Responsive */
