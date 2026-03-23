@@ -41,8 +41,42 @@ def init_db():
             created_at DATETIME NOT NULL,
             last_login DATETIME NULL,
             is_active TINYINT(1) DEFAULT 1,
+            is_admin TINYINT(1) DEFAULT 0,
             INDEX idx_username (username),
             INDEX idx_email (email)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+    # Migration: Add is_admin column if it doesn't exist
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'users'
+            AND column_name = 'is_admin'
+        """, (config.MYSQL_DATABASE,))
+        has_is_admin = cursor.fetchone()[0] > 0
+
+        if not has_is_admin:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN is_admin TINYINT(1) DEFAULT 0 AFTER is_active")
+            print("✅ Added is_admin column to users table")
+    except Exception as e:
+        print(f"⚠️ Migration note (users is_admin): {e}")
+
+    # Per-user limits and monthly usage counters
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_quotas (
+            user_id INT PRIMARY KEY,
+            blogs_monthly_limit INT NOT NULL DEFAULT 20,
+            text_regen_monthly_limit INT NOT NULL DEFAULT 20,
+            image_regen_limit INT NOT NULL DEFAULT 3,
+            usage_month CHAR(7) NOT NULL,
+            blogs_used INT NOT NULL DEFAULT 0,
+            text_regen_used INT NOT NULL DEFAULT 0,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
@@ -436,6 +470,22 @@ def init_db():
     except Exception as e:
         print(f"⚠️ Migration note (drafts publish_sent_at): {e}")
 
+    # Backfill quota rows for existing users
+    try:
+        current_month = datetime.utcnow().strftime("%Y-%m")
+        cursor.execute("""
+            INSERT INTO user_quotas (user_id, usage_month, updated_at)
+            SELECT u.id, %s, %s
+            FROM users u
+            LEFT JOIN user_quotas q ON q.user_id = u.id
+            WHERE q.user_id IS NULL
+        """, (current_month, datetime.utcnow()))
+        if cursor.rowcount > 0:
+            print(
+                f"✅ Backfilled {cursor.rowcount} quota row(s) for existing users")
+    except Exception as e:
+        print(f"⚠️ Migration note (user_quotas backfill): {e}")
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -770,15 +820,25 @@ def get_page_chunks_count(site_id: str) -> int:
 
 
 # User management functions
-def create_user(username: str, email: str, password_hash: str) -> int:
+def create_user(username: str, email: str, password_hash: str, is_admin: bool = False) -> int:
     """Create a new user."""
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    current_month = now.strftime("%Y-%m")
+
     cursor.execute("""
-        INSERT INTO users (username, email, password_hash, created_at)
-        VALUES (%s, %s, %s, %s)
-    """, (username, email, password_hash, datetime.utcnow()))
+        INSERT INTO users (username, email, password_hash, created_at, is_admin)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (username, email, password_hash, now, int(is_admin)))
     user_id = cursor.lastrowid
+
+    cursor.execute("""
+        INSERT INTO user_quotas (user_id, usage_month, updated_at)
+        VALUES (%s, %s, %s)
+    """, (user_id, current_month, now))
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -825,6 +885,236 @@ def update_user_last_login(user_id: int) -> None:
     cursor.execute("""
         UPDATE users SET last_login = %s WHERE id = %s
     """, (datetime.utcnow(), user_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def update_user_password_hash(user_id: int, password_hash: str) -> bool:
+    """Update a user's password hash. Returns True when a row was updated."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE users
+        SET password_hash = %s
+        WHERE id = %s
+    """, (password_hash, user_id))
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return updated
+
+
+def bootstrap_admin_users(admin_emails: List[str]) -> int:
+    """Mark existing users as admin when their email is listed in config."""
+    normalized_emails = [email.strip().lower()
+                         for email in admin_emails if email and email.strip()]
+    if not normalized_emails:
+        return 0
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    placeholders = ",".join(["%s"] * len(normalized_emails))
+
+    cursor.execute(f"""
+        UPDATE users
+        SET is_admin = 1
+        WHERE LOWER(email) IN ({placeholders})
+    """, tuple(normalized_emails))
+
+    updated = cursor.rowcount
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return updated
+
+
+def _current_month_key() -> str:
+    """Return current month key in YYYY-MM format."""
+    return datetime.utcnow().strftime("%Y-%m")
+
+
+def _reset_monthly_usage_if_needed(cursor, user_id: int) -> None:
+    """Reset usage counters lazily when month changes."""
+    month_key = _current_month_key()
+    cursor.execute("""
+        UPDATE user_quotas
+        SET usage_month = %s,
+            blogs_used = 0,
+            text_regen_used = 0,
+            updated_at = %s
+        WHERE user_id = %s AND usage_month <> %s
+    """, (month_key, datetime.utcnow(), user_id, month_key))
+
+
+def get_user_quota(user_id: int) -> Dict[str, Any]:
+    """Get user quota settings and monthly usage counters."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    month_key = _current_month_key()
+    now = datetime.utcnow()
+
+    cursor.execute("""
+        INSERT INTO user_quotas (user_id, usage_month, updated_at)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE user_id = user_id
+    """, (user_id, month_key, now))
+
+    _reset_monthly_usage_if_needed(cursor, user_id)
+
+    cursor.execute("""
+        SELECT user_id, blogs_monthly_limit, text_regen_monthly_limit,
+               image_regen_limit, usage_month, blogs_used, text_regen_used, updated_at
+        FROM user_quotas
+        WHERE user_id = %s
+    """, (user_id,))
+    row = cursor.fetchone()
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    if not row:
+        return {
+            "user_id": user_id,
+            "blogs_monthly_limit": 20,
+            "text_regen_monthly_limit": 20,
+            "image_regen_limit": 3,
+            "usage_month": month_key,
+            "blogs_used": 0,
+            "text_regen_used": 0,
+            "updated_at": now,
+        }
+
+    return row
+
+
+def increment_user_usage(user_id: int, blogs_delta: int = 0, text_regen_delta: int = 0) -> None:
+    """Increment monthly usage counters for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    month_key = _current_month_key()
+    now = datetime.utcnow()
+
+    cursor.execute("""
+        INSERT INTO user_quotas (user_id, usage_month, updated_at)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE user_id = user_id
+    """, (user_id, month_key, now))
+
+    _reset_monthly_usage_if_needed(cursor, user_id)
+
+    cursor.execute("""
+        UPDATE user_quotas
+        SET blogs_used = blogs_used + %s,
+            text_regen_used = text_regen_used + %s,
+            updated_at = %s
+        WHERE user_id = %s
+    """, (max(0, blogs_delta), max(0, text_regen_delta), now, user_id))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+def can_generate_post(user_id: int) -> tuple[bool, str]:
+    """Check if user can generate another post this month."""
+    quota = get_user_quota(user_id)
+    if quota['blogs_used'] >= quota['blogs_monthly_limit']:
+        return False, (
+            f"Maandlimiet bereikt: {quota['blogs_used']}/{quota['blogs_monthly_limit']} blogs gebruikt."
+        )
+    return True, ""
+
+
+def can_regenerate_text(user_id: int) -> tuple[bool, str]:
+    """Check if user can run another text regeneration this month."""
+    quota = get_user_quota(user_id)
+    if quota['text_regen_used'] >= quota['text_regen_monthly_limit']:
+        return False, (
+            f"Tekst-regeneratie limiet bereikt: {quota['text_regen_used']}/{quota['text_regen_monthly_limit']} gebruikt deze maand."
+        )
+    return True, ""
+
+
+def get_admin_user_list() -> List[Dict[str, Any]]:
+    """Return all users with quota settings and monthly usage."""
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        month_key = _current_month_key()
+
+        cursor.execute("""
+            SELECT u.id, u.username, u.email, u.created_at, u.last_login,
+                   u.is_active, u.is_admin,
+                   q.blogs_monthly_limit, q.text_regen_monthly_limit,
+                   q.image_regen_limit,
+                   CASE
+                        WHEN q.usage_month = %s THEN q.blogs_used
+                        ELSE 0
+                   END AS blogs_used,
+                   CASE
+                        WHEN q.usage_month = %s THEN q.text_regen_used
+                        ELSE 0
+                   END AS text_regen_used,
+                   q.usage_month, q.updated_at AS quota_updated_at
+            FROM users u
+            LEFT JOIN user_quotas q ON q.user_id = u.id
+            ORDER BY u.created_at DESC
+        """, (month_key, month_key))
+
+        rows = cursor.fetchall()
+        logger.info(f"Admin list query returned {len(rows)} rows")
+        cursor.close()
+        conn.close()
+
+        for row in rows:
+            if row.get("blogs_monthly_limit") is None:
+                row["blogs_monthly_limit"] = 20
+            if row.get("text_regen_monthly_limit") is None:
+                row["text_regen_monthly_limit"] = 20
+            if row.get("image_regen_limit") is None:
+                row["image_regen_limit"] = 3
+            if row.get("blogs_used") is None:
+                row["blogs_used"] = 0
+            if row.get("text_regen_used") is None:
+                row["text_regen_used"] = 0
+
+        return rows
+    except Exception as e:
+        logger.error(f"Error in get_admin_user_list: {e}", exc_info=True)
+        return []
+
+
+def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int) -> None:
+    """Update quota settings for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    month_key = _current_month_key()
+    now = datetime.utcnow()
+
+    cursor.execute("""
+        INSERT INTO user_quotas (
+            user_id,
+            blogs_monthly_limit,
+            text_regen_monthly_limit,
+            image_regen_limit,
+            usage_month,
+            updated_at
+        )
+        VALUES (%s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            blogs_monthly_limit = VALUES(blogs_monthly_limit),
+            text_regen_monthly_limit = VALUES(text_regen_monthly_limit),
+            image_regen_limit = VALUES(image_regen_limit),
+            updated_at = VALUES(updated_at)
+    """, (user_id, blogs_monthly_limit, text_regen_monthly_limit, image_regen_limit, month_key, now))
+
     conn.commit()
     cursor.close()
     conn.close()
@@ -1069,7 +1359,7 @@ def get_feedback_chain(image_id: int, user_id: int) -> List[str]:
     return []
 
 
-def validate_regeneration_limit(image_id: int, user_id: int) -> tuple[bool, str]:
+def validate_regeneration_limit(image_id: int, user_id: int, limit: int = 3) -> tuple[bool, str]:
     """
     Validate if regeneration is allowed for this image.
     Returns (is_valid, error_message).
@@ -1089,8 +1379,9 @@ def validate_regeneration_limit(image_id: int, user_id: int) -> tuple[bool, str]
     if not row:
         return False, "Image generation not found"
 
-    if row['generation_number'] >= 3:
-        return False, "Maximum regeneration limit (3 generations) reached"
+    effective_limit = max(1, int(limit))
+    if row['generation_number'] >= effective_limit:
+        return False, f"Maximum regeneration limit ({effective_limit} generations) reached"
 
     return True, ""
 

@@ -332,30 +332,44 @@ function queueDraftAutosave() {
 function initNavigation() {
   const navLinks = document.querySelectorAll('.nav-link');
   const sections = document.querySelectorAll('.page-section');
+
+  function activateSection(target) {
+    if (!target) return;
+
+    const targetSection = document.getElementById(target);
+    if (!targetSection) return;
+
+    navLinks.forEach(l => l.classList.remove('active'));
+    const targetLink = document.querySelector(`.nav-link[data-page="${target}"]`);
+    if (targetLink) {
+      targetLink.classList.add('active');
+    }
+
+    sections.forEach(s => s.classList.add('hidden'));
+    targetSection.classList.remove('hidden');
+
+    if (target === 'publish') {
+      restorePublishPreview();
+      loadDrafts();
+    }
+  }
   
   navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
       const target = link.dataset.page;
-      
-      // Update active nav
-      navLinks.forEach(l => l.classList.remove('active'));
-      link.classList.add('active');
-      
-      // Show target section
-      sections.forEach(s => s.classList.add('hidden'));
-      const targetSection = document.getElementById(target);
-      if (targetSection) {
-        targetSection.classList.remove('hidden');
-      }
-      
-      // Restore publish preview when navigating to publish section
-      if (target === 'publish') {
-        restorePublishPreview();
-        loadDrafts(); // Load saved drafts from database
+      activateSection(target);
+
+      if (window.location.pathname.endsWith('/dashboard')) {
+        window.history.replaceState(null, '', `#${target}`);
       }
     });
   });
+
+  const initialTarget = window.location.hash.replace('#', '');
+  if (initialTarget) {
+    activateSection(initialTarget);
+  }
 }
 
 // Connect Site

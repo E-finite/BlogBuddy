@@ -1,14 +1,42 @@
 <header class="header">
   <div class="container">
     <div class="header-content">
-      <div class="logo">Blog Generator</div>
+      <a class="logo" href="{{ url_for('dashboard') }}">Blog Generator</a>
       <nav class="nav">
-        <a href="#" class="nav-link active" data-page="connect">Verbinden</a>
-        <a href="#" class="nav-link" data-page="generate">Genereren</a>
-        <a href="#" class="nav-link" data-page="publish">Publiceren</a>
-        <a href="#" class="nav-link" data-page="jobs">Jobs</a>
+        <a
+          href="{{ url_for('dashboard') }}#connect"
+          class="nav-link active"
+          data-page="connect"
+          >Verbinden</a
+        >
+        <a
+          href="{{ url_for('dashboard') }}#generate"
+          class="nav-link"
+          data-page="generate"
+          >Genereren</a
+        >
+        <a
+          href="{{ url_for('dashboard') }}#publish"
+          class="nav-link"
+          data-page="publish"
+          >Publiceren</a
+        >
+        <a
+          href="{{ url_for('dashboard') }}#jobs"
+          class="nav-link"
+          data-page="jobs"
+          >Jobs</a
+        >
       </nav>
       <div class="user-info">
+        {% if user.is_admin %}
+        <a
+          href="/admin"
+          class="btn btn-secondary btn-sm"
+          style="margin-right: 1rem"
+          >Admin</a
+        >
+        {% endif %}
         <span class="user-name">{{ user.username }}</span>
         <a href="{{ url_for('logout') }}" class="btn btn-secondary btn-sm"
           >Uitloggen</a

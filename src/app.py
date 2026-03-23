@@ -4,6 +4,7 @@ import uuid
 import json
 import logging
 import copy
+from functools import wraps
 from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
 from datetime import datetime, timezone
@@ -52,6 +53,11 @@ def load_user(user_id):
 
 # Initialize database
 db.init_db()
+if config.ADMIN_EMAILS:
+    promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
+    if promoted_count:
+        logger.info(
+            f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
 
 # Start background worker
 start_worker()
@@ -136,6 +142,19 @@ def validate_publish_draft_scheduling(draft: dict) -> None:
             "%Y-%m-%dT%H:%M:%S")
     elif schedule_date_gmt:
         draft.pop("scheduleDateGmt", None)
+
+
+def admin_required(func):
+    """Ensure route access is restricted to admin users."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not getattr(current_user, "is_admin", False):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Admin access required"}), 403
+            flash("Je hebt geen toegang tot het admin paneel.", "error")
+            return redirect(url_for('dashboard'))
+        return func(*args, **kwargs)
+    return wrapper
 
 
 # Authentication routes
@@ -227,7 +246,8 @@ def login():
             id=user_data['id'],
             username=user_data['username'],
             email=user_data['email'],
-            is_active=bool(user_data.get('is_active', 1))
+            is_active=bool(user_data.get('is_active', 1)),
+            is_admin=bool(user_data.get('is_admin', 0))
         )
         login_user(user, remember=remember)
         db.update_user_last_login(user.id)
@@ -258,12 +278,227 @@ def dashboard():
     stats = db.get_user_stats(current_user.id)
     sites = db.get_user_sites(current_user.id)
     recent_jobs = db.get_user_jobs(current_user.id, limit=5)
+    quota = db.get_user_quota(current_user.id)
+
+    dashboard_quota = {
+        "blogs_limit": quota.get("blogs_monthly_limit", 0),
+        "blogs_used": quota.get("blogs_used", 0),
+        "blogs_remaining": max(0, quota.get("blogs_monthly_limit", 0) - quota.get("blogs_used", 0)),
+        "text_regen_limit": quota.get("text_regen_monthly_limit", 0),
+        "text_regen_used": quota.get("text_regen_used", 0),
+        "text_regen_remaining": max(0, quota.get("text_regen_monthly_limit", 0) - quota.get("text_regen_used", 0)),
+        "image_regen_limit": quota.get("image_regen_limit", 0),
+        "usage_month": quota.get("usage_month"),
+    }
 
     return render_template('dashboard.html',
                            user=current_user,
                            stats=stats,
                            sites=sites,
-                           recent_jobs=recent_jobs)
+                           recent_jobs=recent_jobs,
+                           quota=dashboard_quota)
+
+
+@app.route("/admin", methods=["GET"])
+@login_required
+@admin_required
+def admin_panel():
+    """Admin panel for account and quota management."""
+    try:
+        users = db.get_admin_user_list()
+        logger.info(f"Admin panel loaded: {len(users)} users found")
+    except Exception as e:
+        logger.error(f"Error loading admin user list: {e}", exc_info=True)
+        users = []
+    return render_template("admin.html", user=current_user, users=users)
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_user():
+    """Create account from admin panel."""
+    username = (request.form.get("username") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    is_admin = request.form.get("is_admin") == "on"
+
+    blogs_monthly_limit = request.form.get("blogs_monthly_limit", "20")
+    text_regen_monthly_limit = request.form.get(
+        "text_regen_monthly_limit", "20")
+    image_regen_limit = request.form.get("image_regen_limit", "3")
+
+    if not username or not email or not password:
+        flash("Gebruikersnaam, e-mail en wachtwoord zijn verplicht.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if len(password) < 8:
+        flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if db.get_user_by_username(username):
+        flash("Gebruikersnaam is al in gebruik.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if db.get_user_by_email(email):
+        flash("E-mail is al geregistreerd.", "error")
+        return redirect(url_for("admin_panel"))
+
+    try:
+        blogs_monthly_limit = max(1, int(blogs_monthly_limit))
+        text_regen_monthly_limit = max(0, int(text_regen_monthly_limit))
+        image_regen_limit = max(1, int(image_regen_limit))
+    except ValueError:
+        flash("Limieten moeten numeriek zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+    user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    flash(f"Account {username} succesvol aangemaakt.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/quota", methods=["POST"])
+@login_required
+@admin_required
+def admin_update_user_quota(user_id: int):
+    """Update per-account limits from admin panel."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        flash("Gebruiker niet gevonden.", "error")
+        return redirect(url_for("admin_panel"))
+
+    try:
+        blogs_monthly_limit = max(
+            1, int(request.form.get("blogs_monthly_limit", "20")))
+        text_regen_monthly_limit = max(
+            0, int(request.form.get("text_regen_monthly_limit", "20")))
+        image_regen_limit = max(
+            1, int(request.form.get("image_regen_limit", "3")))
+    except ValueError:
+        flash("Limieten moeten numeriek zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    flash(f"Limieten bijgewerkt voor {user['username']}.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/password", methods=["POST"])
+@login_required
+@admin_required
+def admin_update_user_password(user_id: int):
+    """Update a user's password from the admin panel."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        flash("Gebruiker niet gevonden.", "error")
+        return redirect(url_for("admin_panel"))
+
+    new_password = request.form.get("new_password") or ""
+
+    if len(new_password) < 8:
+        flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    password_hash = bcrypt.generate_password_hash(new_password).decode("utf-8")
+    updated = db.update_user_password_hash(user_id, password_hash)
+
+    if not updated:
+        flash("Wachtwoord kon niet worden aangepast.", "error")
+        return redirect(url_for("admin_panel"))
+
+    flash(f"Wachtwoord aangepast voor {user['username']}.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/api/admin/users", methods=["GET"])
+@login_required
+@admin_required
+def admin_get_users_api():
+    """Return user list for admin integrations."""
+    return jsonify({"users": db.get_admin_user_list()}), 200
+
+
+@app.route("/api/admin/users", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_user_api():
+    """Create account through API."""
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    is_admin = bool(data.get("isAdmin", False))
+
+    if not username or not email or not password:
+        return jsonify({"error": "username, email en password zijn verplicht"}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "password moet minimaal 8 karakters lang zijn"}), 400
+
+    if db.get_user_by_username(username):
+        return jsonify({"error": "Gebruikersnaam is al in gebruik"}), 409
+
+    if db.get_user_by_email(email):
+        return jsonify({"error": "E-mail is al geregistreerd"}), 409
+
+    try:
+        blogs_monthly_limit = max(1, int(data.get("blogsMonthlyLimit", 20)))
+        text_regen_monthly_limit = max(
+            0, int(data.get("textRegenMonthlyLimit", 20)))
+        image_regen_limit = max(1, int(data.get("imageRegenLimit", 3)))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Limieten moeten numeriek zijn"}), 400
+
+    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+    user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    return jsonify({"ok": True, "userId": user_id}), 201
+
+
+@app.route("/api/admin/users/<int:user_id>/quota", methods=["PUT"])
+@login_required
+@admin_required
+def admin_update_user_quota_api(user_id: int):
+    """Update per-account limits through API."""
+    if not db.get_user_by_id(user_id):
+        return jsonify({"error": "Gebruiker niet gevonden"}), 404
+
+    data = request.get_json() or {}
+    try:
+        blogs_monthly_limit = max(1, int(data.get("blogsMonthlyLimit", 20)))
+        text_regen_monthly_limit = max(
+            0, int(data.get("textRegenMonthlyLimit", 20)))
+        image_regen_limit = max(1, int(data.get("imageRegenLimit", 3)))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Limieten moeten numeriek zijn"}), 400
+
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+    return jsonify({"ok": True}), 200
 
 
 @app.route("/api/sites", methods=["GET"])
@@ -349,6 +584,15 @@ def connect_site():
 def generate_post():
     """Generate blog post content - MULTI-TENANT."""
     try:
+        can_generate, blog_limit_msg = db.can_generate_post(current_user.id)
+        if not can_generate:
+            return jsonify({"error": blog_limit_msg}), 429
+
+        can_text_regen, text_regen_msg = db.can_regenerate_text(
+            current_user.id)
+        if not can_text_regen:
+            return jsonify({"error": text_regen_msg}), 429
+
         data = request.get_json()
         req = GeneratePostRequest(**data)
 
@@ -389,6 +633,9 @@ def generate_post():
                 if req.scheduleDateGmt:
                     draft["scheduleDateGmt"] = req.scheduleDateGmt
 
+            db.increment_user_usage(
+                current_user.id, blogs_delta=1, text_regen_delta=1)
+
             return jsonify({"drafts": drafts}), 200
         else:
             # Single language
@@ -418,6 +665,9 @@ def generate_post():
             )
             logger.info(f"Draft saved to database with ID: {draft_id}")
 
+            db.increment_user_usage(
+                current_user.id, blogs_delta=1, text_regen_delta=1)
+
             return jsonify({"draft": draft, "draftId": draft_id}), 200
 
     except Exception as e:
@@ -441,8 +691,12 @@ def regenerate_image():
             return jsonify({"error": "feedback is required"}), 400
 
         # Validate regeneration limit
+        user_quota = db.get_user_quota(current_user.id)
         is_valid, error_msg = db.validate_regeneration_limit(
-            parent_id, current_user.id)
+            parent_id,
+            current_user.id,
+            limit=user_quota.get('image_regen_limit', 3)
+        )
         if not is_valid:
             return jsonify({"error": error_msg}), 400
 
