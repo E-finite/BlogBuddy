@@ -57,7 +57,8 @@ def generate_featured_image(
     if feedback_chain is None:
         feedback_chain = []
 
-    translated_feedback_chain = _translate_feedback_chain_to_english(feedback_chain)
+    translated_feedback_chain = _translate_feedback_chain_to_english(
+        feedback_chain)
 
     prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
         topic=topic,
@@ -74,7 +75,8 @@ def generate_featured_image(
     if feedback_chain:
         logger.info(f"Feedback chain: {feedback_chain}")
     if feedback_chain and translated_feedback_chain != feedback_chain:
-        logger.info(f"Translated feedback chain (EN): {translated_feedback_chain}")
+        logger.info(
+            f"Translated feedback chain (EN): {translated_feedback_chain}")
 
     if reference_image_bytes:
         logger.info("Reference image detected; using Imagen image edit")
