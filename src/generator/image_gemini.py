@@ -9,10 +9,12 @@ import requests
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.auth.exceptions import RefreshError
+from openai import OpenAI
 from src import config
 from src.prompt_templates import load_prompt_template, render_prompt_template
 
 logger = logging.getLogger(__name__)
+_openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
 
 _VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
 _VERTEX_AUTH_BROKEN = False
@@ -55,11 +57,13 @@ def generate_featured_image(
     if feedback_chain is None:
         feedback_chain = []
 
+    translated_feedback_chain = _translate_feedback_chain_to_english(feedback_chain)
+
     prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
         topic=topic,
         brand=brand,
         image_settings=image_settings,
-        feedback_chain=feedback_chain,
+        feedback_chain=translated_feedback_chain,
     )
 
     logger.info(f"Generating image variation {variation_index} for: {topic}")
@@ -69,6 +73,8 @@ def generate_featured_image(
     )
     if feedback_chain:
         logger.info(f"Feedback chain: {feedback_chain}")
+    if feedback_chain and translated_feedback_chain != feedback_chain:
+        logger.info(f"Translated feedback chain (EN): {translated_feedback_chain}")
 
     if reference_image_bytes:
         logger.info("Reference image detected; using Imagen image edit")
@@ -174,6 +180,67 @@ def _build_prompt_and_settings(
         )
 
     return prompt, aspect_ratio, brand_colors, use_brand_colors, preset
+
+
+def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]:
+    """Translate image edit feedback to English using OpenAI with graceful fallback."""
+    if not feedback_chain:
+        return []
+
+    translation_model = getattr(
+        config,
+        "OPENAI_TRANSLATION_MODEL",
+        getattr(config, "OPENAI_TEXT_MODEL", "gpt-4o"),
+    )
+
+    system_prompt = (
+        "You translate image editing feedback into concise, natural English. "
+        "Preserve intent exactly, do not add or remove details, and keep output usable as an image-edit instruction. "
+        "Return strict JSON only in this format: {\"translations\": [\"...\"]}."
+    )
+
+    try:
+        response = _openai_client.chat.completions.create(
+            model=translation_model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {
+                    "role": "user",
+                    "content": (
+                        "Translate this list to English and keep the same order and number of items:\n"
+                        f"{json.dumps(feedback_chain, ensure_ascii=False)}"
+                    ),
+                },
+            ],
+            response_format={"type": "json_object"},
+            temperature=0,
+            max_tokens=600,
+        )
+
+        raw_content = (response.choices[0].message.content or "{}").strip()
+        payload = json.loads(raw_content)
+        translations = payload.get("translations")
+
+        if not isinstance(translations, list) or len(translations) != len(feedback_chain):
+            logger.warning(
+                "Feedback translation returned invalid shape; using original feedback chain"
+            )
+            return feedback_chain
+
+        normalized_translations = []
+        for i, translated in enumerate(translations):
+            if isinstance(translated, str) and translated.strip():
+                normalized_translations.append(translated.strip())
+            else:
+                normalized_translations.append(feedback_chain[i])
+
+        return normalized_translations
+
+    except Exception as e:
+        logger.warning(
+            f"Feedback translation failed, using original feedback chain: {e}"
+        )
+        return feedback_chain
 
 
 # ---------------------------------------------------------------------------

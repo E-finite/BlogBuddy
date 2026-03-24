@@ -30,6 +30,7 @@ MASTER_KEY = "your-secure-master-key-min-32-chars-here"
 
 # Optional: Model Configuration
 OPENAI_TEXT_MODEL = "gpt-4o"  # or "gpt-4", "gpt-3.5-turbo"
+OPENAI_TRANSLATION_MODEL = "gpt-4o-mini"  # used for translating image-edit feedback to English
 # Google Imagen - voor nieuwe afbeeldingen genereren
 IMAGEN_MODEL = "imagen-3.0-generate-002"
 # Google Imagen - voor afbeeldingen aanpassen
