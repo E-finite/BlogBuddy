@@ -10,6 +10,39 @@ from src import config
 logger = logging.getLogger(__name__)
 
 
+def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, site_id: Optional[str] = None, days_old: Optional[int] = None) -> None:
+    """Delete context-site related rows in foreign-key-safe order."""
+    if site_id is not None:
+        filter_sql = "cs.id = %s"
+        params = (site_id,)
+    elif user_id is not None and days_old is not None:
+        filter_sql = "cs.user_id = %s AND cs.created_at < DATE_SUB(NOW(), INTERVAL %s DAY)"
+        params = (user_id, days_old)
+    elif user_id is not None:
+        filter_sql = "cs.user_id = %s"
+        params = (user_id,)
+    else:
+        raise ValueError("Either site_id or user_id must be provided")
+
+    cursor.execute(f"""
+        DELETE pc FROM page_chunks pc
+        INNER JOIN context_sites cs ON pc.site_id = cs.id AND pc.site_type = 'context'
+        WHERE {filter_sql}
+    """, params)
+
+    cursor.execute(f"""
+        DELETE sp FROM scraped_pages sp
+        INNER JOIN context_sites cs ON sp.site_id = cs.id AND sp.site_type = 'context'
+        WHERE {filter_sql}
+    """, params)
+
+    cursor.execute(f"""
+        DELETE sd FROM site_dna sd
+        INNER JOIN context_sites cs ON sd.site_id = cs.id AND sd.site_type = 'context'
+        WHERE {filter_sql}
+    """, params)
+
+
 def get_db_connection():
     """Get a MySQL database connection."""
     try:
@@ -602,15 +635,11 @@ def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # First, delete related data (scraped_pages, page_chunks, site_dna)
-        cursor.execute("""
-            DELETE sp, pc, sd FROM context_sites cs
-            LEFT JOIN scraped_pages sp ON sp.site_id = cs.id AND sp.site_type = 'context'
-            LEFT JOIN page_chunks pc ON pc.site_id = cs.id AND pc.site_type = 'context'
-            LEFT JOIN site_dna sd ON sd.site_id = cs.id AND sd.site_type = 'context'
-            WHERE cs.user_id = %s 
-            AND cs.created_at < DATE_SUB(NOW(), INTERVAL %s DAY)
-        """, (user_id, days_old))
+        _delete_context_site_related_data(
+            cursor,
+            user_id=user_id,
+            days_old=days_old
+        )
 
         # Then delete the context sites themselves
         cursor.execute("""
@@ -630,14 +659,7 @@ def delete_all_context_sites(user_id: int) -> int:
     conn = get_db_connection()
     cursor = conn.cursor()
     try:
-        # Delete related data first
-        cursor.execute("""
-            DELETE sp, pc, sd FROM context_sites cs
-            LEFT JOIN scraped_pages sp ON sp.site_id = cs.id AND sp.site_type = 'context'
-            LEFT JOIN page_chunks pc ON pc.site_id = cs.id AND pc.site_type = 'context'
-            LEFT JOIN site_dna sd ON sd.site_id = cs.id AND sd.site_type = 'context'
-            WHERE cs.user_id = %s
-        """, (user_id,))
+        _delete_context_site_related_data(cursor, user_id=user_id)
 
         # Then delete context sites
         cursor.execute("""
@@ -661,13 +683,7 @@ def delete_context_site(site_id: str, user_id: int) -> bool:
         if not cursor.fetchone():
             return False
 
-        # Delete related data
-        cursor.execute(
-            "DELETE FROM scraped_pages WHERE site_id = %s AND site_type = 'context'", (site_id,))
-        cursor.execute(
-            "DELETE FROM page_chunks WHERE site_id = %s AND site_type = 'context'", (site_id,))
-        cursor.execute(
-            "DELETE FROM site_dna WHERE site_id = %s AND site_type = 'context'", (site_id,))
+        _delete_context_site_related_data(cursor, site_id=site_id)
 
         # Delete context site
         cursor.execute(
