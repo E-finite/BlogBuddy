@@ -1,4 +1,15 @@
 {% extends 'app_base.html' %} {% block title %}Home - E-finite{% endblock %} {%
-block content %} {% include 'dashboard/partials/_page_header.html' %} {% include
-'dashboard/partials/_stats_overview.html' %} {% include
+block content %}
+<section class="page-intro-card">
+  <div class="page-intro-copy">
+    <span class="page-kicker">Dashboard</span>
+    <h1 class="page-heading">Welkom, {{ user.username }}!</h1>
+    <p class="page-description">
+      Bekijk je maandelijkse limieten en volg je recente job-activiteit vanuit
+      je persoonlijke home-overzicht.
+    </p>
+  </div>
+</section>
+
+{% include 'dashboard/partials/_stats_overview.html' %} {% include
 'dashboard/partials/_jobs_section.html' %} {% endblock %}
