@@ -152,17 +152,48 @@ def admin_required(func):
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Admin access required"}), 403
             flash("Je hebt geen toegang tot het admin paneel.", "error")
-            return redirect(url_for('dashboard'))
+            return redirect(url_for('home_page'))
         return func(*args, **kwargs)
     return wrapper
 
 
+def build_dashboard_quota(quota: dict) -> dict:
+    """Normalize quota data for dashboard templates."""
+    return {
+        "blogs_limit": quota.get("blogs_monthly_limit", 0),
+        "blogs_used": quota.get("blogs_used", 0),
+        "blogs_remaining": max(0, quota.get("blogs_monthly_limit", 0) - quota.get("blogs_used", 0)),
+        "text_regen_limit": quota.get("text_regen_monthly_limit", 0),
+        "text_regen_used": quota.get("text_regen_used", 0),
+        "text_regen_remaining": max(0, quota.get("text_regen_monthly_limit", 0) - quota.get("text_regen_used", 0)),
+        "image_regen_limit": quota.get("image_regen_limit", 0),
+        "usage_month": quota.get("usage_month"),
+    }
+
+
+def build_app_page_context(*, current_page: str) -> dict:
+    """Build shared render context for authenticated app pages."""
+    stats = db.get_user_stats(current_user.id)
+    sites = db.get_user_sites(current_user.id)
+    quota = db.get_user_quota(current_user.id)
+
+    context = {
+        "user": current_user,
+        "stats": stats,
+        "sites": sites,
+        "quota": build_dashboard_quota(quota),
+        "current_page": current_page,
+    }
+
+    return context
+
+
 # Authentication routes
 @app.route("/")
-def home():
-    """Home page - redirect to login or dashboard."""
+def index():
+    """Landing route that redirects to login or the authenticated home page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
     return redirect(url_for('login'))
 
 
@@ -170,7 +201,7 @@ def home():
 def register():
     """User registration page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
 
     if request.method == "POST":
         username = request.form.get('username')
@@ -214,7 +245,7 @@ def register():
 def login():
     """User login page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
 
     if request.method == "POST":
         username = request.form.get('username')
@@ -254,9 +285,9 @@ def login():
 
         flash(f'Welkom terug, {user.username}!', 'success')
 
-        # Redirect to next page or dashboard
+        # Redirect to next page or home page
         next_page = request.args.get('next')
-        return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        return redirect(next_page) if next_page else redirect(url_for('home_page'))
 
     return render_template('login.html')
 
@@ -270,33 +301,54 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route("/dashboard")
+@app.route("/home")
 @login_required
-def dashboard():
-    """Dashboard page for authenticated users."""
-    # Get user statistics
-    stats = db.get_user_stats(current_user.id)
-    sites = db.get_user_sites(current_user.id)
-    recent_jobs = db.get_user_jobs(current_user.id, limit=5)
-    quota = db.get_user_quota(current_user.id)
+def home_page():
+    """Home page for authenticated users."""
+    return render_template(
+        'home.html',
+        **build_app_page_context(current_page='home'),
+    )
 
-    dashboard_quota = {
-        "blogs_limit": quota.get("blogs_monthly_limit", 0),
-        "blogs_used": quota.get("blogs_used", 0),
-        "blogs_remaining": max(0, quota.get("blogs_monthly_limit", 0) - quota.get("blogs_used", 0)),
-        "text_regen_limit": quota.get("text_regen_monthly_limit", 0),
-        "text_regen_used": quota.get("text_regen_used", 0),
-        "text_regen_remaining": max(0, quota.get("text_regen_monthly_limit", 0) - quota.get("text_regen_used", 0)),
-        "image_regen_limit": quota.get("image_regen_limit", 0),
-        "usage_month": quota.get("usage_month"),
-    }
 
-    return render_template('dashboard.html',
-                           user=current_user,
-                           stats=stats,
-                           sites=sites,
-                           recent_jobs=recent_jobs,
-                           quota=dashboard_quota)
+@app.route("/connect")
+@login_required
+def connect_page():
+    """WordPress connection page."""
+    return render_template(
+        'connect.html',
+        **build_app_page_context(current_page='connect'),
+    )
+
+
+@app.route("/generate")
+@login_required
+def generate_page():
+    """Content generation page."""
+    return render_template(
+        'generate.html',
+        **build_app_page_context(current_page='generate'),
+    )
+
+
+@app.route("/publish")
+@login_required
+def publish_page():
+    """Publishing page."""
+    return render_template(
+        'publish.html',
+        **build_app_page_context(current_page='publish'),
+    )
+
+
+@app.route("/archive")
+@login_required
+def archive_page():
+    """Jobs archive page."""
+    return render_template(
+        'archive.html',
+        **build_app_page_context(current_page='archive'),
+    )
 
 
 @app.route("/admin", methods=["GET"])
@@ -310,7 +362,7 @@ def admin_panel():
     except Exception as e:
         logger.error(f"Error loading admin user list: {e}", exc_info=True)
         users = []
-    return render_template("admin.html", user=current_user, users=users)
+    return render_template("admin.html", user=current_user, users=users, current_page="admin")
 
 
 @app.route("/admin/users/create", methods=["POST"])
@@ -1320,12 +1372,6 @@ def get_site_dna_api(site_id):
 def health():
     """Health check endpoint."""
     return jsonify({"status": "ok"}), 200
-
-
-@app.route("/", methods=["GET"])
-def index():
-    """Serve the main frontend page."""
-    return render_template("index.html")
 
 
 if __name__ == "__main__":

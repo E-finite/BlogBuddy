@@ -13,7 +13,6 @@ let lastSavedDraftSignature = null;
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   initializeActiveDraftId();
-  initNavigation();
   loadSitesDropdowns(); // Load sites into dropdowns
   initConnectSite();
   initGeneratePost();
@@ -22,9 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Check API health
   checkHealth();
-  
-  // Restore publish preview if available
-  restorePublishPreview();
 });
 
 function initializeActiveDraftId() {
@@ -326,50 +322,6 @@ function queueDraftAutosave() {
   draftAutosaveTimeout = setTimeout(() => {
     saveCurrentDraft({ silent: true });
   }, 1200);
-}
-
-// Navigation
-function initNavigation() {
-  const navLinks = document.querySelectorAll('.nav-link');
-  const sections = document.querySelectorAll('.page-section');
-
-  function activateSection(target) {
-    if (!target) return;
-
-    const targetSection = document.getElementById(target);
-    if (!targetSection) return;
-
-    navLinks.forEach(l => l.classList.remove('active'));
-    const targetLink = document.querySelector(`.nav-link[data-page="${target}"]`);
-    if (targetLink) {
-      targetLink.classList.add('active');
-    }
-
-    sections.forEach(s => s.classList.add('hidden'));
-    targetSection.classList.remove('hidden');
-
-    if (target === 'publish') {
-      restorePublishPreview();
-      loadDrafts();
-    }
-  }
-  
-  navLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const target = link.dataset.page;
-      activateSection(target);
-
-      if (window.location.pathname.endsWith('/dashboard')) {
-        window.history.replaceState(null, '', `#${target}`);
-      }
-    });
-  });
-
-  const initialTarget = window.location.hash.replace('#', '');
-  if (initialTarget) {
-    activateSection(initialTarget);
-  }
 }
 
 // Connect Site
@@ -945,6 +897,13 @@ function initPublishPost() {
   }
 
   syncPublishStatusControls();
+  loadDrafts();
+
+  if (activeDraftId) {
+    loadDraft(activeDraftId);
+  } else {
+    restorePublishPreview();
+  }
   
   // Setup real-time preview sync
   const titleInput = document.getElementById('title');
@@ -1065,6 +1024,11 @@ function initPublishPost() {
 
 // Jobs View
 function initJobsView() {
+  const jobsContainer = document.getElementById('jobs-list');
+  if (!jobsContainer) {
+    return;
+  }
+
   const refreshBtn = document.getElementById('refresh-jobs-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', loadJobs);
@@ -1212,10 +1176,7 @@ function fillPublishForm(result, siteId) {
 
 // Switch to publish tab
 function switchToPublishTab() {
-  const publishTab = document.querySelector('.nav-link[data-page="publish"]');
-  if (publishTab) {
-    publishTab.click();
-  }
+  window.location.assign('/publish');
 }
 
 // Restore publish preview from sessionStorage

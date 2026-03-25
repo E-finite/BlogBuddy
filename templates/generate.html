@@ -1,0 +1,18 @@
+{% extends 'app_base.html' %}
+
+{% block title %}Genereren - E-finite{% endblock %}
+
+{% block content %}
+  <section class="page-intro-card">
+    <div class="page-intro-copy">
+      <span class="page-kicker">Content studio</span>
+      <h1 class="page-heading">Blog Post Genereren</h1>
+      <p class="page-description">
+        Bouw nieuwe artikelen op basis van websitecontext, doelgroep en
+        beeldinstellingen, met dezelfde componenten als in je redesign.
+      </p>
+    </div>
+  </section>
+
+  {% include 'dashboard/partials/_generate_section.html' %}
+{% endblock %}

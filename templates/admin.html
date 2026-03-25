@@ -1,22 +1,10 @@
-<!doctype html>
-<html lang="nl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Admin Paneel - WordPress Blog Generator</title>
-    <link
-      rel="stylesheet"
-      href="{{ url_for('static', filename='css/main.css') }}"
-    />
-  </head>
-  <body>
-    {% include 'dashboard/partials/_header.html' %}
+{% extends 'app_base.html' %}
 
-    <main class="main">
-      <div class="container">
-        {% include 'dashboard/partials/_flash_messages.html' %}
+{% block title %}Admin Paneel - E-finite{% endblock %}
 
+{% block content %}
         <div class="page-header">
+          <span class="page-kicker">Administratie</span>
           <h1 class="page-title">Admin Paneel</h1>
           <p class="page-subtitle">
             Beheer accounts en limieten voor blogs en regeneraties.
@@ -298,10 +286,6 @@
           </div>
           {% endfor %}
         </section>
-      </div>
-    </main>
-
-    {% include 'dashboard/partials/_footer.html' %}
     <script>
       (function () {
         function generateStrongPassword(length) {
@@ -360,5 +344,4 @@
         });
       })();
     </script>
-  </body>
-</html>
+{% endblock %}
