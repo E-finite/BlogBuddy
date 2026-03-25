@@ -1,347 +1,327 @@
-{% extends 'app_base.html' %}
+{% extends 'app_base.html' %} {% block title %}Admin Paneel - E-finite{%
+endblock %} {% block content %}
+<div class="page-header">
+  <span class="page-kicker">Administratie</span>
+  <h1 class="page-title">Admin Paneel</h1>
+  <p class="page-subtitle">
+    Beheer accounts en limieten voor blogs en regeneraties.
+  </p>
+</div>
 
-{% block title %}Admin Paneel - E-finite{% endblock %}
+<section class="section" style="margin-bottom: 2rem">
+  <h2 class="section-title">Nieuw Account Aanmaken</h2>
+  <div class="card">
+    <form method="post" action="{{ url_for('admin_create_user') }}">
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label class="form-label" for="new-username">Gebruikersnaam</label>
+          <input
+            class="form-input"
+            id="new-username"
+            name="username"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-email">E-mail</label>
+          <input
+            class="form-input"
+            id="new-email"
+            name="email"
+            type="email"
+            required
+          />
+        </div>
+      </div>
 
-{% block content %}
-        <div class="page-header">
-          <span class="page-kicker">Administratie</span>
-          <h1 class="page-title">Admin Paneel</h1>
-          <p class="page-subtitle">
-            Beheer accounts en limieten voor blogs en regeneraties.
-          </p>
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label class="form-label" for="new-password">Wachtwoord</label>
+          <input
+            class="form-input"
+            id="new-password"
+            name="password"
+            type="password"
+            minlength="8"
+            required
+          />
+          <button
+            class="btn btn-ghost"
+            type="button"
+            data-generate-password="new-password"
+            style="margin-top: 0.5rem"
+          >
+            Genereer wachtwoord
+          </button>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-is-admin">Rol</label>
+          <label class="form-checkbox" for="new-is-admin">
+            <input id="new-is-admin" name="is_admin" type="checkbox" />
+            <span>Maak dit account ook admin</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="grid grid-3">
+        <div class="form-group">
+          <label class="form-label" for="new-blogs-limit"
+            >Blogs per maand</label
+          >
+          <input
+            class="form-input"
+            id="new-blogs-limit"
+            name="blogs_monthly_limit"
+            type="number"
+            min="1"
+            value="20"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-text-regens-limit"
+            >Tekst regeneraties per maand</label
+          >
+          <input
+            class="form-input"
+            id="new-text-regens-limit"
+            name="text_regen_monthly_limit"
+            type="number"
+            min="0"
+            value="20"
+            required
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="new-image-regens-limit"
+            >Afbeelding regeneraties per afbeelding</label
+          >
+          <input
+            class="form-input"
+            id="new-image-regens-limit"
+            name="image_regen_limit"
+            type="number"
+            min="1"
+            value="3"
+            required
+          />
+        </div>
+      </div>
+
+      <button class="btn btn-primary" type="submit">Account aanmaken</button>
+    </form>
+  </div>
+</section>
+
+<section class="section">
+  <h2 class="section-title">Accounts & Limieten</h2>
+
+  {% for account in users %}
+  <div class="card" style="margin-bottom: 1rem">
+    <div
+      class="card-header"
+      style="
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+      "
+    >
+      <div>
+        <h3 class="card-title" style="margin-bottom: 0.25rem">
+          {{ account.username }}
+        </h3>
+        <div class="form-help">{{ account.email }}</div>
+      </div>
+      <div
+        style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap"
+      >
+        {% if account.is_admin %}
+        <span class="badge badge-primary">Admin</span>
+        {% endif %} {% if account.is_active %}
+        <span class="badge badge-primary">Actief</span>
+        {% else %}
+        <span class="badge" style="background: #f5d0d0; color: #7f1d1d"
+          >Inactief</span
+        >
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card-body">
+      <form
+        method="post"
+        action="{{ url_for('admin_update_user_quota', user_id=account.id) }}"
+      >
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label class="form-label" for="blogs-limit-{{ account.id }}"
+              >Blogs per maand</label
+            >
+            <input
+              class="form-input"
+              id="blogs-limit-{{ account.id }}"
+              name="blogs_monthly_limit"
+              type="number"
+              min="1"
+              value="{{ account.blogs_monthly_limit }}"
+              required
+            />
+            <div class="form-help">
+              Gebruikt: {{ account.blogs_used }} in {{ account.usage_month or
+              '-' }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="text-regens-limit-{{ account.id }}"
+              >Tekst regeneraties per maand</label
+            >
+            <input
+              class="form-input"
+              id="text-regens-limit-{{ account.id }}"
+              name="text_regen_monthly_limit"
+              type="number"
+              min="0"
+              value="{{ account.text_regen_monthly_limit }}"
+              required
+            />
+            <div class="form-help">
+              Gebruikt: {{ account.text_regen_used }} in {{ account.usage_month
+              or '-' }}
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="image-regens-limit-{{ account.id }}"
+              >Afbeelding regeneraties per afbeelding</label
+            >
+            <input
+              class="form-input"
+              id="image-regens-limit-{{ account.id }}"
+              name="image_regen_limit"
+              type="number"
+              min="1"
+              value="{{ account.image_regen_limit }}"
+              required
+            />
+          </div>
         </div>
 
-        <section class="section" style="margin-bottom: 2rem">
-          <h2 class="section-title">Nieuw Account Aanmaken</h2>
-          <div class="card">
-            <form method="post" action="{{ url_for('admin_create_user') }}">
-              <div class="grid grid-2">
-                <div class="form-group">
-                  <label class="form-label" for="new-username"
-                    >Gebruikersnaam</label
-                  >
-                  <input
-                    class="form-input"
-                    id="new-username"
-                    name="username"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="new-email">E-mail</label>
-                  <input
-                    class="form-input"
-                    id="new-email"
-                    name="email"
-                    type="email"
-                    required
-                  />
-                </div>
-              </div>
+        <button class="btn btn-secondary" type="submit">
+          Limieten opslaan
+        </button>
+      </form>
 
-              <div class="grid grid-2">
-                <div class="form-group">
-                  <label class="form-label" for="new-password"
-                    >Wachtwoord</label
-                  >
-                  <input
-                    class="form-input"
-                    id="new-password"
-                    name="password"
-                    type="password"
-                    minlength="8"
-                    required
-                  />
-                  <button
-                    class="btn btn-ghost"
-                    type="button"
-                    data-generate-password="new-password"
-                    style="margin-top: 0.5rem"
-                  >
-                    Genereer wachtwoord
-                  </button>
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="new-is-admin">Rol</label>
-                  <label class="form-checkbox" for="new-is-admin">
-                    <input id="new-is-admin" name="is_admin" type="checkbox" />
-                    <span>Maak dit account ook admin</span>
-                  </label>
-                </div>
-              </div>
+      <hr
+        style="
+          margin: 1.25rem 0;
+          border: 0;
+          border-top: 1px solid var(--border-color);
+        "
+      />
 
-              <div class="grid grid-3">
-                <div class="form-group">
-                  <label class="form-label" for="new-blogs-limit"
-                    >Blogs per maand</label
-                  >
-                  <input
-                    class="form-input"
-                    id="new-blogs-limit"
-                    name="blogs_monthly_limit"
-                    type="number"
-                    min="1"
-                    value="20"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="new-text-regens-limit"
-                    >Tekst regeneraties per maand</label
-                  >
-                  <input
-                    class="form-input"
-                    id="new-text-regens-limit"
-                    name="text_regen_monthly_limit"
-                    type="number"
-                    min="0"
-                    value="20"
-                    required
-                  />
-                </div>
-                <div class="form-group">
-                  <label class="form-label" for="new-image-regens-limit"
-                    >Afbeelding regeneraties per afbeelding</label
-                  >
-                  <input
-                    class="form-input"
-                    id="new-image-regens-limit"
-                    name="image_regen_limit"
-                    type="number"
-                    min="1"
-                    value="3"
-                    required
-                  />
-                </div>
-              </div>
-
-              <button class="btn btn-primary" type="submit">
-                Account aanmaken
-              </button>
-            </form>
-          </div>
-        </section>
-
-        <section class="section">
-          <h2 class="section-title">Accounts & Limieten</h2>
-
-          {% for account in users %}
-          <div class="card" style="margin-bottom: 1rem">
-            <div
-              class="card-header"
-              style="
-                display: flex;
-                justify-content: space-between;
-                gap: 1rem;
-                flex-wrap: wrap;
-              "
+      <form
+        method="post"
+        action="{{ url_for('admin_update_user_password', user_id=account.id) }}"
+      >
+        <div class="grid grid-2">
+          <div class="form-group" style="margin-bottom: 0">
+            <label class="form-label" for="new-password-{{ account.id }}"
+              >Nieuw wachtwoord</label
             >
-              <div>
-                <h3 class="card-title" style="margin-bottom: 0.25rem">
-                  {{ account.username }}
-                </h3>
-                <div class="form-help">{{ account.email }}</div>
-              </div>
-              <div
-                style="
-                  display: flex;
-                  gap: 0.5rem;
-                  align-items: center;
-                  flex-wrap: wrap;
-                "
-              >
-                {% if account.is_admin %}
-                <span class="badge badge-primary">Admin</span>
-                {% endif %} {% if account.is_active %}
-                <span class="badge badge-primary">Actief</span>
-                {% else %}
-                <span class="badge" style="background: #f5d0d0; color: #7f1d1d"
-                  >Inactief</span
-                >
-                {% endif %}
-              </div>
-            </div>
-
-            <div class="card-body">
-              <form
-                method="post"
-                action="{{ url_for('admin_update_user_quota', user_id=account.id) }}"
-              >
-                <div class="grid grid-3">
-                  <div class="form-group">
-                    <label class="form-label" for="blogs-limit-{{ account.id }}"
-                      >Blogs per maand</label
-                    >
-                    <input
-                      class="form-input"
-                      id="blogs-limit-{{ account.id }}"
-                      name="blogs_monthly_limit"
-                      type="number"
-                      min="1"
-                      value="{{ account.blogs_monthly_limit }}"
-                      required
-                    />
-                    <div class="form-help">
-                      Gebruikt: {{ account.blogs_used }} in {{
-                      account.usage_month or '-' }}
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label
-                      class="form-label"
-                      for="text-regens-limit-{{ account.id }}"
-                      >Tekst regeneraties per maand</label
-                    >
-                    <input
-                      class="form-input"
-                      id="text-regens-limit-{{ account.id }}"
-                      name="text_regen_monthly_limit"
-                      type="number"
-                      min="0"
-                      value="{{ account.text_regen_monthly_limit }}"
-                      required
-                    />
-                    <div class="form-help">
-                      Gebruikt: {{ account.text_regen_used }} in {{
-                      account.usage_month or '-' }}
-                    </div>
-                  </div>
-
-                  <div class="form-group">
-                    <label
-                      class="form-label"
-                      for="image-regens-limit-{{ account.id }}"
-                      >Afbeelding regeneraties per afbeelding</label
-                    >
-                    <input
-                      class="form-input"
-                      id="image-regens-limit-{{ account.id }}"
-                      name="image_regen_limit"
-                      type="number"
-                      min="1"
-                      value="{{ account.image_regen_limit }}"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <button class="btn btn-secondary" type="submit">
-                  Limieten opslaan
-                </button>
-              </form>
-
-              <hr
-                style="
-                  margin: 1.25rem 0;
-                  border: 0;
-                  border-top: 1px solid var(--border-color);
-                "
-              />
-
-              <form
-                method="post"
-                action="{{ url_for('admin_update_user_password', user_id=account.id) }}"
-              >
-                <div class="grid grid-2">
-                  <div class="form-group" style="margin-bottom: 0">
-                    <label
-                      class="form-label"
-                      for="new-password-{{ account.id }}"
-                      >Nieuw wachtwoord</label
-                    >
-                    <input
-                      class="form-input"
-                      id="new-password-{{ account.id }}"
-                      name="new_password"
-                      type="password"
-                      minlength="8"
-                      placeholder="Minimaal 8 karakters"
-                      required
-                    />
-                    <button
-                      class="btn btn-ghost"
-                      type="button"
-                      data-generate-password="new-password-{{ account.id }}"
-                      style="margin-top: 0.5rem"
-                    >
-                      Genereer wachtwoord
-                    </button>
-                  </div>
-                  <div
-                    class="form-group"
-                    style="display: flex; align-items: end; margin-bottom: 0"
-                  >
-                    <button class="btn btn-secondary" type="submit">
-                      Wachtwoord aanpassen
-                    </button>
-                  </div>
-                </div>
-              </form>
-            </div>
+            <input
+              class="form-input"
+              id="new-password-{{ account.id }}"
+              name="new_password"
+              type="password"
+              minlength="8"
+              placeholder="Minimaal 8 karakters"
+              required
+            />
+            <button
+              class="btn btn-ghost"
+              type="button"
+              data-generate-password="new-password-{{ account.id }}"
+              style="margin-top: 0.5rem"
+            >
+              Genereer wachtwoord
+            </button>
           </div>
-          {% else %}
-          <div class="card">
-            <p>Geen accounts gevonden.</p>
+          <div
+            class="form-group"
+            style="display: flex; align-items: end; margin-bottom: 0"
+          >
+            <button class="btn btn-secondary" type="submit">
+              Wachtwoord aanpassen
+            </button>
           </div>
-          {% endfor %}
-        </section>
-    <script>
-      (function () {
-        function generateStrongPassword(length) {
-          const lower = "abcdefghijkmnopqrstuvwxyz";
-          const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-          const digits = "23456789";
-          const symbols = "!@#$%^&*-_+=";
+        </div>
+      </form>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <p>Geen accounts gevonden.</p>
+  </div>
+  {% endfor %}
+</section>
+<script>
+  (function () {
+    function generateStrongPassword(length) {
+      const lower = "abcdefghijkmnopqrstuvwxyz";
+      const upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      const digits = "23456789";
+      const symbols = "!@#$%^&*-_+=";
 
-          const all = lower + upper + digits + symbols;
-          const result = [
-            lower[Math.floor(Math.random() * lower.length)],
-            upper[Math.floor(Math.random() * upper.length)],
-            digits[Math.floor(Math.random() * digits.length)],
-            symbols[Math.floor(Math.random() * symbols.length)],
-          ];
+      const all = lower + upper + digits + symbols;
+      const result = [
+        lower[Math.floor(Math.random() * lower.length)],
+        upper[Math.floor(Math.random() * upper.length)],
+        digits[Math.floor(Math.random() * digits.length)],
+        symbols[Math.floor(Math.random() * symbols.length)],
+      ];
 
-          while (result.length < length) {
-            result.push(all[Math.floor(Math.random() * all.length)]);
-          }
+      while (result.length < length) {
+        result.push(all[Math.floor(Math.random() * all.length)]);
+      }
 
-          for (let i = result.length - 1; i > 0; i--) {
-            const j = Math.floor(Math.random() * (i + 1));
-            const tmp = result[i];
-            result[i] = result[j];
-            result[j] = tmp;
-          }
+      for (let i = result.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = result[i];
+        result[i] = result[j];
+        result[j] = tmp;
+      }
 
-          return result.join("");
+      return result.join("");
+    }
+
+    const buttons = document.querySelectorAll("[data-generate-password]");
+    buttons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const targetId = button.getAttribute("data-generate-password");
+        const input = document.getElementById(targetId);
+        if (!input) return;
+
+        const password = generateStrongPassword(16);
+        input.value = password;
+        input.type = "text";
+        input.focus();
+        input.select();
+
+        try {
+          await navigator.clipboard.writeText(password);
+          button.textContent = "Gegenereerd + gekopieerd";
+        } catch (e) {
+          button.textContent = "Gegenereerd";
         }
 
-        const buttons = document.querySelectorAll("[data-generate-password]");
-        buttons.forEach((button) => {
-          button.addEventListener("click", async () => {
-            const targetId = button.getAttribute("data-generate-password");
-            const input = document.getElementById(targetId);
-            if (!input) return;
-
-            const password = generateStrongPassword(16);
-            input.value = password;
-            input.type = "text";
-            input.focus();
-            input.select();
-
-            try {
-              await navigator.clipboard.writeText(password);
-              button.textContent = "Gegenereerd + gekopieerd";
-            } catch (e) {
-              button.textContent = "Gegenereerd";
-            }
-
-            setTimeout(() => {
-              button.textContent = "Genereer wachtwoord";
-              input.type = "password";
-            }, 2000);
-          });
-        });
-      })();
-    </script>
+        setTimeout(() => {
+          button.textContent = "Genereer wachtwoord";
+          input.type = "password";
+        }, 2000);
+      });
+    });
+  })();
+</script>
 {% endblock %}

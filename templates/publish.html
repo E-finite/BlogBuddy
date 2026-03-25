@@ -1,18 +1,14 @@
-{% extends 'app_base.html' %}
+{% extends 'app_base.html' %} {% block title %}Publiceren - E-finite{% endblock
+%} {% block content %}
+<section class="page-intro-card">
+  <div class="page-intro-copy">
+    <span class="page-kicker">Publishing desk</span>
+    <h1 class="page-heading">Post Publiceren naar WordPress</h1>
+    <p class="page-description">
+      Beheer opgeslagen concepten, herstelde previews en geplande publicaties op
+      een aparte publicatiepagina.
+    </p>
+  </div>
+</section>
 
-{% block title %}Publiceren - E-finite{% endblock %}
-
-{% block content %}
-  <section class="page-intro-card">
-    <div class="page-intro-copy">
-      <span class="page-kicker">Publishing desk</span>
-      <h1 class="page-heading">Post Publiceren naar WordPress</h1>
-      <p class="page-description">
-        Beheer opgeslagen concepten, herstelde previews en geplande publicaties
-        op een aparte publicatiepagina.
-      </p>
-    </div>
-  </section>
-
-  {% include 'dashboard/partials/_publish_section.html' %}
-{% endblock %}
+{% include 'dashboard/partials/_publish_section.html' %} {% endblock %}

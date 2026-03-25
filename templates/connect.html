@@ -1,18 +1,14 @@
-{% extends 'app_base.html' %}
+{% extends 'app_base.html' %} {% block title %}Verbinden - E-finite{% endblock
+%} {% block content %}
+<section class="page-intro-card">
+  <div class="page-intro-copy">
+    <span class="page-kicker">WordPress integratie</span>
+    <h1 class="page-heading">WordPress Site Verbinden</h1>
+    <p class="page-description">
+      Koppel je WordPress-omgeving zodat concepten, afbeeldingen en publicaties
+      rechtstreeks vanuit de app doorstromen.
+    </p>
+  </div>
+</section>
 
-{% block title %}Verbinden - E-finite{% endblock %}
-
-{% block content %}
-  <section class="page-intro-card">
-    <div class="page-intro-copy">
-      <span class="page-kicker">WordPress integratie</span>
-      <h1 class="page-heading">WordPress Site Verbinden</h1>
-      <p class="page-description">
-        Koppel je WordPress-omgeving zodat concepten, afbeeldingen en publicaties
-        rechtstreeks vanuit de app doorstromen.
-      </p>
-    </div>
-  </section>
-
-  {% include 'dashboard/partials/_connect_section.html' %}
-{% endblock %}
+{% include 'dashboard/partials/_connect_section.html' %} {% endblock %}
