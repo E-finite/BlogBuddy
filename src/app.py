@@ -4,15 +4,17 @@ import uuid
 import json
 import logging
 import copy
+import secrets
 from functools import wraps
 from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from src import db
 from src import crypto_utils
 from src import wp_client
+from src.mailer import build_reset_password_url, send_password_reset_email
 from src.models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
 from src.generator.draft_builder import build_draft, build_multilang_drafts
 from src.jobs.queue import enqueue_job
@@ -29,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Get the project root directory (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BOOTSTRAP_ON_IMPORT = os.getenv(
+    "APP_BOOTSTRAP_ON_IMPORT", "true").strip().lower() == "true"
 
 app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'),
@@ -52,15 +56,16 @@ def load_user(user_id):
 
 
 # Initialize database
-db.init_db()
-if config.ADMIN_EMAILS:
-    promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
-    if promoted_count:
-        logger.info(
-            f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
+if BOOTSTRAP_ON_IMPORT:
+    db.init_db()
+    if config.ADMIN_EMAILS:
+        promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
+        if promoted_count:
+            logger.info(
+                f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
 
-# Start background worker
-start_worker()
+    # Start background worker
+    start_worker()
 
 
 # Helper functions
@@ -290,6 +295,96 @@ def login():
         return redirect(next_page) if next_page else redirect(url_for('home_page'))
 
     return render_template('login.html')
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Request a password reset link by email."""
+    if current_user.is_authenticated:
+        return redirect(url_for("home_page"))
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+
+        if not email:
+            flash("Vul je e-mailadres in om een resetlink aan te vragen.", "error")
+            return render_template("forgot_password.html", email=email)
+
+        user = db.get_user_by_email(email)
+        if user and user.get("is_active", 1):
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                seconds=config.PASSWORD_RESET_TOKEN_TTL_SECONDS)
+
+            try:
+                created = db.create_password_reset_token(
+                    user["id"], token, expires_at)
+                if created:
+                    reset_url = build_reset_password_url(
+                        token, request.url_root)
+                    mail_sent, mail_error = send_password_reset_email(
+                        user["email"], reset_url)
+                    if not mail_sent:
+                        logger.error(
+                            "Password reset mail kon niet worden verstuurd voor user_id=%s: %s",
+                            user["id"],
+                            mail_error,
+                        )
+                        db.delete_password_reset_token(token)
+            except Exception as exc:
+                logger.exception(
+                    "Password reset aanvraag mislukt voor user_id=%s", user["id"])
+
+        flash(
+            "Als dit e-mailadres bekend is, ontvang je een reset link.",
+            "info",
+        )
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html", email="")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token: str):
+    """Validate reset token and store a new password."""
+    if current_user.is_authenticated:
+        return redirect(url_for("home_page"))
+
+    token_data = db.validate_password_reset_token(token)
+    if not token_data:
+        flash("Deze reset link is ongeldig of verlopen.", "error")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        new_password = request.form.get("new_password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+
+        if not new_password or not confirm_password:
+            flash("Vul beide wachtwoordvelden in.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if new_password != confirm_password:
+            flash("Wachtwoorden komen niet overeen.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if len(new_password) < 8:
+            flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+            return render_template("reset_password.html", token=token)
+
+        password_hash = bcrypt.generate_password_hash(
+            new_password).decode("utf-8")
+        updated = db.update_user_password_hash(
+            token_data["user_id"], password_hash)
+
+        if not updated:
+            flash("Wachtwoord kon niet worden aangepast.", "error")
+            return render_template("reset_password.html", token=token)
+
+        db.delete_password_reset_token(token)
+        flash("Je wachtwoord is aangepast. Je kunt nu inloggen.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 
 @app.route("/logout")

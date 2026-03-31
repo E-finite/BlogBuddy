@@ -1,9 +1,10 @@
 """Database initialization and utilities."""
+import time
 import mysql.connector
 from mysql.connector import Error
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from src import config
 
@@ -45,18 +46,37 @@ def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, sit
 
 def get_db_connection():
     """Get a MySQL database connection."""
-    try:
-        conn = mysql.connector.connect(
-            host=config.MYSQL_HOST,
-            port=config.MYSQL_PORT,
-            user=config.MYSQL_USER,
-            password=config.MYSQL_PASSWORD,
-            database=config.MYSQL_DATABASE
-        )
-        return conn
-    except Error as e:
-        print(f"Error connecting to MySQL: {e}")
-        raise
+    attempts = max(1, int(config.MYSQL_CONNECT_RETRIES))
+    delay_seconds = max(0.0, float(config.MYSQL_CONNECT_RETRY_DELAY_SECONDS))
+    timeout_seconds = max(1, int(config.MYSQL_CONNECT_TIMEOUT_SECONDS))
+
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            conn = mysql.connector.connect(
+                host=config.MYSQL_HOST,
+                port=config.MYSQL_PORT,
+                user=config.MYSQL_USER,
+                password=config.MYSQL_PASSWORD,
+                database=config.MYSQL_DATABASE,
+                connection_timeout=timeout_seconds,
+            )
+            return conn
+        except Error as e:
+            last_error = e
+            logger.warning(
+                "MySQL connect attempt %s/%s failed (%s:%s): %s",
+                attempt,
+                attempts,
+                config.MYSQL_HOST,
+                config.MYSQL_PORT,
+                e,
+            )
+            if attempt < attempts and delay_seconds > 0:
+                time.sleep(delay_seconds)
+
+    print(f"Error connecting to MySQL after {attempts} attempts: {last_error}")
+    raise last_error
 
 
 def init_db():
@@ -110,6 +130,18 @@ def init_db():
             text_regen_used INT NOT NULL DEFAULT 0,
             updated_at DATETIME NOT NULL,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            token VARCHAR(255) PRIMARY KEY,
+            user_id INT NOT NULL,
+            created_at DATETIME NOT NULL,
+            expires_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            UNIQUE KEY uq_password_reset_user_id (user_id),
+            INDEX idx_password_reset_expires_at (expires_at)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
@@ -920,6 +952,80 @@ def update_user_password_hash(user_id: int, password_hash: str) -> bool:
     cursor.close()
     conn.close()
     return updated
+
+
+def create_password_reset_token(user_id: int, token: str, expires_at: datetime) -> bool:
+    """Create or replace a password reset token for a user."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    cursor.execute(
+        "DELETE FROM password_reset_tokens WHERE user_id = %s OR expires_at <= %s",
+        (user_id, now),
+    )
+    cursor.execute(
+        """
+        INSERT INTO password_reset_tokens (token, user_id, created_at, expires_at)
+        VALUES (%s, %s, %s, %s)
+        """,
+        (token, user_id, now, expires_at),
+    )
+
+    conn.commit()
+    created = cursor.rowcount > 0
+    cursor.close()
+    conn.close()
+    return created
+
+
+def get_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
+    """Return password reset token data joined with the user record."""
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """
+        SELECT prt.token, prt.user_id, prt.created_at, prt.expires_at,
+               u.email, u.username, u.is_active
+        FROM password_reset_tokens prt
+        INNER JOIN users u ON u.id = prt.user_id
+        WHERE prt.token = %s
+        """,
+        (token,),
+    )
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def validate_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
+    """Return token payload when it exists and has not expired."""
+    token_row = get_password_reset_token(token)
+    if not token_row:
+        return None
+
+    if token_row["expires_at"] <= datetime.now(timezone.utc).replace(tzinfo=None):
+        delete_password_reset_token(token)
+        return None
+
+    if not token_row.get("is_active", 1):
+        return None
+
+    return token_row
+
+
+def delete_password_reset_token(token: str) -> bool:
+    """Delete a password reset token."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM password_reset_tokens WHERE token = %s", (token,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return deleted
 
 
 def bootstrap_admin_users(admin_emails: List[str]) -> int:
