@@ -29,7 +29,7 @@ Thumbs.db
 desktop.ini
 
 # Config (bevat gevoelige data)
-config.py
+/config.py
 .env
 .env.*
 !.env.example
