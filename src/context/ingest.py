@@ -11,6 +11,44 @@ import json
 logger = logging.getLogger(__name__)
 
 
+def _upsert_scraped_page(cursor, site_id: str, site_type: str, page_data: Dict[str, Any], extracted: Dict[str, Any]) -> int:
+    """Insert or update a scraped page while preserving its page id."""
+    cursor.execute("""
+        INSERT INTO scraped_pages (
+            site_id, site_type, url, canonical_url, title, clean_text, headings_json,
+            status_code, fetched_at, content_hash, page_type
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+            id = LAST_INSERT_ID(id),
+            canonical_url = VALUES(canonical_url),
+            title = VALUES(title),
+            clean_text = VALUES(clean_text),
+            headings_json = VALUES(headings_json),
+            status_code = VALUES(status_code),
+            fetched_at = VALUES(fetched_at),
+            content_hash = VALUES(content_hash),
+            page_type = VALUES(page_type)
+    """, (
+        site_id,
+        site_type,
+        page_data["url"],
+        page_data["canonical_url"],
+        page_data["title"],
+        extracted["clean_text"],
+        json.dumps(extracted["headings"]),
+        page_data["status_code"],
+        page_data["fetched_at"],
+        page_data["content_hash"],
+        extracted["page_type"]
+    ))
+
+    page_id = cursor.lastrowid
+
+    cursor.execute("DELETE FROM page_chunks WHERE page_id = %s", (page_id,))
+
+    return page_id
+
+
 def ingest_website(
     site_id: str,
     seed_urls: Optional[List[str]] = None,
@@ -108,27 +146,14 @@ def ingest_website(
                     f"Skipping page with no content: {page_data['url']}")
                 continue
 
-            # Store page
-            cursor.execute("""
-                REPLACE INTO scraped_pages (
-                    site_id, site_type, url, canonical_url, title, clean_text, headings_json,
-                    status_code, fetched_at, content_hash, page_type
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                site_id,
-                site_type,
-                page_data["url"],
-                page_data["canonical_url"],
-                page_data["title"],
-                extracted["clean_text"],
-                json.dumps(extracted["headings"]),
-                page_data["status_code"],
-                page_data["fetched_at"],
-                page_data["content_hash"],
-                extracted["page_type"]
-            ))
-
-            page_id = cursor.lastrowid
+            # Upsert page and refresh its chunks without deleting the parent row.
+            page_id = _upsert_scraped_page(
+                cursor=cursor,
+                site_id=site_id,
+                site_type=site_type,
+                page_data=page_data,
+                extracted=extracted
+            )
             pages_stored += 1
 
             # Chunk and store chunks

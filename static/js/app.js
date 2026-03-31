@@ -13,7 +13,6 @@ let lastSavedDraftSignature = null;
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   initializeActiveDraftId();
-  initNavigation();
   loadSitesDropdowns(); // Load sites into dropdowns
   initConnectSite();
   initGeneratePost();
@@ -22,9 +21,6 @@ document.addEventListener('DOMContentLoaded', () => {
   
   // Check API health
   checkHealth();
-  
-  // Restore publish preview if available
-  restorePublishPreview();
 });
 
 function initializeActiveDraftId() {
@@ -328,43 +324,140 @@ function queueDraftAutosave() {
   }, 1200);
 }
 
-// Navigation
-function initNavigation() {
-  const navLinks = document.querySelectorAll('.nav-link');
-  const sections = document.querySelectorAll('.page-section');
-  
-  navLinks.forEach(link => {
-    link.addEventListener('click', (e) => {
-      e.preventDefault();
-      const target = link.dataset.page;
-      
-      // Update active nav
-      navLinks.forEach(l => l.classList.remove('active'));
-      link.classList.add('active');
-      
-      // Show target section
-      sections.forEach(s => s.classList.add('hidden'));
-      const targetSection = document.getElementById(target);
-      if (targetSection) {
-        targetSection.classList.remove('hidden');
-      }
-      
-      // Restore publish preview when navigating to publish section
-      if (target === 'publish') {
-        restorePublishPreview();
-        loadDrafts(); // Load saved drafts from database
-      }
-    });
-  });
-}
-
 // Connect Site
 function initConnectSite() {
   const form = document.getElementById('connect-site-form');
+  const connectorSelect = document.getElementById('connectorType');
+  const connectorSitesPanel = document.getElementById('connector-sites-panel');
+  const connectedSitesList = document.getElementById('connected-sites-list');
+  const showConnectFormBtn = document.getElementById('show-connect-form-btn');
+  const connectFormPanel = document.getElementById('connect-form-panel');
+  const connectFormTitle = document.getElementById('connect-form-title');
+  const connectFormDescription = document.getElementById('connect-form-description');
+  const connectFormContext = document.getElementById('connect-form-context');
+  const baseUrlInput = document.getElementById('wpBaseUrl');
+  const usernameInput = document.getElementById('wpUsername');
+  const passwordInput = document.getElementById('wpApplicationPassword');
   if (!form) return;
-  
-  // Check if user already has a site and show warning
-  checkExistingSites(form);
+
+  let connectedSites = [];
+
+  function renderConnectedSites() {
+    if (!connectedSitesList) {
+      return;
+    }
+
+    if (connectedSites.length === 0) {
+      connectedSitesList.innerHTML = `
+        <div class="connector-empty-state">
+          Nog geen WordPress website verbonden. Kies hieronder voor een nieuwe verbinding om te starten.
+        </div>
+      `;
+      return;
+    }
+
+    connectedSitesList.innerHTML = connectedSites.map((site) => `
+      <button type="button" class="connector-site-button" data-site-id="${site.id}">
+        <div class="connector-site-copy">
+          <span class="connector-site-name">${site.wp_base_url}</span>
+          <p class="connector-site-meta">Gebruiker: ${site.wp_username}</p>
+        </div>
+        <span class="badge badge-primary">Openen</span>
+      </button>
+    `).join('');
+  }
+
+  function showFormForSite(site = null) {
+    if (!connectFormPanel || !connectFormTitle || !connectFormDescription || !connectFormContext) {
+      return;
+    }
+
+    connectFormPanel.classList.remove('hidden');
+
+    if (site) {
+      connectFormTitle.textContent = 'Verbonden WordPress Site';
+      connectFormDescription.textContent = 'Werk deze verbinding bij of vervang ze met een nieuwe application password.';
+      connectFormContext.classList.remove('hidden');
+      connectFormContext.classList.remove('alert-warning');
+      connectFormContext.classList.add('alert-info');
+      connectFormContext.innerHTML = `
+        <span>Je bekijkt de verbinding voor <strong>${site.wp_base_url}</strong>. Vul opnieuw een application password in om deze verbinding te updaten.</span>
+      `;
+      if (baseUrlInput) baseUrlInput.value = site.wp_base_url || '';
+      if (usernameInput) usernameInput.value = site.wp_username || '';
+      if (passwordInput) passwordInput.value = '';
+    } else {
+      connectFormTitle.textContent = 'Nieuwe WordPress Site Verbinden';
+      connectFormDescription.textContent = 'Vul je WordPress-gegevens in om een nieuwe verbinding te maken.';
+      form.reset();
+      connectFormContext.classList.remove('hidden');
+      connectFormContext.classList.remove('alert-info');
+      connectFormContext.classList.add('alert-warning');
+      connectFormContext.innerHTML = connectedSites.length > 0
+        ? '<span>Je hebt al een WordPress site verbonden. Als je nu opslaat, wordt de bestaande verbinding vervangen.</span>'
+        : '<span>Vul hieronder je eerste WordPress verbinding in.</span>';
+    }
+  }
+
+  async function loadConnectedSites() {
+    if (!connectorSelect || connectorSelect.value !== 'wordpress') {
+      if (connectorSitesPanel) connectorSitesPanel.classList.add('hidden');
+      if (connectFormPanel) connectFormPanel.classList.add('hidden');
+      return;
+    }
+
+    try {
+      const sitesResponse = await api.getSites();
+      connectedSites = Array.isArray(sitesResponse)
+        ? sitesResponse
+        : (Array.isArray(sitesResponse?.sites) ? sitesResponse.sites : []);
+
+      renderConnectedSites();
+
+      if (connectorSitesPanel) {
+        connectorSitesPanel.classList.remove('hidden');
+      }
+    } catch (error) {
+      console.error('Error loading connected sites:', error);
+      connectedSites = [];
+      if (connectedSitesList) {
+        connectedSitesList.innerHTML = `
+          <div class="connector-empty-state">
+            Verbonden websites konden niet geladen worden. Probeer de pagina opnieuw te laden.
+          </div>
+        `;
+      }
+      if (connectorSitesPanel) {
+        connectorSitesPanel.classList.remove('hidden');
+      }
+    }
+  }
+
+  if (connectorSelect) {
+    connectorSelect.addEventListener('change', async () => {
+      await loadConnectedSites();
+    });
+  }
+
+  if (connectedSitesList) {
+    connectedSitesList.addEventListener('click', (event) => {
+      const siteButton = event.target.closest('[data-site-id]');
+      if (!siteButton) {
+        return;
+      }
+
+      const selectedSite = connectedSites.find((site) => String(site.id) === String(siteButton.dataset.siteId));
+      if (selectedSite) {
+        showFormForSite(selectedSite);
+      }
+    });
+  }
+
+  if (showConnectFormBtn) {
+    showConnectFormBtn.addEventListener('click', () => {
+      showFormForSite();
+    });
+  }
   
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -396,12 +489,13 @@ function initConnectSite() {
       
       // Reload sites dropdowns
       await loadSitesDropdowns();
+      await loadConnectedSites();
       
       // Store siteId for later use
       sessionStorage.setItem('currentSiteId', result.siteId);
-      
-      // Update warning message
-      checkExistingSites(form);
+
+      const savedSite = connectedSites.find((site) => String(site.id) === String(result.siteId));
+      showFormForSite(savedSite || null);
       
     } catch (error) {
       showAlert(error.message || 'Fout bij verbinden met WordPress', 'error');
@@ -409,33 +503,9 @@ function initConnectSite() {
       setButtonLoading(submitBtn, false);
     }
   });
-}
 
-// Check if user has existing sites and show warning
-async function checkExistingSites(form) {
-  try {
-    const sites = await api.getSites();
-    
-    // Remove existing warning
-    const existingWarning = form.querySelector('.site-replace-warning');
-    if (existingWarning) {
-      existingWarning.remove();
-    }
-    
-    if (sites && sites.length > 0) {
-      // Show warning that connecting will replace existing site
-      const warningDiv = document.createElement('div');
-      warningDiv.className = 'alert alert-warning site-replace-warning';
-      warningDiv.style.marginTop = '1rem';
-      warningDiv.innerHTML = `
-        <strong>⚠️ Let op!</strong><br>
-        <small>Je hebt al een site verbonden: <strong>${sites[0].wp_base_url}</strong></small><br>
-        <small>Als je een nieuwe site verbindt, wordt de oude site automatisch vervangen.</small>
-      `;
-      form.appendChild(warningDiv);
-    }
-  } catch (error) {
-    console.error('Error checking existing sites:', error);
+  if (connectorSelect && connectorSelect.value === 'wordpress') {
+    loadConnectedSites();
   }
 }
 
@@ -931,6 +1001,13 @@ function initPublishPost() {
   }
 
   syncPublishStatusControls();
+  loadDrafts();
+
+  if (activeDraftId) {
+    loadDraft(activeDraftId);
+  } else {
+    restorePublishPreview();
+  }
   
   // Setup real-time preview sync
   const titleInput = document.getElementById('title');
@@ -1051,6 +1128,11 @@ function initPublishPost() {
 
 // Jobs View
 function initJobsView() {
+  const jobsContainer = document.getElementById('jobs-list');
+  if (!jobsContainer) {
+    return;
+  }
+
   const refreshBtn = document.getElementById('refresh-jobs-btn');
   if (refreshBtn) {
     refreshBtn.addEventListener('click', loadJobs);
@@ -1198,10 +1280,7 @@ function fillPublishForm(result, siteId) {
 
 // Switch to publish tab
 function switchToPublishTab() {
-  const publishTab = document.querySelector('.nav-link[data-page="publish"]');
-  if (publishTab) {
-    publishTab.click();
-  }
+  window.location.assign('/publish');
 }
 
 // Restore publish preview from sessionStorage

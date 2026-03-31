@@ -4,14 +4,17 @@ import uuid
 import json
 import logging
 import copy
+import secrets
+from functools import wraps
 from src import config
 from flask import Flask, request, jsonify, render_template, redirect, url_for, flash, session
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_bcrypt import Bcrypt
 from src import db
 from src import crypto_utils
 from src import wp_client
+from src.mailer import build_reset_password_url, send_password_reset_email
 from src.models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
 from src.generator.draft_builder import build_draft, build_multilang_drafts
 from src.jobs.queue import enqueue_job
@@ -28,6 +31,8 @@ logger = logging.getLogger(__name__)
 
 # Get the project root directory (parent of src/)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BOOTSTRAP_ON_IMPORT = os.getenv(
+    "APP_BOOTSTRAP_ON_IMPORT", "true").strip().lower() == "true"
 
 app = Flask(__name__,
             template_folder=os.path.join(BASE_DIR, 'templates'),
@@ -51,10 +56,16 @@ def load_user(user_id):
 
 
 # Initialize database
-db.init_db()
+if BOOTSTRAP_ON_IMPORT:
+    db.init_db()
+    if config.ADMIN_EMAILS:
+        promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
+        if promoted_count:
+            logger.info(
+                f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
 
-# Start background worker
-start_worker()
+    # Start background worker
+    start_worker()
 
 
 # Helper functions
@@ -138,12 +149,56 @@ def validate_publish_draft_scheduling(draft: dict) -> None:
         draft.pop("scheduleDateGmt", None)
 
 
+def admin_required(func):
+    """Ensure route access is restricted to admin users."""
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        if not getattr(current_user, "is_admin", False):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Admin access required"}), 403
+            flash("Je hebt geen toegang tot het admin paneel.", "error")
+            return redirect(url_for('home_page'))
+        return func(*args, **kwargs)
+    return wrapper
+
+
+def build_dashboard_quota(quota: dict) -> dict:
+    """Normalize quota data for dashboard templates."""
+    return {
+        "blogs_limit": quota.get("blogs_monthly_limit", 0),
+        "blogs_used": quota.get("blogs_used", 0),
+        "blogs_remaining": max(0, quota.get("blogs_monthly_limit", 0) - quota.get("blogs_used", 0)),
+        "text_regen_limit": quota.get("text_regen_monthly_limit", 0),
+        "text_regen_used": quota.get("text_regen_used", 0),
+        "text_regen_remaining": max(0, quota.get("text_regen_monthly_limit", 0) - quota.get("text_regen_used", 0)),
+        "image_regen_limit": quota.get("image_regen_limit", 0),
+        "usage_month": quota.get("usage_month"),
+    }
+
+
+def build_app_page_context(*, current_page: str) -> dict:
+    """Build shared render context for authenticated app pages."""
+    stats = db.get_user_stats(current_user.id)
+    sites = db.get_user_sites(current_user.id)
+    quota = db.get_user_quota(current_user.id)
+
+    context = {
+        "user": current_user,
+        "stats": stats,
+        "sites": sites,
+        "quota": build_dashboard_quota(quota),
+        "current_page": current_page,
+    }
+
+    return context
+
+
 # Authentication routes
 @app.route("/")
-def home():
-    """Home page - redirect to login or dashboard."""
+def index():
+    """Landing route that redirects to login or the authenticated home page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
     return redirect(url_for('login'))
 
 
@@ -151,7 +206,7 @@ def home():
 def register():
     """User registration page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
 
     if request.method == "POST":
         username = request.form.get('username')
@@ -195,7 +250,7 @@ def register():
 def login():
     """User login page."""
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('home_page'))
 
     if request.method == "POST":
         username = request.form.get('username')
@@ -227,18 +282,109 @@ def login():
             id=user_data['id'],
             username=user_data['username'],
             email=user_data['email'],
-            is_active=bool(user_data.get('is_active', 1))
+            is_active=bool(user_data.get('is_active', 1)),
+            is_admin=bool(user_data.get('is_admin', 0))
         )
         login_user(user, remember=remember)
         db.update_user_last_login(user.id)
 
         flash(f'Welkom terug, {user.username}!', 'success')
 
-        # Redirect to next page or dashboard
+        # Redirect to next page or home page
         next_page = request.args.get('next')
-        return redirect(next_page) if next_page else redirect(url_for('dashboard'))
+        return redirect(next_page) if next_page else redirect(url_for('home_page'))
 
     return render_template('login.html')
+
+
+@app.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    """Request a password reset link by email."""
+    if current_user.is_authenticated:
+        return redirect(url_for("home_page"))
+
+    if request.method == "POST":
+        email = (request.form.get("email") or "").strip().lower()
+
+        if not email:
+            flash("Vul je e-mailadres in om een resetlink aan te vragen.", "error")
+            return render_template("forgot_password.html", email=email)
+
+        user = db.get_user_by_email(email)
+        if user and user.get("is_active", 1):
+            token = secrets.token_urlsafe(32)
+            expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(
+                seconds=config.PASSWORD_RESET_TOKEN_TTL_SECONDS)
+
+            try:
+                created = db.create_password_reset_token(
+                    user["id"], token, expires_at)
+                if created:
+                    reset_url = build_reset_password_url(
+                        token, request.url_root)
+                    mail_sent, mail_error = send_password_reset_email(
+                        user["email"], reset_url)
+                    if not mail_sent:
+                        logger.error(
+                            "Password reset mail kon niet worden verstuurd voor user_id=%s: %s",
+                            user["id"],
+                            mail_error,
+                        )
+                        db.delete_password_reset_token(token)
+            except Exception as exc:
+                logger.exception(
+                    "Password reset aanvraag mislukt voor user_id=%s", user["id"])
+
+        flash(
+            "Als dit e-mailadres bekend is, ontvang je een reset link.",
+            "info",
+        )
+        return redirect(url_for("login"))
+
+    return render_template("forgot_password.html", email="")
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token: str):
+    """Validate reset token and store a new password."""
+    if current_user.is_authenticated:
+        return redirect(url_for("home_page"))
+
+    token_data = db.validate_password_reset_token(token)
+    if not token_data:
+        flash("Deze reset link is ongeldig of verlopen.", "error")
+        return redirect(url_for("login"))
+
+    if request.method == "POST":
+        new_password = request.form.get("new_password") or ""
+        confirm_password = request.form.get("confirm_password") or ""
+
+        if not new_password or not confirm_password:
+            flash("Vul beide wachtwoordvelden in.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if new_password != confirm_password:
+            flash("Wachtwoorden komen niet overeen.", "error")
+            return render_template("reset_password.html", token=token)
+
+        if len(new_password) < 8:
+            flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+            return render_template("reset_password.html", token=token)
+
+        password_hash = bcrypt.generate_password_hash(
+            new_password).decode("utf-8")
+        updated = db.update_user_password_hash(
+            token_data["user_id"], password_hash)
+
+        if not updated:
+            flash("Wachtwoord kon niet worden aangepast.", "error")
+            return render_template("reset_password.html", token=token)
+
+        db.delete_password_reset_token(token)
+        flash("Je wachtwoord is aangepast. Je kunt nu inloggen.", "success")
+        return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token=token)
 
 
 @app.route("/logout")
@@ -250,20 +396,256 @@ def logout():
     return redirect(url_for('login'))
 
 
-@app.route("/dashboard")
+@app.route("/home")
 @login_required
-def dashboard():
-    """Dashboard page for authenticated users."""
-    # Get user statistics
-    stats = db.get_user_stats(current_user.id)
-    sites = db.get_user_sites(current_user.id)
-    recent_jobs = db.get_user_jobs(current_user.id, limit=5)
+def home_page():
+    """Home page for authenticated users."""
+    return render_template(
+        'home.html',
+        **build_app_page_context(current_page='home'),
+    )
 
-    return render_template('dashboard.html',
-                           user=current_user,
-                           stats=stats,
-                           sites=sites,
-                           recent_jobs=recent_jobs)
+
+@app.route("/connect")
+@login_required
+def connect_page():
+    """WordPress connection page."""
+    return render_template(
+        'connect.html',
+        **build_app_page_context(current_page='connect'),
+    )
+
+
+@app.route("/generate")
+@login_required
+def generate_page():
+    """Content generation page."""
+    return render_template(
+        'generate.html',
+        **build_app_page_context(current_page='generate'),
+    )
+
+
+@app.route("/publish")
+@login_required
+def publish_page():
+    """Publishing page."""
+    return render_template(
+        'publish.html',
+        **build_app_page_context(current_page='publish'),
+    )
+
+
+@app.route("/archive")
+@login_required
+def archive_page():
+    """Jobs archive page."""
+    return render_template(
+        'archive.html',
+        **build_app_page_context(current_page='archive'),
+    )
+
+
+@app.route("/admin", methods=["GET"])
+@login_required
+@admin_required
+def admin_panel():
+    """Admin panel for account and quota management."""
+    try:
+        users = db.get_admin_user_list()
+        logger.info(f"Admin panel loaded: {len(users)} users found")
+    except Exception as e:
+        logger.error(f"Error loading admin user list: {e}", exc_info=True)
+        users = []
+    return render_template("admin.html", user=current_user, users=users, current_page="admin")
+
+
+@app.route("/admin/users/create", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_user():
+    """Create account from admin panel."""
+    username = (request.form.get("username") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    is_admin = request.form.get("is_admin") == "on"
+
+    blogs_monthly_limit = request.form.get("blogs_monthly_limit", "20")
+    text_regen_monthly_limit = request.form.get(
+        "text_regen_monthly_limit", "20")
+    image_regen_limit = request.form.get("image_regen_limit", "3")
+
+    if not username or not email or not password:
+        flash("Gebruikersnaam, e-mail en wachtwoord zijn verplicht.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if len(password) < 8:
+        flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if db.get_user_by_username(username):
+        flash("Gebruikersnaam is al in gebruik.", "error")
+        return redirect(url_for("admin_panel"))
+
+    if db.get_user_by_email(email):
+        flash("E-mail is al geregistreerd.", "error")
+        return redirect(url_for("admin_panel"))
+
+    try:
+        blogs_monthly_limit = max(1, int(blogs_monthly_limit))
+        text_regen_monthly_limit = max(0, int(text_regen_monthly_limit))
+        image_regen_limit = max(1, int(image_regen_limit))
+    except ValueError:
+        flash("Limieten moeten numeriek zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+    user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    flash(f"Account {username} succesvol aangemaakt.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/quota", methods=["POST"])
+@login_required
+@admin_required
+def admin_update_user_quota(user_id: int):
+    """Update per-account limits from admin panel."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        flash("Gebruiker niet gevonden.", "error")
+        return redirect(url_for("admin_panel"))
+
+    try:
+        blogs_monthly_limit = max(
+            1, int(request.form.get("blogs_monthly_limit", "20")))
+        text_regen_monthly_limit = max(
+            0, int(request.form.get("text_regen_monthly_limit", "20")))
+        image_regen_limit = max(
+            1, int(request.form.get("image_regen_limit", "3")))
+    except ValueError:
+        flash("Limieten moeten numeriek zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    flash(f"Limieten bijgewerkt voor {user['username']}.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/admin/users/<int:user_id>/password", methods=["POST"])
+@login_required
+@admin_required
+def admin_update_user_password(user_id: int):
+    """Update a user's password from the admin panel."""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        flash("Gebruiker niet gevonden.", "error")
+        return redirect(url_for("admin_panel"))
+
+    new_password = request.form.get("new_password") or ""
+
+    if len(new_password) < 8:
+        flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
+        return redirect(url_for("admin_panel"))
+
+    password_hash = bcrypt.generate_password_hash(new_password).decode("utf-8")
+    updated = db.update_user_password_hash(user_id, password_hash)
+
+    if not updated:
+        flash("Wachtwoord kon niet worden aangepast.", "error")
+        return redirect(url_for("admin_panel"))
+
+    flash(f"Wachtwoord aangepast voor {user['username']}.", "success")
+    return redirect(url_for("admin_panel"))
+
+
+@app.route("/api/admin/users", methods=["GET"])
+@login_required
+@admin_required
+def admin_get_users_api():
+    """Return user list for admin integrations."""
+    return jsonify({"users": db.get_admin_user_list()}), 200
+
+
+@app.route("/api/admin/users", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_user_api():
+    """Create account through API."""
+    data = request.get_json() or {}
+    username = (data.get("username") or "").strip()
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+    is_admin = bool(data.get("isAdmin", False))
+
+    if not username or not email or not password:
+        return jsonify({"error": "username, email en password zijn verplicht"}), 400
+
+    if len(password) < 8:
+        return jsonify({"error": "password moet minimaal 8 karakters lang zijn"}), 400
+
+    if db.get_user_by_username(username):
+        return jsonify({"error": "Gebruikersnaam is al in gebruik"}), 409
+
+    if db.get_user_by_email(email):
+        return jsonify({"error": "E-mail is al geregistreerd"}), 409
+
+    try:
+        blogs_monthly_limit = max(1, int(data.get("blogsMonthlyLimit", 20)))
+        text_regen_monthly_limit = max(
+            0, int(data.get("textRegenMonthlyLimit", 20)))
+        image_regen_limit = max(1, int(data.get("imageRegenLimit", 3)))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Limieten moeten numeriek zijn"}), 400
+
+    password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
+    user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+
+    return jsonify({"ok": True, "userId": user_id}), 201
+
+
+@app.route("/api/admin/users/<int:user_id>/quota", methods=["PUT"])
+@login_required
+@admin_required
+def admin_update_user_quota_api(user_id: int):
+    """Update per-account limits through API."""
+    if not db.get_user_by_id(user_id):
+        return jsonify({"error": "Gebruiker niet gevonden"}), 404
+
+    data = request.get_json() or {}
+    try:
+        blogs_monthly_limit = max(1, int(data.get("blogsMonthlyLimit", 20)))
+        text_regen_monthly_limit = max(
+            0, int(data.get("textRegenMonthlyLimit", 20)))
+        image_regen_limit = max(1, int(data.get("imageRegenLimit", 3)))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Limieten moeten numeriek zijn"}), 400
+
+    db.update_user_quota(
+        user_id,
+        blogs_monthly_limit=blogs_monthly_limit,
+        text_regen_monthly_limit=text_regen_monthly_limit,
+        image_regen_limit=image_regen_limit,
+    )
+    return jsonify({"ok": True}), 200
 
 
 @app.route("/api/sites", methods=["GET"])
@@ -349,6 +731,15 @@ def connect_site():
 def generate_post():
     """Generate blog post content - MULTI-TENANT."""
     try:
+        can_generate, blog_limit_msg = db.can_generate_post(current_user.id)
+        if not can_generate:
+            return jsonify({"error": blog_limit_msg}), 429
+
+        can_text_regen, text_regen_msg = db.can_regenerate_text(
+            current_user.id)
+        if not can_text_regen:
+            return jsonify({"error": text_regen_msg}), 429
+
         data = request.get_json()
         req = GeneratePostRequest(**data)
 
@@ -389,6 +780,9 @@ def generate_post():
                 if req.scheduleDateGmt:
                     draft["scheduleDateGmt"] = req.scheduleDateGmt
 
+            db.increment_user_usage(
+                current_user.id, blogs_delta=1, text_regen_delta=1)
+
             return jsonify({"drafts": drafts}), 200
         else:
             # Single language
@@ -418,6 +812,9 @@ def generate_post():
             )
             logger.info(f"Draft saved to database with ID: {draft_id}")
 
+            db.increment_user_usage(
+                current_user.id, blogs_delta=1, text_regen_delta=1)
+
             return jsonify({"draft": draft, "draftId": draft_id}), 200
 
     except Exception as e:
@@ -441,8 +838,12 @@ def regenerate_image():
             return jsonify({"error": "feedback is required"}), 400
 
         # Validate regeneration limit
+        user_quota = db.get_user_quota(current_user.id)
         is_valid, error_msg = db.validate_regeneration_limit(
-            parent_id, current_user.id)
+            parent_id,
+            current_user.id,
+            limit=user_quota.get('image_regen_limit', 3)
+        )
         if not is_valid:
             return jsonify({"error": error_msg}), 400
 
@@ -1066,12 +1467,6 @@ def get_site_dna_api(site_id):
 def health():
     """Health check endpoint."""
     return jsonify({"status": "ok"}), 200
-
-
-@app.route("/", methods=["GET"])
-def index():
-    """Serve the main frontend page."""
-    return render_template("index.html")
 
 
 if __name__ == "__main__":

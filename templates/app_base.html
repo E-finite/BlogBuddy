@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}E-finite{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/main.css') }}"
+    />
+  </head>
+  <body>
+    <div class="app-shell">
+      {% include 'dashboard/partials/_header.html' %}
+
+      <main class="app-main">
+        <div class="content-container animate-fade-in">
+          {% include 'dashboard/partials/_flash_messages.html' %} {% block
+          content %}{% endblock %}
+        </div>
+
+        {% include 'dashboard/partials/_footer.html' %}
+      </main>
+    </div>
+
+    <script
+      type="module"
+      src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
+  </body>
+</html>

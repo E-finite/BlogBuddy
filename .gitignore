@@ -73,3 +73,5 @@ site/
 *.swp
 *~
 .cache/
+
+*.json

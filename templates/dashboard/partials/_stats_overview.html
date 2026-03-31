@@ -1,14 +1,22 @@
-<div class="stats-grid" style="margin-bottom: 2rem">
-  <div class="stat-card">
-    <div class="stat-value">{{ stats.sites }}</div>
-    <div class="stat-label">WordPress Sites</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value">{{ stats.jobs }}</div>
-    <div class="stat-label">Totaal Jobs</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-value">{{ stats.completed_jobs }}</div>
-    <div class="stat-label">Afgerond</div>
+<div class="section" style="margin-bottom: 2rem">
+  <h2 class="section-title">Jouw Limieten ({{ quota.usage_month }})</h2>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value">{{ quota.blogs_remaining }}</div>
+      <div class="stat-label">
+        Blogs over deze maand ({{ quota.blogs_used }}/{{ quota.blogs_limit }})
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ quota.text_regen_remaining }}</div>
+      <div class="stat-label">
+        Tekst-regens over deze maand ({{ quota.text_regen_used }}/{{
+        quota.text_regen_limit }})
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value">{{ quota.image_regen_limit }}</div>
+      <div class="stat-label">Image-regens per afbeelding</div>
+    </div>
   </div>
 </div>

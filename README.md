@@ -82,6 +82,7 @@ MYSQL_PASSWORD=
 MYSQL_DATABASE=blogbot
 APP_HOST=0.0.0.0
 APP_PORT=8000
+ADMIN_EMAILS=admin@jouwdomein.nl
 ```
 
 ### 3. Applicatie starten
