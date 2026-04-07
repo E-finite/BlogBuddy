@@ -136,14 +136,15 @@ def _build_prompt_and_settings(
     style_strength = image_settings.get("styleStrength", "medium")
     use_brand_colors = image_settings.get("useBrandColors", False)
     color_strictness = image_settings.get("colorStrictness", "medium")
-    
+
     # Priority: custom brandColors from form > extracted from Site DNA
     custom_brand_colors = image_settings.get("brandColors", "")
     if custom_brand_colors:
-        brand_colors = [c.strip() for c in custom_brand_colors.split(",") if c.strip()]
+        brand_colors = [c.strip()
+                        for c in custom_brand_colors.split(",") if c.strip()]
     else:
         brand_colors = brand.get("colors", [])
-    
+
     composition = image_settings.get("composition", "auto")
     lighting = image_settings.get("lighting", "soft-studio")
     negative_prompt = image_settings.get("negativePrompt", "")
@@ -172,15 +173,13 @@ def _build_prompt_and_settings(
         "isometric": "isometric 3D perspective",
     }.get(composition, "")
 
-
-
     # Detailed style strength descriptions with visual intensity hints
     strength_modifier = {
         "low": "subtle and understated",
         "medium": "balanced and expressive",
         "high": "bold, striking, and highly saturated",
     }.get(style_strength, "")
-    
+
     # Color strictness instructions for brand color enforcement
     color_instruction = ""
     if use_brand_colors and brand_colors:
@@ -191,7 +190,7 @@ def _build_prompt_and_settings(
             "high": f"Strictly adhere to this exact brand color palette: {color_hex_list}",
         }.get(color_strictness, f"Use these brand colors: {color_hex_list}")
         color_instruction = f"\n{strictness_guidance}"
-    
+
     # Negative prompt handling
     negative_instruction = ""
     if negative_prompt:
@@ -214,7 +213,7 @@ def _build_prompt_and_settings(
     if feedback_chain:
         feedback_template = load_prompt_template(
             "image_gemini_feedback_appendix.txt")
-        
+
         # Track which feedbacks have been applied (all except the last one)
         if len(feedback_chain) > 1:
             previous_feedback = feedback_chain[:-1]
@@ -223,10 +222,10 @@ def _build_prompt_and_settings(
             )
         else:
             previous_feedback_text = "(This is the first refinement)"
-        
+
         # The current/latest feedback to focus on
         numbered_feedback = f"1. {feedback_chain[-1]}"
-        
+
         prompt += "\n\n" + render_prompt_template(
             feedback_template,
             {
@@ -258,7 +257,8 @@ def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]
     )
     user_prompt = render_prompt_template(
         user_prompt_template,
-        {"feedback_chain_json": json.dumps(feedback_chain, ensure_ascii=False)},
+        {"feedback_chain_json": json.dumps(
+            feedback_chain, ensure_ascii=False)},
     )
 
     try:
@@ -320,11 +320,12 @@ def _try_gemini_generate(
 
         gemini_model = getattr(config, "GEMINI_IMAGE_MODEL",
                                "gemini-2.0-flash-exp-image-generation")
-        
+
         genai.configure(api_key=gemini_api_key)
-        
-        logger.info(f"Sending request to Gemini API (model={gemini_model}, aspect_ratio={aspect_ratio})...")
-        
+
+        logger.info(
+            f"Sending request to Gemini API (model={gemini_model}, aspect_ratio={aspect_ratio})...")
+
         model = genai.GenerativeModel(gemini_model)
         response = model.generate_images(
             prompt=prompt,
@@ -348,23 +349,24 @@ def _try_gemini_generate(
                 },
             ]
         )
-        
+
         logger.info(f"Gemini API response received")
-        
+
         if not response.images or len(response.images) == 0:
             return None, "", "", "Gemini API returned no images"
-        
+
         image = response.images[0]
-        image_bytes = image.read_bytes() if hasattr(image, 'read_bytes') else base64.b64decode(image._image_bytes)
+        image_bytes = image.read_bytes() if hasattr(
+            image, 'read_bytes') else base64.b64decode(image._image_bytes)
         mime_type = "image/png"
         out_ext = "png"
-        
+
         filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{out_ext}"
         logger.info(
             f"Gemini generated successfully ({len(image_bytes)} bytes, {mime_type})"
         )
         return image_bytes, mime_type, filename, None
-        
+
     except Exception as e:
         error_msg = f"Gemini generation error: {str(e)}"
         logger.warning(error_msg)
@@ -464,7 +466,7 @@ def _try_imagen_image_edit(
     reference_image_mime_type: Optional[str],
 ) -> Tuple[Optional[bytes], str, str, Optional[str]]:
     """Edit an existing image using Google Imagen 3 (inpainting/editing).
-    
+
     Args:
         base_prompt: Original generation prompt (without edits)
         edit_prompt: Full prompt with edit instructions

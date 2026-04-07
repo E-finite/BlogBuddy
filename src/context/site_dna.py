@@ -130,19 +130,23 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         # Always include landing, about, pricing if available
         if page_type in ["landing", "about", "pricing"]:
             selected.append(page)
-            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
+            selected_type_counts[page_type] = selected_type_counts.get(
+                page_type, 0) + 1
         # Include up to 3 service pages
         elif page_type == "service" and selected_type_counts.get("service", 0) < 3:
             selected.append(page)
-            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
+            selected_type_counts[page_type] = selected_type_counts.get(
+                page_type, 0) + 1
         # Include 1 FAQ if available
         elif page_type == "faq" and selected_type_counts.get("faq", 0) < 1:
             selected.append(page)
-            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
+            selected_type_counts[page_type] = selected_type_counts.get(
+                page_type, 0) + 1
         # Include up to 2 blogs
         elif page_type == "blog" and selected_type_counts.get("blog", 0) < 2:
             selected.append(page)
-            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
+            selected_type_counts[page_type] = selected_type_counts.get(
+                page_type, 0) + 1
 
         if len(selected) >= 15:
             break
