@@ -1065,21 +1065,19 @@ def list_context_sites():
     try:
         sites = db.get_user_context_sites(current_user.id)
 
-        # Enrich with site DNA info
+        # Enrich with site DNA info and include legacy sites without DNA.
         result = []
         for site in sites:
             from context.site_dna import get_site_dna
             dna = get_site_dna(site["id"], user_id=current_user.id)
 
-            # Only show sites that have DNA
-            if dna:
-                result.append({
-                    "id": site["id"],
-                    "baseUrl": site["base_url"],
-                    "createdAt": site["created_at"].isoformat() if site["created_at"] else None,
-                    "brandName": dna.get("brand_name", ""),
-                    "hasDna": True
-                })
+            result.append({
+                "id": site["id"],
+                "baseUrl": site["base_url"],
+                "createdAt": site["created_at"].isoformat() if site["created_at"] else None,
+                "brandName": dna.get("brand_name", "") if dna else "",
+                "hasDna": dna is not None
+            })
 
         return jsonify({"sites": result}), 200
 

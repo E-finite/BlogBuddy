@@ -77,7 +77,7 @@ def generate_site_dna(
             ],
             response_format={"type": "json_object"},
             temperature=0.3,  # Lower temperature for factual extraction
-            max_tokens=2000
+            max_completion_tokens=2000
         )
         content = response.choices[0].message.content
         dna = json.loads(content)
@@ -122,7 +122,7 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     # Take up to 15 pages, prioritizing different types
     selected = []
-    selected_types = set()
+    selected_type_counts: Dict[str, int] = {}
 
     for page in sorted_pages:
         page_type = page.get("page_type", "page")
@@ -130,19 +130,19 @@ def _select_priority_pages(pages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         # Always include landing, about, pricing if available
         if page_type in ["landing", "about", "pricing"]:
             selected.append(page)
-            selected_types.add(page_type)
+            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
         # Include up to 3 service pages
-        elif page_type == "service" and selected_types.count("service") < 3:
+        elif page_type == "service" and selected_type_counts.get("service", 0) < 3:
             selected.append(page)
-            selected_types.add(page_type)
+            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
         # Include 1 FAQ if available
-        elif page_type == "faq" and "faq" not in selected_types:
+        elif page_type == "faq" and selected_type_counts.get("faq", 0) < 1:
             selected.append(page)
-            selected_types.add("faq")
+            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
         # Include up to 2 blogs
-        elif page_type == "blog" and list(selected_types).count("blog") < 2:
+        elif page_type == "blog" and selected_type_counts.get("blog", 0) < 2:
             selected.append(page)
-            selected_types.add("blog")
+            selected_type_counts[page_type] = selected_type_counts.get(page_type, 0) + 1
 
         if len(selected) >= 15:
             break

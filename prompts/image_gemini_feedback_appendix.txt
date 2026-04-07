@@ -1,3 +1,14 @@
-### USER REFINEMENTS (REQUIRED):
-Apply ALL of the following refinements to the image:
+### ORIGINAL IMAGE GENERATION PROMPT:
+The image was originally generated based on this specification:
+{original_prompt}
+
+### IMAGE EDIT HISTORY:
+The following refinements have already been applied to the image in previous edits:
+{previous_feedback_applied}
+
+### CURRENT REFINEMENT (REQUIRED):
+Focus on applying ONLY the latest refinement(s) below while preserving all previous edits AND the original specifications.
+If no new refinement is specified, maintain the current image as-is with no changes.
+
+Apply the following refinement(s):
 {numbered_feedback_list}

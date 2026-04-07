@@ -1,4 +1,4 @@
-﻿"""Image generation and editing via Google Vertex AI Imagen."""
+﻿"""Image generation and editing via Google Vertex AI Imagen and Gemini."""
 import base64
 import logging
 import os
@@ -9,6 +9,7 @@ import requests
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.auth.exceptions import RefreshError
+import google.generativeai as genai
 from openai import OpenAI
 from src import config
 from src.prompt_templates import load_prompt_template, render_prompt_template
@@ -43,9 +44,9 @@ def generate_featured_image(
     """
     Generate or edit a featured image.
 
-    - Initial generation (no reference): Google Imagen on Vertex AI
+    - Initial generation (no reference): Google Gemini 2.0 Flash (primary) → Imagen (fallback)
     - Regeneration with reference image + feedback: Google Imagen edit model on Vertex AI
-    - Fallback: DALL-E 3
+    - Final fallback: DALL-E 3
 
     Returns:
         Tuple of (image_bytes, mime_type, filename, error_message)
@@ -60,7 +61,16 @@ def generate_featured_image(
     translated_feedback_chain = _translate_feedback_chain_to_english(
         feedback_chain)
 
-    prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
+    # Build base prompt (without feedback)
+    base_prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
+        topic=topic,
+        brand=brand,
+        image_settings=image_settings,
+        feedback_chain=[],  # No feedback yet
+    )
+
+    # Build final prompt with feedback for generation
+    prompt, _, _, _, _ = _build_prompt_and_settings(
         topic=topic,
         brand=brand,
         image_settings=image_settings,
@@ -82,7 +92,8 @@ def generate_featured_image(
         logger.info("Reference image detected; using Imagen image edit")
         result = _try_imagen_image_edit(
             topic=topic,
-            prompt=prompt,
+            base_prompt=base_prompt,
+            edit_prompt=prompt,
             variation_index=variation_index,
             reference_image_bytes=reference_image_bytes,
             reference_image_mime_type=reference_image_mime_type,
@@ -90,9 +101,15 @@ def generate_featured_image(
         if result[0]:
             return result
         logger.warning(
-            f"Imagen image edit failed, falling back to Imagen generation: {result[3]}")
+            f"Imagen image edit failed, falling back to Gemini/Imagen generation: {result[3]}")
 
-    # Initial generation (or fallback after failed edit) via Imagen
+    # Initial generation: try Gemini first (primary), then Imagen, then DALL-E 3
+    result = _try_gemini_generate(topic, prompt, aspect_ratio, variation_index)
+    if result[0]:
+        return result
+
+    logger.warning(
+        f"Gemini generation failed, falling back to Imagen: {result[3]}")
     result = _try_imagen_generate(topic, prompt, aspect_ratio, variation_index)
     if result[0]:
         return result
@@ -118,9 +135,18 @@ def _build_prompt_and_settings(
     aspect_ratio = image_settings.get("aspectRatio", "16:9")
     style_strength = image_settings.get("styleStrength", "medium")
     use_brand_colors = image_settings.get("useBrandColors", False)
-    brand_colors = brand.get("colors", [])
+    color_strictness = image_settings.get("colorStrictness", "medium")
+    
+    # Priority: custom brandColors from form > extracted from Site DNA
+    custom_brand_colors = image_settings.get("brandColors", "")
+    if custom_brand_colors:
+        brand_colors = [c.strip() for c in custom_brand_colors.split(",") if c.strip()]
+    else:
+        brand_colors = brand.get("colors", [])
+    
     composition = image_settings.get("composition", "auto")
     lighting = image_settings.get("lighting", "soft-studio")
+    negative_prompt = image_settings.get("negativePrompt", "")
 
     style_presets = {
         "minimal-tech": "Clean, minimalist, modern tech aesthetic with geometric shapes",
@@ -146,16 +172,30 @@ def _build_prompt_and_settings(
         "isometric": "isometric 3D perspective",
     }.get(composition, "")
 
+
+
+    # Detailed style strength descriptions with visual intensity hints
+    strength_modifier = {
+        "low": "subtle and understated",
+        "medium": "balanced and expressive",
+        "high": "bold, striking, and highly saturated",
+    }.get(style_strength, "")
+    
+    # Color strictness instructions for brand color enforcement
     color_instruction = ""
     if use_brand_colors and brand_colors:
         color_hex_list = ", ".join(brand_colors)
-        color_instruction = f"\nColor palette: {color_hex_list}"
-
-    strength_modifier = {
-        "low": "subtle",
-        "medium": "",
-        "high": "bold and striking",
-    }.get(style_strength, "")
+        strictness_guidance = {
+            "low": f"Use these colors as inspiration (not required): {color_hex_list}",
+            "medium": f"Incorporate these brand colors moderately: {color_hex_list}",
+            "high": f"Strictly adhere to this exact brand color palette: {color_hex_list}",
+        }.get(color_strictness, f"Use these brand colors: {color_hex_list}")
+        color_instruction = f"\n{strictness_guidance}"
+    
+    # Negative prompt handling
+    negative_instruction = ""
+    if negative_prompt:
+        negative_instruction = f"\nAvoid: {negative_prompt}"
 
     prompt_template = load_prompt_template("image_gemini_base_prompt.txt")
     prompt = render_prompt_template(
@@ -167,18 +207,33 @@ def _build_prompt_and_settings(
             "composition_desc": composition_desc,
             "lighting_desc": lighting_desc,
             "color_instruction": color_instruction,
+            "negative_instruction": negative_instruction,
         },
     )
 
     if feedback_chain:
         feedback_template = load_prompt_template(
             "image_gemini_feedback_appendix.txt")
-        numbered_feedback = "\n".join(
-            f"{i}. {feedback}" for i, feedback in enumerate(feedback_chain, 1)
-        )
+        
+        # Track which feedbacks have been applied (all except the last one)
+        if len(feedback_chain) > 1:
+            previous_feedback = feedback_chain[:-1]
+            previous_feedback_text = "\n".join(
+                f"{i}. {feedback}" for i, feedback in enumerate(previous_feedback, 1)
+            )
+        else:
+            previous_feedback_text = "(This is the first refinement)"
+        
+        # The current/latest feedback to focus on
+        numbered_feedback = f"1. {feedback_chain[-1]}"
+        
         prompt += "\n\n" + render_prompt_template(
             feedback_template,
-            {"numbered_feedback_list": numbered_feedback},
+            {
+                "original_prompt": prompt,  # Include the base prompt for context
+                "previous_feedback_applied": previous_feedback_text,
+                "numbered_feedback_list": numbered_feedback
+            },
         )
 
     return prompt, aspect_ratio, brand_colors, use_brand_colors, preset
@@ -195,10 +250,15 @@ def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]
         getattr(config, "OPENAI_TEXT_MODEL", "gpt-4o"),
     )
 
-    system_prompt = (
-        "You translate image editing feedback into concise, natural English. "
-        "Preserve intent exactly, do not add or remove details, and keep output usable as an image-edit instruction. "
-        "Return strict JSON only in this format: {\"translations\": [\"...\"]}."
+    system_prompt = load_prompt_template(
+        "image_feedback_translate_system_prompt.txt"
+    )
+    user_prompt_template = load_prompt_template(
+        "image_feedback_translate_user_prompt.txt"
+    )
+    user_prompt = render_prompt_template(
+        user_prompt_template,
+        {"feedback_chain_json": json.dumps(feedback_chain, ensure_ascii=False)},
     )
 
     try:
@@ -208,15 +268,12 @@ def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]
                 {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
-                    "content": (
-                        "Translate this list to English and keep the same order and number of items:\n"
-                        f"{json.dumps(feedback_chain, ensure_ascii=False)}"
-                    ),
+                    "content": user_prompt,
                 },
             ],
             response_format={"type": "json_object"},
             temperature=0,
-            max_tokens=600,
+            max_completion_tokens=600,
         )
 
         raw_content = (response.choices[0].message.content or "{}").strip()
@@ -246,7 +303,76 @@ def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]
 
 
 # ---------------------------------------------------------------------------
-# Google Imagen - initial generation
+# Google Gemini 2.0 Flash - primary image generation
+# ---------------------------------------------------------------------------
+
+def _try_gemini_generate(
+    topic: str,
+    prompt: str,
+    aspect_ratio: str,
+    variation_index: int,
+) -> Tuple[Optional[bytes], str, str, Optional[str]]:
+    """Generate an image with Google Gemini 2.0 Flash."""
+    try:
+        gemini_api_key = config.GEMINI_API_KEY
+        if not gemini_api_key:
+            return None, "", "", "GEMINI_API_KEY not configured"
+
+        gemini_model = getattr(config, "GEMINI_IMAGE_MODEL",
+                               "gemini-2.0-flash-exp-image-generation")
+        
+        genai.configure(api_key=gemini_api_key)
+        
+        logger.info(f"Sending request to Gemini API (model={gemini_model}, aspect_ratio={aspect_ratio})...")
+        
+        model = genai.GenerativeModel(gemini_model)
+        response = model.generate_images(
+            prompt=prompt,
+            number_of_images=1,
+            safety_settings=[
+                {
+                    "category": "HARM_CATEGORY_HARASSMENT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                },
+                {
+                    "category": "HARM_CATEGORY_HATE_SPEECH",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                },
+                {
+                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                },
+                {
+                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                    "threshold": "BLOCK_MEDIUM_AND_ABOVE",
+                },
+            ]
+        )
+        
+        logger.info(f"Gemini API response received")
+        
+        if not response.images or len(response.images) == 0:
+            return None, "", "", "Gemini API returned no images"
+        
+        image = response.images[0]
+        image_bytes = image.read_bytes() if hasattr(image, 'read_bytes') else base64.b64decode(image._image_bytes)
+        mime_type = "image/png"
+        out_ext = "png"
+        
+        filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{out_ext}"
+        logger.info(
+            f"Gemini generated successfully ({len(image_bytes)} bytes, {mime_type})"
+        )
+        return image_bytes, mime_type, filename, None
+        
+    except Exception as e:
+        error_msg = f"Gemini generation error: {str(e)}"
+        logger.warning(error_msg)
+        return None, "", "", error_msg
+
+
+# ---------------------------------------------------------------------------
+# Google Imagen - fallback image generation
 # ---------------------------------------------------------------------------
 
 def _try_imagen_generate(
@@ -331,12 +457,18 @@ def _try_imagen_generate(
 
 def _try_imagen_image_edit(
     topic: str,
-    prompt: str,
+    base_prompt: str,
+    edit_prompt: str,
     variation_index: int,
     reference_image_bytes: bytes,
     reference_image_mime_type: Optional[str],
 ) -> Tuple[Optional[bytes], str, str, Optional[str]]:
-    """Edit an existing image using Google Imagen 3 (inpainting/editing)."""
+    """Edit an existing image using Google Imagen 3 (inpainting/editing).
+    
+    Args:
+        base_prompt: Original generation prompt (without edits)
+        edit_prompt: Full prompt with edit instructions
+    """
     if _VERTEX_AUTH_BROKEN:
         return None, "", "", f"Vertex auth unavailable: {_VERTEX_AUTH_ERROR}"
 
@@ -359,7 +491,7 @@ def _try_imagen_image_edit(
             {
                 "instances": [
                     {
-                        "prompt": prompt,
+                        "prompt": edit_prompt,
                         "referenceImages": [
                             {
                                 "referenceType": "REFERENCE_TYPE_RAW",
@@ -381,7 +513,7 @@ def _try_imagen_image_edit(
             {
                 "instances": [
                     {
-                        "prompt": prompt,
+                        "prompt": edit_prompt,
                         "image": {
                             "bytesBase64Encoded": image_b64,
                             "mimeType": mime_type,

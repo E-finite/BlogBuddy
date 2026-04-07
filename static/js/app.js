@@ -533,6 +533,7 @@ function initGeneratePost() {
   const contextStatusDiv = document.getElementById('context-status');
   const crawlBtn = document.getElementById('crawl-context-btn');
   const existingSitesSection = document.getElementById('existing-sites-section');
+  const existingSitesDivider = document.getElementById('existing-sites-divider');
   const existingSiteSelect = document.getElementById('existingSiteSelect');
   
   let contextSiteId = null;
@@ -546,23 +547,33 @@ function initGeneratePost() {
       const data = await response.json();
       if (data.sites && data.sites.length > 0) {
         existingSitesSection.style.display = 'block';
+        if (existingSitesDivider) {
+          existingSitesDivider.style.display = 'block';
+        }
         
         // Clear existing options except first
         existingSiteSelect.innerHTML = '<option value="">-- Kies een website --</option>';
         
-        // Add sites to dropdown (only sites with DNA are returned from API)
+        // Add sites to dropdown and indicate whether Site DNA is available.
         data.sites.forEach(site => {
           const option = document.createElement('option');
           option.value = site.id;
-          option.textContent = `${site.brandName || site.baseUrl} ✓`;
+          const label = site.brandName || site.baseUrl;
+          option.textContent = site.hasDna ? `${label} ✓` : `${label} (zonder DNA)`;
           existingSiteSelect.appendChild(option);
         });
-        
-        console.log(`Loaded ${data.sites.length} sites with DNA`);
+
+        console.log(`Loaded ${data.sites.length} context sites`);
       } else {
-        console.log('No sites with DNA found');
+        if (existingSitesDivider) {
+          existingSitesDivider.style.display = 'none';
+        }
+        console.log('No context sites found');
       }
     } catch (error) {
+      if (existingSitesDivider) {
+        existingSitesDivider.style.display = 'none';
+      }
       console.error('Error loading context sites:', error);
     }
   }
@@ -598,6 +609,27 @@ function initGeneratePost() {
         contextSiteId = null;
       }
     });
+  }
+
+  // Restore initial UI state (e.g., browser auto-fill or persisted selection)
+  function syncContextUiState() {
+    if (!contextUrlInput || !crawlBtn || !contextStatusDiv) {
+      return;
+    }
+
+    const hasUrl = Boolean(contextUrlInput.value.trim());
+    const selectedSiteId = existingSiteSelect ? existingSiteSelect.value : '';
+
+    if (hasUrl) {
+      crawlBtn.style.display = 'block';
+    }
+
+    if (selectedSiteId && confirmSiteBtn) {
+      confirmSiteBtn.style.display = 'block';
+      confirmSiteBtn.disabled = false;
+      confirmSiteBtn.textContent = '✓ Gebruik deze website';
+      crawlBtn.style.display = 'none';
+    }
   }
   
   // Handle site confirmation
@@ -744,6 +776,8 @@ function initGeneratePost() {
       }
     });
   }
+
+  syncContextUiState();
   
   // Crawl website for context
   if (crawlBtn) {

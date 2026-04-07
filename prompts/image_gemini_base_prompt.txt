@@ -2,11 +2,10 @@ Create a professional blog header image about: {topic}
 
 Style: {style_desc} {strength_modifier}
 {composition_desc}
-Lighting: {lighting_desc}{color_instruction}
+Lighting: {lighting_desc}{color_instruction}{negative_instruction}
 
 Requirements:
-- No text or logos
-- Professional and visually appealing
 - Suitable for business blog featured image
 - High resolution
 - Modern aesthetic
+- Optimized for web display (crisp, clear details)

@@ -34,10 +34,8 @@ def generate_post_content(
     if form_data is None:
         form_data = {}
 
-    # NIEUW: Zorg dat deze variabelen beschikbaar zijn vanuit je formulier data
-    # Als ze leeg zijn, vallen we terug op een generieke waarde
+    # Optional invalshoek vanuit formulier data
     current_angle = form_data.get('angle', 'Uitgebreide gids met tips')
-    specific_question = form_data.get('customer_question', '')
 
     # Build website context section from template
     website_context_section = ""
@@ -71,24 +69,12 @@ def generate_post_content(
         },
     )
 
-    # Hier voegen we de specifieke sturing toe in de user prompt
-    context_injection = ""
-    if specific_question:
-        context_injection_template = load_prompt_template(
-            "text_openai_context_injection.txt"
-        )
-        context_injection = render_prompt_template(
-            context_injection_template,
-            {"specific_question": specific_question},
-        )
-
     user_prompt_template = load_prompt_template("text_openai_user_prompt.txt")
     user_prompt = render_prompt_template(
         user_prompt_template,
         {
             "topic": topic,
             "current_angle": current_angle,
-            "context_injection": context_injection,
             "pain_points": ", ".join(audience.get("painPoints", [])),
         },
     )
@@ -102,7 +88,7 @@ def generate_post_content(
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=3000
+            max_completion_tokens=3000
         )
 
         content = response.choices[0].message.content
@@ -130,20 +116,17 @@ def generate_post_content(
 
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON from OpenAI: {e}")
-        # Retry once with stricter instruction
-        logger.info("Retrying with stricter JSON instruction...")
-        retry_instruction = load_prompt_template(
-            "text_openai_retry_appendix.txt")
-        retry_prompt = user_prompt + f"\n\n{retry_instruction}"
+        # Retry once with the same prompt and a lower temperature.
+        logger.info("Retrying generation with lower temperature...")
         response = client.chat.completions.create(
             model=config.OPENAI_TEXT_MODEL,
             messages=[
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": retry_prompt}
+                {"role": "user", "content": user_prompt}
             ],
             response_format={"type": "json_object"},
             temperature=0.5,
-            max_tokens=3000
+            max_completion_tokens=3000
         )
         content = response.choices[0].message.content
         result = json.loads(content)

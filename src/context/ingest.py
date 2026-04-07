@@ -206,6 +206,7 @@ def ingest_website(
 
     # Step 3: Generate Site DNA
     logger.info("Step 3/4: Generating Site DNA...")
+    site_dna_error = None
     try:
         # Get unique colors (most common ones first)
         from collections import Counter
@@ -220,6 +221,7 @@ def ingest_website(
     except Exception as e:
         logger.error(f"Error generating Site DNA: {e}")
         site_dna = None
+        site_dna_error = str(e)
 
     logger.info("Step 4/4: Ingest complete")
 
@@ -229,6 +231,7 @@ def ingest_website(
         "pages_stored": pages_stored,
         "chunks_stored": chunks_stored,
         "site_dna_generated": site_dna is not None,
+        "site_dna_error": site_dna_error,
         "completed_at": datetime.utcnow().isoformat()
     }
 
