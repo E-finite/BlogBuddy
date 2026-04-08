@@ -3,13 +3,14 @@ import base64
 import logging
 import os
 import json
+import re
 from typing import Tuple, Optional, Dict, Any
 
 import requests
 import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 from google.auth.exceptions import RefreshError
-import google.generativeai as genai
+from google import genai
 from openai import OpenAI
 from src import config
 from src.prompt_templates import load_prompt_template, render_prompt_template
@@ -28,6 +29,30 @@ _IMAGEN_ASPECT_MAP = {
     "9:16": "9:16",
     "3:4": "3:4",
     "4:3": "4:3",
+}
+
+_TEXT_REQUEST_HINTS = (
+    "text",
+    "headline",
+    "title",
+    "caption",
+    "quote",
+    "slogan",
+    "tagline",
+    "typography",
+    "poster",
+    "flyer",
+    "banner",
+    "sign",
+    "label",
+)
+
+_GEMINI_IMAGE_MODEL_ALIASES = {
+    "gemini-3.0-pro-image-latest": "gemini-3-pro-image-preview",
+    "gemini-3-pro-image-latest": "gemini-3-pro-image-preview",
+    "gemini-3.0-pro-image-preview": "gemini-3-pro-image-preview",
+    "gemini-2.0-flash-exp-image-generation": "gemini-2.5-flash-image",
+    "gemini-2.0-flash-exp": "gemini-2.5-flash-image",
 }
 
 
@@ -89,7 +114,21 @@ def generate_featured_image(
             f"Translated feedback chain (EN): {translated_feedback_chain}")
 
     if reference_image_bytes:
-        logger.info("Reference image detected; using Imagen image edit")
+        # Preferred path: Gemini 3 Pro with reference image for high-fidelity editing
+        logger.info("Reference image detected; trying Gemini image edit first")
+        result = _try_gemini_generate(
+            topic,
+            prompt,
+            aspect_ratio,
+            variation_index,
+            reference_image_bytes=reference_image_bytes,
+            reference_image_mime_type=reference_image_mime_type,
+        )
+        if result[0]:
+            return result
+        logger.warning(
+            f"Gemini image edit failed, falling back to Imagen image edit: {result[3]}")
+
         result = _try_imagen_image_edit(
             topic=topic,
             base_prompt=base_prompt,
@@ -103,7 +142,7 @@ def generate_featured_image(
         logger.warning(
             f"Imagen image edit failed, falling back to Gemini/Imagen generation: {result[3]}")
 
-    # Initial generation: try Gemini first (primary), then Imagen, then DALL-E 3
+    # Initial generation (or last resort after edit failures): Gemini → Imagen → DALL-E 3
     result = _try_gemini_generate(topic, prompt, aspect_ratio, variation_index)
     if result[0]:
         return result
@@ -148,6 +187,11 @@ def _build_prompt_and_settings(
     composition = image_settings.get("composition", "auto")
     lighting = image_settings.get("lighting", "soft-studio")
     negative_prompt = image_settings.get("negativePrompt", "")
+    text_requested = _prompt_requests_visible_text(topic, feedback_chain)
+    negative_prompt = _sanitize_negative_prompt(
+        negative_prompt,
+        allow_visible_text=text_requested,
+    )
 
     style_presets = {
         "minimal-tech": "Clean, minimalist, modern tech aesthetic with geometric shapes",
@@ -196,6 +240,11 @@ def _build_prompt_and_settings(
     if negative_prompt:
         negative_instruction = f"\nAvoid: {negative_prompt}"
 
+    text_instruction = _build_text_rendering_instruction(
+        topic=topic,
+        feedback_chain=feedback_chain,
+    )
+
     prompt_template = load_prompt_template("image_gemini_base_prompt.txt")
     prompt = render_prompt_template(
         prompt_template,
@@ -205,6 +254,7 @@ def _build_prompt_and_settings(
             "strength_modifier": strength_modifier,
             "composition_desc": composition_desc,
             "lighting_desc": lighting_desc,
+            "text_instruction": text_instruction,
             "color_instruction": color_instruction,
             "negative_instruction": negative_instruction,
         },
@@ -236,6 +286,64 @@ def _build_prompt_and_settings(
         )
 
     return prompt, aspect_ratio, brand_colors, use_brand_colors, preset
+
+
+def _extract_quoted_text(value: str) -> list[str]:
+    return [
+        match.group(1).strip()
+        for match in re.finditer(r'["“”]([^"“”]{2,80})["“”]', value or "")
+        if match.group(1).strip()
+    ]
+
+
+def _prompt_requests_visible_text(topic: str, feedback_chain: list[str]) -> bool:
+    combined_parts = [topic, *feedback_chain]
+    combined_text = " ".join(part for part in combined_parts if part).lower()
+    if any(hint in combined_text for hint in _TEXT_REQUEST_HINTS):
+        return True
+    return bool(_extract_quoted_text(" ".join(part for part in combined_parts if part)))
+
+
+def _sanitize_negative_prompt(negative_prompt: str, *, allow_visible_text: bool) -> str:
+    if not negative_prompt or not allow_visible_text:
+        return negative_prompt
+
+    cleaned_terms = []
+    for term in negative_prompt.split(","):
+        normalized = term.strip()
+        normalized_lower = normalized.lower()
+        if not normalized:
+            continue
+        if "text overlay" in normalized_lower or "overlay text" in normalized_lower:
+            continue
+        cleaned_terms.append(normalized)
+    return ", ".join(cleaned_terms)
+
+
+def _build_text_rendering_instruction(topic: str, feedback_chain: list[str]) -> str:
+    combined_parts = [topic, *feedback_chain]
+    quoted_text = []
+    for part in combined_parts:
+        for item in _extract_quoted_text(part):
+            if item not in quoted_text:
+                quoted_text.append(item)
+
+    lines = []
+    if quoted_text:
+        exact_text = ", ".join(f'"{item}"' for item in quoted_text)
+        lines.append(
+            f"If the image includes visible text, render this text exactly as written: {exact_text}."
+        )
+    else:
+        lines.append(
+            "If the image includes visible text, render the requested words exactly as specified."
+        )
+
+    lines.append(
+        "Use a bold sans-serif font for short display text, with clean spacing, strong contrast, and consistent alignment."
+    )
+    lines.append("Ensure all text is legible and correctly spelt.")
+    return "\n".join(lines)
 
 
 def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]:
@@ -303,7 +411,7 @@ def _translate_feedback_chain_to_english(feedback_chain: list[str]) -> list[str]
 
 
 # ---------------------------------------------------------------------------
-# Google Gemini 2.0 Flash - primary image generation
+# Google Gemini image generation
 # ---------------------------------------------------------------------------
 
 def _try_gemini_generate(
@@ -311,26 +419,42 @@ def _try_gemini_generate(
     prompt: str,
     aspect_ratio: str,
     variation_index: int,
+    reference_image_bytes: Optional[bytes] = None,
+    reference_image_mime_type: Optional[str] = None,
 ) -> Tuple[Optional[bytes], str, str, Optional[str]]:
-    """Generate an image with Google Gemini 2.0 Flash."""
+    """Generate or edit an image with Google Gemini image models via the Gen AI SDK.
+
+    When *reference_image_bytes* is provided the reference image is included in
+    the request so Gemini treats the call as an image-edit / refinement rather
+    than a fresh generation.
+    """
     try:
         gemini_api_key = config.GEMINI_API_KEY
         if not gemini_api_key:
             return None, "", "", "GEMINI_API_KEY not configured"
 
-        gemini_model = getattr(config, "GEMINI_IMAGE_MODEL",
-                               "gemini-2.0-flash-exp-image-generation")
+        requested_model = getattr(
+            config,
+            "GEMINI_IMAGE_MODEL",
+            "gemini-3-pro-image-preview",
+        )
+        gemini_model = _resolve_gemini_image_model(requested_model)
+        image_size = _resolve_gemini_image_size(gemini_model)
 
-        genai.configure(api_key=gemini_api_key)
+        if gemini_model != requested_model:
+            logger.info(
+                f"Resolved Gemini image model alias: {requested_model} -> {gemini_model}"
+            )
 
         logger.info(
             f"Sending request to Gemini API (model={gemini_model}, aspect_ratio={aspect_ratio})...")
 
-        model = genai.GenerativeModel(gemini_model)
-        response = model.generate_images(
-            prompt=prompt,
-            number_of_images=1,
-            safety_settings=[
+        response_config = {
+            "response_modalities": ["IMAGE"],
+            "image_config": {
+                "aspect_ratio": aspect_ratio,
+            },
+            "safety_settings": [
                 {
                     "category": "HARM_CATEGORY_HARASSMENT",
                     "threshold": "BLOCK_MEDIUM_AND_ABOVE",
@@ -347,19 +471,42 @@ def _try_gemini_generate(
                     "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
                     "threshold": "BLOCK_MEDIUM_AND_ABOVE",
                 },
-            ]
+            ],
+        }
+        if image_size:
+            response_config["image_config"]["image_size"] = image_size
+
+        from google.genai import types as genai_types
+
+        contents: list = [prompt]
+        if reference_image_bytes:
+            ref_mime = reference_image_mime_type or "image/jpeg"
+            contents.append(
+                genai_types.Part.from_bytes(
+                    data=reference_image_bytes,
+                    mime_type=ref_mime,
+                )
+            )
+            logger.info(
+                f"Including reference image ({len(reference_image_bytes)} bytes, {ref_mime}) in Gemini request"
+            )
+
+        client = genai.Client(api_key=gemini_api_key)
+        response = client.models.generate_content(
+            model=gemini_model,
+            contents=contents,
+            config=response_config,
         )
 
         logger.info(f"Gemini API response received")
 
-        if not response.images or len(response.images) == 0:
-            return None, "", "", "Gemini API returned no images"
+        image_bytes, mime_type = _extract_gemini_image_bytes(response)
+        if not image_bytes:
+            text_detail = _extract_gemini_text(response)
+            detail_suffix = f" Response text: {text_detail}" if text_detail else ""
+            return None, "", "", f"Gemini API returned no images.{detail_suffix}"
 
-        image = response.images[0]
-        image_bytes = image.read_bytes() if hasattr(
-            image, 'read_bytes') else base64.b64decode(image._image_bytes)
-        mime_type = "image/png"
-        out_ext = "png"
+        out_ext = _extension_for_mime_type(mime_type)
 
         filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{out_ext}"
         logger.info(
@@ -371,6 +518,64 @@ def _try_gemini_generate(
         error_msg = f"Gemini generation error: {str(e)}"
         logger.warning(error_msg)
         return None, "", "", error_msg
+
+
+def _resolve_gemini_image_model(model_name: str) -> str:
+    normalized = (model_name or "").strip()
+    if not normalized:
+        return "gemini-3-pro-image-preview"
+    return _GEMINI_IMAGE_MODEL_ALIASES.get(normalized, normalized)
+
+
+def _resolve_gemini_image_size(model_name: str) -> Optional[str]:
+    configured_size = (getattr(config, "GEMINI_IMAGE_SIZE", "") or "").strip()
+    if configured_size:
+        return configured_size
+    if model_name == "gemini-3-pro-image-preview":
+        return "2K"
+    return None
+
+
+def _response_parts(response: Any) -> list[Any]:
+    if getattr(response, "parts", None):
+        return list(response.parts)
+
+    parts = []
+    for candidate in getattr(response, "candidates", []) or []:
+        content = getattr(candidate, "content", None)
+        if getattr(content, "parts", None):
+            parts.extend(content.parts)
+    return parts
+
+
+def _extract_gemini_image_bytes(response: Any) -> Tuple[Optional[bytes], str]:
+    for part in _response_parts(response):
+        if getattr(part, "thought", False):
+            continue
+
+        inline_data = getattr(part, "inline_data", None)
+        if not inline_data:
+            continue
+
+        mime_type = getattr(inline_data, "mime_type", None) or getattr(inline_data, "mimetype", None) or "image/png"
+        data = getattr(inline_data, "data", None)
+        if isinstance(data, bytes) and data:
+            return data, mime_type
+        if isinstance(data, str) and data:
+            return base64.b64decode(data), mime_type
+
+    return None, ""
+
+
+def _extract_gemini_text(response: Any) -> str:
+    text_parts = []
+    for part in _response_parts(response):
+        if getattr(part, "thought", False):
+            continue
+        text = getattr(part, "text", None)
+        if text:
+            text_parts.append(text.strip())
+    return " ".join(text_parts).strip()
 
 
 # ---------------------------------------------------------------------------

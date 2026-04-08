@@ -213,7 +213,8 @@ MASTER_KEY (32+ chars)
 APP_HOST = "0.0.0.0"
 APP_PORT = 5000
 OPENAI_TEXT_MODEL = "gpt-4o"
-GEMINI_IMAGE_MODEL = "gemini-2.0-flash-exp"
+GEMINI_IMAGE_MODEL = "gemini-3-pro-image-preview"
+GEMINI_IMAGE_SIZE = "2K"
 ```
 
 ## 📈 Performance

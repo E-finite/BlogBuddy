@@ -920,7 +920,7 @@ function initGeneratePost() {
         lighting: formData.get('lighting') || 'soft-studio',
         lockSeed: formData.get('lockSeed') === 'on',
         seedValue: formData.get('seedValue') ? parseInt(formData.get('seedValue')) : null,
-        negativePrompt: formData.get('negativePrompt') || 'blurry, low quality, watermark, text overlay, jpeg artifacts, deformed, pixelated',
+        negativePrompt: formData.get('negativePrompt') || 'blurry, low quality, watermark, jpeg artifacts, deformed, pixelated',
         variations: parseInt(formData.get('variations')) || 1,
       },
       multilang: {

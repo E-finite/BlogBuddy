@@ -2,7 +2,10 @@ Create a professional blog header image about: {topic}
 
 Style: {style_desc} {strength_modifier}
 {composition_desc}
-Lighting: {lighting_desc}{color_instruction}{negative_instruction}
+Lighting: {lighting_desc}
+
+Text handling:
+{text_instruction}{color_instruction}{negative_instruction}
 
 Requirements:
 - Suitable for business blog featured image

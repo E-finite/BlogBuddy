@@ -4,6 +4,7 @@ Basic tests to verify app structure and imports
 
 from src.context.ingest import _upsert_scraped_page
 from src.db import _delete_context_site_related_data
+from src.generator.image_gemini import _build_prompt_and_settings, _resolve_gemini_image_model
 
 
 def test_app_imports():
@@ -94,3 +95,30 @@ def test_delete_context_site_related_data_uses_child_first_order():
     assert cursor.calls[0][1] == (7, 30)
     assert cursor.calls[1][1] == (7, 30)
     assert cursor.calls[2][1] == (7, 30)
+
+
+def test_image_prompt_preserves_text_quality_instructions():
+    """Text-focused prompts should keep typography guidance and drop conflicting negatives."""
+
+    prompt, *_ = _build_prompt_and_settings(
+        topic='A poster with the text "Exact Text Here" in bold sans-serif font',
+        brand={},
+        image_settings={
+            'negativePrompt': 'blurry, text overlay, watermark',
+        },
+        feedback_chain=[],
+    )
+
+    assert 'render this text exactly as written: "Exact Text Here".' in prompt
+    assert 'Use a bold sans-serif font for short display text' in prompt
+    assert 'Ensure all text is legible and correctly spelt.' in prompt
+    assert 'Avoid: blurry, watermark' in prompt
+    assert 'text overlay' not in prompt
+
+
+def test_gemini_model_aliases_resolve_to_supported_models():
+    """Legacy or informal Gemini image model names should map to supported API models."""
+
+    assert _resolve_gemini_image_model('gemini-3.0-pro-image-latest') == 'gemini-3-pro-image-preview'
+    assert _resolve_gemini_image_model('gemini-2.0-flash-exp-image-generation') == 'gemini-2.5-flash-image'
+    assert _resolve_gemini_image_model('gemini-3-pro-image-preview') == 'gemini-3-pro-image-preview'

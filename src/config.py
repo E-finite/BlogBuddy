@@ -102,8 +102,9 @@ IMAGEN_MODEL = os.getenv("IMAGEN_MODEL", "imagen-3.0-generate-002")
 IMAGEN_EDIT_MODEL = os.getenv("IMAGEN_EDIT_MODEL", "imagen-3.0-capability-001")
 GEMINI_IMAGE_MODEL = os.getenv(
     "GEMINI_IMAGE_MODEL",
-    "gemini-2.0-flash-exp-image-generation",
+    "gemini-3-pro-image-preview",
 )
+GEMINI_IMAGE_SIZE = os.getenv("GEMINI_IMAGE_SIZE", "")
 
 # Optional logging level
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
