@@ -44,20 +44,6 @@ load_dotenv(_ROOT_DIR / ".env")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 
-# Vertex AI auth/config
-VERTEX_PROJECT_ID = os.getenv("VERTEX_PROJECT_ID", "your-gcp-project-id")
-VERTEX_LOCATION = os.getenv("VERTEX_LOCATION", "us-central1")
-STRICT_VERTEX_STARTUP_CHECK = _to_bool(
-    os.getenv("STRICT_VERTEX_STARTUP_CHECK"),
-    default=False,
-)
-
-# Ensure google-auth can discover service account from env.
-if os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
-        "GOOGLE_APPLICATION_CREDENTIALS", ""
-    )
-
 # Database
 MYSQL_HOST = os.getenv("MYSQL_HOST", "127.0.0.1")
 MYSQL_PORT = _to_int(os.getenv("MYSQL_PORT"), 3306)
@@ -98,8 +84,6 @@ MAIL_USE_SSL = _to_bool(os.getenv("MAIL_USE_SSL"), default=False)
 # Models
 OPENAI_TEXT_MODEL = os.getenv("OPENAI_TEXT_MODEL", "gpt-4o")
 OPENAI_TRANSLATION_MODEL = os.getenv("OPENAI_TRANSLATION_MODEL", "gpt-4o-mini")
-IMAGEN_MODEL = os.getenv("IMAGEN_MODEL", "imagen-3.0-generate-002")
-IMAGEN_EDIT_MODEL = os.getenv("IMAGEN_EDIT_MODEL", "imagen-3.0-capability-001")
 GEMINI_IMAGE_MODEL = os.getenv(
     "GEMINI_IMAGE_MODEL",
     "gemini-3-pro-image-preview",

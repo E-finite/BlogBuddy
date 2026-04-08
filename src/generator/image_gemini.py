@@ -1,15 +1,10 @@
-﻿"""Image generation and editing via Google Vertex AI Imagen and Gemini."""
+"""Image generation and editing via Google Gemini image models."""
 import base64
 import logging
-import os
 import json
 import re
 from typing import Tuple, Optional, Dict, Any
 
-import requests
-import google.auth
-from google.auth.transport.requests import Request as GoogleAuthRequest
-from google.auth.exceptions import RefreshError
 from google import genai
 from openai import OpenAI
 from src import config
@@ -17,19 +12,6 @@ from src.prompt_templates import load_prompt_template, render_prompt_template
 
 logger = logging.getLogger(__name__)
 _openai_client = OpenAI(api_key=config.OPENAI_API_KEY)
-
-_VERTEX_SCOPE = "https://www.googleapis.com/auth/cloud-platform"
-_VERTEX_AUTH_BROKEN = False
-_VERTEX_AUTH_ERROR = ""
-
-# Aspect ratios supported by Imagen
-_IMAGEN_ASPECT_MAP = {
-    "1:1": "1:1",
-    "16:9": "16:9",
-    "9:16": "9:16",
-    "3:4": "3:4",
-    "4:3": "4:3",
-}
 
 _TEXT_REQUEST_HINTS = (
     "text",
@@ -67,11 +49,9 @@ def generate_featured_image(
     reference_image_mime_type: Optional[str] = None,
 ) -> Tuple[Optional[bytes], str, str, Optional[str]]:
     """
-    Generate or edit a featured image.
+    Generate or edit a featured image via Gemini 3 Pro Image Preview.
 
-    - Initial generation (no reference): Google Gemini 2.0 Flash (primary) → Imagen (fallback)
-    - Regeneration with reference image + feedback: Google Imagen edit model on Vertex AI
-    - Final fallback: DALL-E 3
+    Both initial generation and feedback-based regeneration use Gemini exclusively.
 
     Returns:
         Tuple of (image_bytes, mime_type, filename, error_message)
@@ -86,16 +66,8 @@ def generate_featured_image(
     translated_feedback_chain = _translate_feedback_chain_to_english(
         feedback_chain)
 
-    # Build base prompt (without feedback)
-    base_prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
-        topic=topic,
-        brand=brand,
-        image_settings=image_settings,
-        feedback_chain=[],  # No feedback yet
-    )
-
-    # Build final prompt with feedback for generation
-    prompt, _, _, _, _ = _build_prompt_and_settings(
+    # Build final prompt (with feedback when present)
+    prompt, aspect_ratio, brand_colors, use_brand_colors, preset = _build_prompt_and_settings(
         topic=topic,
         brand=brand,
         image_settings=image_settings,
@@ -114,49 +86,16 @@ def generate_featured_image(
             f"Translated feedback chain (EN): {translated_feedback_chain}")
 
     if reference_image_bytes:
-        # Preferred path: Gemini 3 Pro with reference image for high-fidelity editing
-        logger.info("Reference image detected; trying Gemini image edit first")
-        result = _try_gemini_generate(
-            topic,
-            prompt,
-            aspect_ratio,
-            variation_index,
-            reference_image_bytes=reference_image_bytes,
-            reference_image_mime_type=reference_image_mime_type,
-        )
-        if result[0]:
-            return result
-        logger.warning(
-            f"Gemini image edit failed, falling back to Imagen image edit: {result[3]}")
+        logger.info("Reference image detected; using Gemini image edit")
 
-        result = _try_imagen_image_edit(
-            topic=topic,
-            base_prompt=base_prompt,
-            edit_prompt=prompt,
-            variation_index=variation_index,
-            reference_image_bytes=reference_image_bytes,
-            reference_image_mime_type=reference_image_mime_type,
-        )
-        if result[0]:
-            return result
-        logger.warning(
-            f"Imagen image edit failed, falling back to Gemini/Imagen generation: {result[3]}")
-
-    # Initial generation (or last resort after edit failures): Gemini → Imagen → DALL-E 3
-    result = _try_gemini_generate(topic, prompt, aspect_ratio, variation_index)
-    if result[0]:
-        return result
-
-    logger.warning(
-        f"Gemini generation failed, falling back to Imagen: {result[3]}")
-    result = _try_imagen_generate(topic, prompt, aspect_ratio, variation_index)
-    if result[0]:
-        return result
-
-    logger.warning(
-        f"Imagen generation failed, falling back to DALL-E 3: {result[3]}")
-    dalle_size = _aspect_to_dalle_size(aspect_ratio)
-    return _try_dalle3_image(topic, prompt, dalle_size, variation_index)
+    return _try_gemini_generate(
+        topic,
+        prompt,
+        aspect_ratio,
+        variation_index,
+        reference_image_bytes=reference_image_bytes,
+        reference_image_mime_type=reference_image_mime_type,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -291,7 +230,7 @@ def _build_prompt_and_settings(
 def _extract_quoted_text(value: str) -> list[str]:
     return [
         match.group(1).strip()
-        for match in re.finditer(r'["“”]([^"“”]{2,80})["“”]', value or "")
+        for match in re.finditer(r'["��]([^"��]{2,80})["��]', value or "")
         if match.group(1).strip()
     ]
 
@@ -580,427 +519,8 @@ def _extract_gemini_text(response: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Google Imagen - fallback image generation
-# ---------------------------------------------------------------------------
-
-def _try_imagen_generate(
-    topic: str,
-    prompt: str,
-    aspect_ratio: str,
-    variation_index: int,
-) -> Tuple[Optional[bytes], str, str, Optional[str]]:
-    """Generate an image with Google Imagen 3."""
-    if _VERTEX_AUTH_BROKEN:
-        return None, "", "", f"Vertex auth unavailable: {_VERTEX_AUTH_ERROR}"
-
-    try:
-        imagen_aspect = _IMAGEN_ASPECT_MAP.get(aspect_ratio, "16:9")
-        imagen_model = getattr(config, "IMAGEN_MODEL",
-                               "imagen-3.0-generate-002")
-        url = _vertex_predict_url(imagen_model)
-        headers = _vertex_auth_headers()
-        payload = {
-            "instances": [{"prompt": prompt}],
-            "parameters": {
-                "sampleCount": 1,
-                "aspectRatio": imagen_aspect,
-                "safetyFilterLevel": "block_some",
-                "personGeneration": "allow_adult",
-            },
-        }
-        logger.info(
-            f"Sending request to Vertex Imagen API (model={imagen_model}, aspectRatio={imagen_aspect})..."
-        )
-        response = requests.post(url, headers=headers,
-                                 json=payload, timeout=120)
-        logger.info(f"Imagen API response status: {response.status_code}")
-
-        if response.status_code != 200:
-            error_detail = response.text[:1000] if response.text else "No error details"
-            error_msg = f"Imagen API error {response.status_code}"
-            logger.error(f"{error_msg}: {error_detail}")
-            try:
-                error_json = response.json()
-                if "error" in error_json:
-                    msg = error_json["error"].get("message", "")
-                    if msg:
-                        error_msg = f"Imagen: {msg}"
-            except Exception:
-                pass
-            return None, "", "", error_msg
-
-        result = response.json()
-        predictions = result.get("predictions") or []
-        if not predictions:
-            error_msg = "Imagen: no predictions in response"
-            logger.warning(error_msg)
-            return None, "", "", error_msg
-
-        encoded = predictions[0].get("bytesBase64Encoded")
-        if not encoded:
-            error_msg = "Imagen: no bytesBase64Encoded in prediction"
-            logger.warning(error_msg)
-            return None, "", "", error_msg
-
-        image_bytes = base64.b64decode(encoded)
-        mime_type = predictions[0].get("mimeType", "image/png")
-        ext = _extension_for_mime_type(mime_type)
-        filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{ext}"
-        logger.info(
-            f"Imagen image generated successfully ({len(image_bytes)} bytes, {mime_type})")
-        return image_bytes, mime_type, filename, None
-
-    except Exception as e:
-        error_msg = f"Exception during Imagen generation: {str(e)}"
-        if error_msg.startswith("Exception during Imagen generation: Vertex auth failed"):
-            logger.warning(error_msg)
-        else:
-            logger.warning(error_msg, exc_info=True)
-        return None, "", "", error_msg
-
-
-# ---------------------------------------------------------------------------
-# Imagen image editing - regeneration
-# ---------------------------------------------------------------------------
-
-def _try_imagen_image_edit(
-    topic: str,
-    base_prompt: str,
-    edit_prompt: str,
-    variation_index: int,
-    reference_image_bytes: bytes,
-    reference_image_mime_type: Optional[str],
-) -> Tuple[Optional[bytes], str, str, Optional[str]]:
-    """Edit an existing image using Google Imagen 3 (inpainting/editing).
-
-    Args:
-        base_prompt: Original generation prompt (without edits)
-        edit_prompt: Full prompt with edit instructions
-    """
-    if _VERTEX_AUTH_BROKEN:
-        return None, "", "", f"Vertex auth unavailable: {_VERTEX_AUTH_ERROR}"
-
-    try:
-        configured_model = getattr(
-            config, "IMAGEN_EDIT_MODEL", "imagen-3.0-capability-002")
-        candidate_models = []
-        for model_name in [configured_model, "imagen-3.0-capability-001"]:
-            if model_name and model_name not in candidate_models:
-                candidate_models.append(model_name)
-
-        headers = _vertex_auth_headers()
-
-        mime_type = reference_image_mime_type or "image/png"
-        image_b64 = base64.b64encode(reference_image_bytes).decode("utf-8")
-
-        # Official Imagen edit schema uses referenceImages with REFERENCE_TYPE_RAW
-        # for mask-free editing.
-        payload_variants = [
-            {
-                "instances": [
-                    {
-                        "prompt": edit_prompt,
-                        "referenceImages": [
-                            {
-                                "referenceType": "REFERENCE_TYPE_RAW",
-                                "referenceId": 1,
-                                "referenceImage": {
-                                    "bytesBase64Encoded": image_b64,
-                                },
-                            }
-                        ],
-                    }
-                ],
-                "parameters": {
-                    "sampleCount": 1,
-                    "safetySetting": "block_medium_and_above",
-                    "personGeneration": "allow_adult",
-                },
-            },
-            # Backward-compat variant for endpoints that still accept context_image.
-            {
-                "instances": [
-                    {
-                        "prompt": edit_prompt,
-                        "image": {
-                            "bytesBase64Encoded": image_b64,
-                            "mimeType": mime_type,
-                        },
-                    }
-                ],
-                "parameters": {
-                    "sampleCount": 1,
-                    "safetySetting": "block_medium_and_above",
-                    "personGeneration": "allow_adult",
-                },
-            },
-        ]
-
-        last_error = ""
-        for edit_model in candidate_models:
-            url = _vertex_predict_url(edit_model)
-            logger.info(
-                f"Sending request to Vertex Imagen image edit API "
-                f"(model={edit_model}, reference={len(reference_image_bytes)} bytes)..."
-            )
-            response = None
-            last_variant_error = ""
-            for i, payload in enumerate(payload_variants, start=1):
-                response = requests.post(url, headers=headers,
-                                         json=payload, timeout=180)
-                logger.info(
-                    f"Imagen image edit API response status: {response.status_code} "
-                    f"(payload_variant={i})")
-
-                if response.status_code == 200:
-                    break
-
-                variant_detail = response.text[:1000] if response.text else "No error details"
-                try:
-                    variant_json = response.json()
-                    variant_msg = variant_json.get(
-                        "error", {}).get("message", "")
-                    if variant_msg:
-                        variant_detail = variant_msg
-                except Exception:
-                    pass
-
-                last_variant_error = variant_detail
-
-                # If the endpoint says context_image is required, do not continue this variant.
-                if "context_image" in variant_detail:
-                    continue
-
-            if response is None:
-                return None, "", "", "Imagen image edit: no response from API"
-
-            if response.status_code == 200:
-                result = response.json()
-                predictions = result.get("predictions") or []
-                if not predictions:
-                    last_error = "Imagen image edit: no predictions in response"
-                    logger.warning(last_error)
-                    continue
-
-                encoded = predictions[0].get("bytesBase64Encoded")
-                if not encoded:
-                    last_error = "Imagen image edit: no bytesBase64Encoded in prediction"
-                    logger.warning(last_error)
-                    continue
-
-                image_bytes = base64.b64decode(encoded)
-                out_mime_type = predictions[0].get("mimeType", "image/png")
-                out_ext = _extension_for_mime_type(out_mime_type)
-
-                filename = f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.{out_ext}"
-                logger.info(
-                    f"Imagen image edit generated successfully ({len(image_bytes)} bytes, {out_mime_type}) "
-                    f"using model={edit_model}"
-                )
-                return image_bytes, out_mime_type, filename, None
-
-            error_detail = response.text[:1000] if response.text else "No error details"
-            error_msg = f"Imagen image edit error {response.status_code}"
-            try:
-                error_json = response.json()
-                if "error" in error_json:
-                    msg = error_json["error"].get("message", "")
-                    if msg:
-                        error_msg = f"Imagen: {msg}"
-            except Exception:
-                pass
-
-            if last_variant_error and "context_image" in last_variant_error and "context_image" not in error_msg:
-                error_msg = f"{error_msg} (last variant hint: {last_variant_error})"
-
-            # Retry another model only for "model unavailable" scenarios.
-            unavailable = response.status_code == 404 and "unavailable" in error_msg.lower()
-            if unavailable:
-                logger.warning(
-                    f"Imagen edit model unavailable ({edit_model}); trying next candidate. Details: {error_msg}"
-                )
-                last_error = error_msg
-                continue
-
-            logger.error(f"{error_msg}: {error_detail}")
-            return None, "", "", error_msg
-
-        return None, "", "", (last_error or "Imagen image edit failed for all candidate models")
-
-    except Exception as e:
-        error_msg = f"Exception during Imagen image edit: {str(e)}"
-        if error_msg.startswith("Exception during Imagen image edit: Vertex auth failed"):
-            logger.warning(error_msg)
-        else:
-            logger.warning(error_msg, exc_info=True)
-        return None, "", "", error_msg
-
-
-# ---------------------------------------------------------------------------
-# DALL-E 3 - fallback
-# ---------------------------------------------------------------------------
-
-def _try_dalle3_image(
-    topic: str,
-    prompt: str,
-    size: str,
-    variation_index: int,
-) -> Tuple[Optional[bytes], str, str, Optional[str]]:
-    """Fallback: generate image with DALL-E 3."""
-    try:
-        url = "https://api.openai.com/v1/images/generations"
-        headers = {
-            "Authorization": f"Bearer {config.OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        }
-        payload = {
-            "model": "dall-e-3",
-            "prompt": prompt,
-            "n": 1,
-            "size": size,
-            "quality": "standard",
-            "response_format": "b64_json",
-        }
-
-        logger.info(f"Sending request to DALL-E 3 API (size={size})...")
-        response = requests.post(
-            url, json=payload, headers=headers, timeout=120)
-        logger.info(f"DALL-E 3 API response status: {response.status_code}")
-
-        if response.status_code == 200:
-            result = response.json()
-            data_items = result.get("data") or []
-            if data_items and "b64_json" in data_items[0]:
-                image_bytes = base64.b64decode(data_items[0]["b64_json"])
-                filename = (
-                    f"featured-{topic[:30].replace(' ', '-').lower()}-var{variation_index}.png"
-                )
-                logger.info(
-                    f"DALL-E 3 image generated successfully ({len(image_bytes)} bytes)")
-                return image_bytes, "image/png", filename, None
-            error_msg = "DALL-E 3: no image data in response"
-            logger.warning(error_msg)
-            return None, "", "", error_msg
-
-        error_msg = f"DALL-E 3 API error {response.status_code}"
-        try:
-            error_json = response.json()
-            if "error" in error_json:
-                if isinstance(error_json["error"], dict):
-                    error_msg = f"OpenAI: {error_json['error'].get('message', error_msg)}"
-                else:
-                    error_msg = f"OpenAI: {str(error_json['error'])[:200]}"
-        except Exception:
-            pass
-        logger.error(error_msg)
-        return None, "", "", error_msg
-
-    except Exception as e:
-        error_msg = f"Exception during DALL-E 3 generation: {str(e)}"
-        logger.warning(error_msg, exc_info=True)
-        return None, "", "", error_msg
-
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-def _vertex_predict_url(model_name: str) -> str:
-    return (
-        f"https://{config.VERTEX_LOCATION}-aiplatform.googleapis.com/v1/"
-        f"projects/{config.VERTEX_PROJECT_ID}/locations/{config.VERTEX_LOCATION}/"
-        f"publishers/google/models/{model_name}:predict"
-    )
-
-
-def _vertex_auth_headers() -> Dict[str, str]:
-    global _VERTEX_AUTH_BROKEN, _VERTEX_AUTH_ERROR
-
-    try:
-        credentials, _ = google.auth.default(scopes=[_VERTEX_SCOPE])
-        credentials.refresh(GoogleAuthRequest())
-        _VERTEX_AUTH_BROKEN = False
-        _VERTEX_AUTH_ERROR = ""
-        return {
-            "Authorization": f"Bearer {credentials.token}",
-            "Content-Type": "application/json",
-        }
-    except RefreshError as e:
-        error_text = str(e)
-        if "Invalid JWT Signature" in error_text:
-            key_hint = _diagnose_service_account_key_mismatch()
-            msg = (
-                "Vertex auth failed: Invalid JWT Signature. "
-                "Controleer GOOGLE_APPLICATION_CREDENTIALS: gebruik een geldige service account key JSON "
-                "(type=service_account), genereer eventueel een nieuwe key in GCP IAM, "
-                "en check dat je systeemklok correct staat."
-            )
-            if key_hint:
-                msg = f"{msg} {key_hint}"
-            _VERTEX_AUTH_BROKEN = True
-            _VERTEX_AUTH_ERROR = msg
-            raise RuntimeError(msg) from e
-        msg = f"Vertex auth failed: {error_text}"
-        _VERTEX_AUTH_BROKEN = True
-        _VERTEX_AUTH_ERROR = msg
-        raise RuntimeError(msg) from e
-
-
-def validate_vertex_auth_startup() -> None:
-    """Validate Vertex credentials early so auth issues surface at startup."""
-    _vertex_auth_headers()
-    logger.info(
-        "Vertex auth startup check OK "
-        f"(project={config.VERTEX_PROJECT_ID}, location={config.VERTEX_LOCATION})"
-    )
-
-
-def _diagnose_service_account_key_mismatch() -> str:
-    """Return a short diagnostic hint when local service-account key is no longer active."""
-    cred_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
-    if not cred_path or not os.path.exists(cred_path):
-        return ""
-
-    try:
-        with open(cred_path, "r", encoding="utf-8") as f:
-            key_json = json.load(f)
-
-        service_account_email = key_json.get("client_email", "")
-        local_key_id = key_json.get("private_key_id", "")
-        if not service_account_email or not local_key_id:
-            return ""
-
-        metadata_url = (
-            "https://www.googleapis.com/robot/v1/metadata/x509/"
-            f"{service_account_email}"
-        )
-        response = requests.get(metadata_url, timeout=15)
-        if response.status_code != 200:
-            return ""
-
-        cert_map = response.json() if response.content else {}
-        if not isinstance(cert_map, dict):
-            return ""
-
-        active_key_ids = list(cert_map.keys())
-        if local_key_id not in active_key_ids:
-            return (
-                "Detected key mismatch: private_key_id uit je JSON staat niet tussen actieve Google keys. "
-                "Maak een nieuwe service-account key en update GOOGLE_APPLICATION_CREDENTIALS."
-            )
-
-    except Exception:
-        return ""
-
-    return ""
-
-
-def _aspect_to_dalle_size(aspect_ratio: str) -> str:
-    return {
-        "1:1": "1024x1024",
-        "16:9": "1792x1024",
-        "9:16": "1024x1792",
-    }.get(aspect_ratio, "1792x1024")
 
 
 def _extension_for_mime_type(mime_type: str) -> str:
