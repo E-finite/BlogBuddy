@@ -119,6 +119,9 @@ def test_image_prompt_preserves_text_quality_instructions():
 def test_gemini_model_aliases_resolve_to_supported_models():
     """Legacy or informal Gemini image model names should map to supported API models."""
 
-    assert _resolve_gemini_image_model('gemini-3.0-pro-image-latest') == 'gemini-3-pro-image-preview'
-    assert _resolve_gemini_image_model('gemini-2.0-flash-exp-image-generation') == 'gemini-2.5-flash-image'
-    assert _resolve_gemini_image_model('gemini-3-pro-image-preview') == 'gemini-3-pro-image-preview'
+    assert _resolve_gemini_image_model(
+        'gemini-3.0-pro-image-latest') == 'gemini-3-pro-image-preview'
+    assert _resolve_gemini_image_model(
+        'gemini-2.0-flash-exp-image-generation') == 'gemini-2.5-flash-image'
+    assert _resolve_gemini_image_model(
+        'gemini-3-pro-image-preview') == 'gemini-3-pro-image-preview'

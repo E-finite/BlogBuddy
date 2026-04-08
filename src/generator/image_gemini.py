@@ -557,7 +557,8 @@ def _extract_gemini_image_bytes(response: Any) -> Tuple[Optional[bytes], str]:
         if not inline_data:
             continue
 
-        mime_type = getattr(inline_data, "mime_type", None) or getattr(inline_data, "mimetype", None) or "image/png"
+        mime_type = getattr(inline_data, "mime_type", None) or getattr(
+            inline_data, "mimetype", None) or "image/png"
         data = getattr(inline_data, "data", None)
         if isinstance(data, bytes) and data:
             return data, mime_type
