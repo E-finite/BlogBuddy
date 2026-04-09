@@ -57,15 +57,18 @@ def load_user(user_id):
 
 # Initialize database
 if BOOTSTRAP_ON_IMPORT:
-    db.init_db()
-    if config.ADMIN_EMAILS:
+    db_ready = db.init_db()
+    if db_ready and config.ADMIN_EMAILS:
         promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
         if promoted_count:
             logger.info(
                 f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
 
     # Start background worker
-    start_worker()
+    if db_ready:
+        start_worker()
+    else:
+        logger.info("Background worker not started because SQL is unavailable.")
 
 
 # Helper functions
@@ -182,11 +185,16 @@ def build_app_page_context(*, current_page: str) -> dict:
     sites = db.get_user_sites(current_user.id)
     quota = db.get_user_quota(current_user.id)
 
+    if not db.is_database_configured():
+        stats = None
+        sites = None
+        quota = None
+
     context = {
         "user": current_user,
         "stats": stats,
         "sites": sites,
-        "quota": build_dashboard_quota(quota),
+        "quota": build_dashboard_quota(quota) if quota else None,
         "current_page": current_page,
     }
 
@@ -653,6 +661,9 @@ def admin_update_user_quota_api(user_id: int):
 def get_user_sites_api():
     """Get all WordPress sites for the logged-in user."""
     try:
+        if not db.is_database_configured():
+            return jsonify(None), 200
+
         sites = db.get_user_sites(current_user.id)
         return jsonify(sites), 200
     except Exception as e:

@@ -1,4 +1,5 @@
 """Database initialization and utilities."""
+import os
 import time
 import mysql.connector
 from mysql.connector import Error
@@ -9,6 +10,12 @@ from typing import Optional, Dict, Any, List
 from src import config
 
 logger = logging.getLogger(__name__)
+
+
+def is_database_configured() -> bool:
+    """Return True when MySQL is explicitly configured via environment variables."""
+    required_vars = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_DATABASE")
+    return all((os.getenv(var) or "").strip() for var in required_vars)
 
 
 def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, site_id: Optional[str] = None, days_old: Optional[int] = None) -> None:
@@ -46,6 +53,12 @@ def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, sit
 
 def get_db_connection():
     """Get a MySQL database connection."""
+    if not is_database_configured():
+        logger.debug(
+            "MySQL not explicitly configured; running without SQL persistence."
+        )
+        return None
+
     attempts = max(1, int(config.MYSQL_CONNECT_RETRIES))
     delay_seconds = max(0.0, float(config.MYSQL_CONNECT_RETRY_DELAY_SECONDS))
     timeout_seconds = max(1, int(config.MYSQL_CONNECT_TIMEOUT_SECONDS))
@@ -75,13 +88,21 @@ def get_db_connection():
             if attempt < attempts and delay_seconds > 0:
                 time.sleep(delay_seconds)
 
-    print(f"Error connecting to MySQL after {attempts} attempts: {last_error}")
-    raise last_error
+    logger.warning(
+        "MySQL unavailable after %s attempts; running without SQL persistence: %s",
+        attempts,
+        last_error,
+    )
+    return None
 
 
 def init_db():
     """Initialize the database schema."""
     conn = get_db_connection()
+    if conn is None:
+        logger.info("Skipping database initialization because SQL is unavailable.")
+        return False
+
     cursor = conn.cursor()
 
     # Users table for authentication (create first for foreign keys)
@@ -554,6 +575,7 @@ def init_db():
     conn.commit()
     cursor.close()
     conn.close()
+    return True
 
 
 def create_site(site_id: str, user_id: int, wp_base_url: str, wp_username: str, wp_app_password_enc: str, default_author_id: Optional[int] = None) -> None:
@@ -572,6 +594,9 @@ def create_site(site_id: str, user_id: int, wp_base_url: str, wp_username: str, 
 def get_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """Get a site by ID, optionally filtered by user."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     if user_id:
         cursor.execute(
@@ -637,6 +662,9 @@ def create_context_site(site_id: str, user_id: int, base_url: str) -> None:
 def get_context_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """Get a context site by ID, optionally filtered by user."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     if user_id:
         cursor.execute(
@@ -652,6 +680,9 @@ def get_context_site(site_id: str, user_id: Optional[int] = None) -> Optional[Di
 def get_user_context_sites(user_id: int) -> List[Dict[str, Any]]:
     """Get all context sites for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM context_sites WHERE user_id = %s ORDER BY created_at DESC
@@ -779,6 +810,9 @@ def update_job(job_id: str, status: str, result: Optional[Dict[str, Any]] = None
 def get_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Get a job by ID."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
     row = cursor.fetchone()
@@ -801,6 +835,9 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
 def get_queued_jobs() -> List[Dict[str, Any]]:
     """Get all queued jobs."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         "SELECT * FROM jobs WHERE status = 'queued' ORDER BY created_at ASC")
@@ -826,6 +863,9 @@ def add_job_step(job_id: str, step: str, status: str, detail: Optional[Dict[str,
 def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
     """Get all steps for a job."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         "SELECT * FROM job_steps WHERE job_id = %s ORDER BY ts ASC", (job_id,))
@@ -838,6 +878,9 @@ def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
 def get_scraped_pages(site_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     """Get scraped pages for a site."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT id, url, title, page_type, fetched_at
@@ -855,6 +898,9 @@ def get_scraped_pages(site_id: str, limit: int = 100) -> List[Dict[str, Any]]:
 def get_page_chunks_count(site_id: str) -> int:
     """Get count of chunks for a site."""
     conn = get_db_connection()
+    if conn is None:
+        return 0
+
     cursor = conn.cursor()
     cursor.execute("""
         SELECT COUNT(*) as count
@@ -896,6 +942,9 @@ def create_user(username: str, email: str, password_hash: str, is_admin: bool = 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get a user by username."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
     row = cursor.fetchone()
@@ -907,6 +956,9 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     """Get a user by email."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
     row = cursor.fetchone()
@@ -918,6 +970,9 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
 def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     """Get a user by ID."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
     row = cursor.fetchone()
@@ -1074,10 +1129,21 @@ def _reset_monthly_usage_if_needed(cursor, user_id: int) -> None:
 def get_user_quota(user_id: int) -> Dict[str, Any]:
     """Get user quota settings and monthly usage counters."""
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
     month_key = _current_month_key()
     now = datetime.utcnow()
+    if conn is None:
+        return {
+            "user_id": user_id,
+            "blogs_monthly_limit": 20,
+            "text_regen_monthly_limit": 20,
+            "image_regen_limit": 3,
+            "usage_month": month_key,
+            "blogs_used": 0,
+            "text_regen_used": 0,
+            "updated_at": now,
+        }
+
+    cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
         INSERT INTO user_quotas (user_id, usage_month, updated_at)
@@ -1167,6 +1233,9 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
     """Return all users with quota settings and monthly usage."""
     try:
         conn = get_db_connection()
+        if conn is None:
+            return []
+
         cursor = conn.cursor(dictionary=True)
         month_key = _current_month_key()
 
@@ -1246,6 +1315,9 @@ def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly
 def get_user_sites(user_id: int) -> List[Dict[str, Any]]:
     """Get all sites for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM sites WHERE user_id = %s ORDER BY created_at DESC
@@ -1259,6 +1331,9 @@ def get_user_sites(user_id: int) -> List[Dict[str, Any]]:
 def get_user_jobs(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
     """Get recent jobs for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM jobs WHERE user_id = %s ORDER BY created_at DESC LIMIT %s
@@ -1272,6 +1347,13 @@ def get_user_jobs(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
 def get_user_stats(user_id: int) -> Dict[str, int]:
     """Get statistics for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return {
+            'sites': 0,
+            'jobs': 0,
+            'completed_jobs': 0
+        }
+
     cursor = conn.cursor(dictionary=True)
 
     # Count sites
@@ -1445,6 +1527,9 @@ def get_image_generation(image_id: int, user_id: int) -> Optional[Dict[str, Any]
     Validates that the image belongs to the user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1465,6 +1550,9 @@ def get_feedback_chain(image_id: int, user_id: int) -> List[str]:
     Returns list of feedback strings in chronological order.
     """
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1487,6 +1575,9 @@ def validate_regeneration_limit(image_id: int, user_id: int, limit: int = 3) -> 
     Returns (is_valid, error_message).
     """
     conn = get_db_connection()
+    if conn is None:
+        return False, "Image generation data unavailable"
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1589,6 +1680,9 @@ def get_user_drafts(user_id: int) -> List[Dict[str, Any]]:
     Get all drafts for a specific user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1631,6 +1725,9 @@ def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     Get a specific draft by ID, ensuring it belongs to the user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
