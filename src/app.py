@@ -19,6 +19,7 @@ from src.models import ConnectSiteRequest, GeneratePostRequest, PublishPostReque
 from src.generator.draft_builder import build_draft, build_multilang_drafts
 from src.jobs.queue import enqueue_job
 from src.auth import User
+from src import offline_auth
 
 # Configure logging
 import os
@@ -47,6 +48,12 @@ login_manager.login_message = 'Log alsjeblieft in om deze pagina te bekijken.'
 
 # Initialize Bcrypt
 bcrypt = Bcrypt(app)
+
+# Initialize offline auth fallback store
+if config.OFFLINE_AUTH_REGENERATE_ON_START:
+    offline_auth.regenerate_offline_auth_store(bcrypt)
+else:
+    offline_auth.init_offline_auth_store(bcrypt)
 
 
 @login_manager.user_loader
@@ -269,8 +276,9 @@ def login():
             flash('Gebruikersnaam en wachtwoord zijn verplicht.', 'error')
             return render_template('login.html')
 
-        # Check user
+        # db helpers fall back to sqlite auth store when MySQL is unavailable.
         user_data = db.get_user_by_username(username)
+
         if not user_data:
             flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
             return render_template('login.html')

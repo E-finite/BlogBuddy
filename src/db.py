@@ -8,8 +8,13 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from src import config
+from src import offline_auth
 
 logger = logging.getLogger(__name__)
+
+# Prevent repeated retry storms: once all retries are exhausted, fail fast
+# for the remainder of this process lifetime.
+_mysql_retry_exhausted = False
 
 
 def is_database_configured() -> bool:
@@ -53,10 +58,15 @@ def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, sit
 
 def get_db_connection():
     """Get a MySQL database connection."""
+    global _mysql_retry_exhausted
+
     if not is_database_configured():
         logger.debug(
             "MySQL not explicitly configured; running without SQL persistence."
         )
+        return None
+
+    if _mysql_retry_exhausted:
         return None
 
     attempts = max(1, int(config.MYSQL_CONNECT_RETRIES))
@@ -74,6 +84,7 @@ def get_db_connection():
                 database=config.MYSQL_DATABASE,
                 connection_timeout=timeout_seconds,
             )
+            _mysql_retry_exhausted = False
             return conn
         except Error as e:
             last_error = e
@@ -93,6 +104,7 @@ def get_db_connection():
         attempts,
         last_error,
     )
+    _mysql_retry_exhausted = True
     return None
 
 
@@ -917,6 +929,9 @@ def get_page_chunks_count(site_id: str) -> int:
 def create_user(username: str, email: str, password_hash: str, is_admin: bool = False) -> int:
     """Create a new user."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.create_offline_user(username, email, password_hash, is_admin)
+
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -943,7 +958,7 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get a user by username."""
     conn = get_db_connection()
     if conn is None:
-        return None
+        return offline_auth.get_offline_user_by_username(username)
 
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
@@ -957,7 +972,7 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     """Get a user by email."""
     conn = get_db_connection()
     if conn is None:
-        return None
+        return offline_auth.get_offline_user_by_email(email)
 
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
@@ -971,7 +986,7 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     """Get a user by ID."""
     conn = get_db_connection()
     if conn is None:
-        return None
+        return offline_auth.get_offline_user_by_id(user_id)
 
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
@@ -984,6 +999,10 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
 def update_user_last_login(user_id: int) -> None:
     """Update user's last login timestamp."""
     conn = get_db_connection()
+    if conn is None:
+        offline_auth.update_offline_last_login(user_id)
+        return
+
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE users SET last_login = %s WHERE id = %s
@@ -996,6 +1015,9 @@ def update_user_last_login(user_id: int) -> None:
 def update_user_password_hash(user_id: int, password_hash: str) -> bool:
     """Update a user's password hash. Returns True when a row was updated."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.update_offline_user_password_hash(user_id, password_hash)
+
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE users
@@ -1012,6 +1034,9 @@ def update_user_password_hash(user_id: int, password_hash: str) -> bool:
 def create_password_reset_token(user_id: int, token: str, expires_at: datetime) -> bool:
     """Create or replace a password reset token for a user."""
     conn = get_db_connection()
+    if conn is None:
+        return False
+
     cursor = conn.cursor()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -1037,6 +1062,9 @@ def create_password_reset_token(user_id: int, token: str, expires_at: datetime) 
 def get_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
     """Return password reset token data joined with the user record."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
@@ -1073,6 +1101,9 @@ def validate_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
 def delete_password_reset_token(token: str) -> bool:
     """Delete a password reset token."""
     conn = get_db_connection()
+    if conn is None:
+        return False
+
     cursor = conn.cursor()
     cursor.execute(
         "DELETE FROM password_reset_tokens WHERE token = %s", (token,))

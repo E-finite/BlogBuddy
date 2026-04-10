@@ -60,6 +60,13 @@ MYSQL_CONNECT_RETRY_DELAY_SECONDS = _to_float(
     1.5,
 )
 
+# Offline auth fallback (used only when MySQL is unavailable)
+OFFLINE_AUTH_ENABLED = _to_bool(os.getenv("OFFLINE_AUTH_ENABLED"))
+OFFLINE_AUTH_DB_PATH = os.getenv("OFFLINE_AUTH_DB_PATH")
+OFFLINE_AUTH_USERNAME = os.getenv("OFFLINE_AUTH_USERNAME")
+OFFLINE_AUTH_PASSWORD = os.getenv("OFFLINE_AUTH_PASSWORD")
+OFFLINE_AUTH_REGENERATE_ON_START = _to_bool(os.getenv("OFFLINE_AUTH_REGENERATE_ON_START"))
+
 # App/security
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = _to_int(os.getenv("APP_PORT"), 8000)
