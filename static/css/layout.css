@@ -124,13 +124,17 @@ body {
   background: rgba(255, 255, 255, 0.95);
   color: #1a2e47;
   border-color: rgba(255, 255, 255, 0.95);
-  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+  transform: translateY(0);
+  box-shadow: var(--shadow-sm);
+  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base), transform var(--transition-base), box-shadow var(--transition-base);
 }
 
 .sidebar .btn-secondary:hover {
   background-color: var(--color-primary);
   color: #1a2e47;
   border-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .app-main {

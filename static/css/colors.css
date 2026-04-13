@@ -13,11 +13,11 @@
   --aig-color-generate: #61ff73;
 
   /* Neutral surfaces */
-  --aig-color-canvas: #f7f7fb;
+  --aig-color-canvas: #fafafa;
   --aig-color-surface: #ffffff;
   --aig-color-surface-muted: #f5f5f5;
-  --aig-color-text: #222222;
-  --aig-color-text-muted: #666666;
+  --aig-color-text: #0d2d49;
+  --aig-color-text-muted: #7a7a7a;
   --aig-color-on-primary: #0b0b0b;
   --aig-color-text-inverse: #ffffff;
 
@@ -73,10 +73,10 @@
   --color-accent-800: #6e6e6e;
   --color-accent-900: #515151;
 
-  --color-text-primary: #222222;
-  --color-text-secondary: #666666;
-  --color-text-tertiary: #5f6b78;
-  --color-text-light: #cccccc;
+  --color-text-primary: #0d2d49;
+  --color-text-secondary: #7a7a7a;
+  --color-text-tertiary: #7a7a7a;
+  --color-text-light: #d1d5d8;
 
   --color-neutral-50: #fafafa;
   --color-neutral-100: #f5f5f5;
@@ -106,13 +106,18 @@
   --bg-secondary: #eef4f9;
   --bg-tertiary: var(--aig-color-sub);
   --bg-elevated: var(--aig-color-surface);
-  --bg-overlay: rgba(247, 247, 251, 0.92);
+  --bg-overlay: rgba(250, 250, 250, 0.92);
   --bg-dark: var(--aig-color-sidebar);
 
   --text-primary: var(--aig-color-text);
   --text-secondary: var(--aig-color-text-muted);
-  --text-tertiary: #5f6b78;
+  --text-tertiary: #7a7a7a;
   --text-inverse: var(--aig-color-text-inverse);
+
+  --color-ghost: #357998;
+  --color-black: #000000;
+  --color-white: #ffffff;
+  --color-transparent: #00000000;
 
   --border-color: var(--aig-color-sub);
   --border-color-hover: var(--aig-color-primary);

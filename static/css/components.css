@@ -65,14 +65,14 @@
 
 .btn-ghost {
   background: var(--bg-elevated);
-  color: var(--text-secondary);
-  border-color: var(--border-color);
+  color: var(--color-ghost);
+  border-color: var(--color-ghost);
 }
 
 .btn-ghost:hover {
   background: #f7f9fc;
   color: var(--text-primary);
-  border-color: var(--color-primary-300);
+  border-color: var(--color-ghost);
 }
 
 .btn-generate {
