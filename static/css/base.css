@@ -19,7 +19,7 @@ body {
   font-family: var(--font-family-primary);
   background: var(--bg-primary);
   color: var(--text-primary);
-  line-height: 1.6;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
@@ -44,6 +44,14 @@ h6 { font-size: 1rem; }
 p {
   margin-bottom: var(--spacing-md);
   color: var(--text-secondary);
+}
+
+button,
+input,
+optgroup,
+select,
+textarea {
+  font: inherit;
 }
 
 a {
@@ -114,9 +122,9 @@ pre {
 
 /* Utility Classes */
 .container {
-  max-width: 1200px;
+  max-width: 1080px;
   margin: 0 auto;
-  padding: 0 var(--spacing-lg);
+  padding: 0 1.5rem;
 }
 
 .sr-only {
