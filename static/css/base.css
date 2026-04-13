@@ -34,16 +34,16 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 
-h1 { font-size: 2.5rem; }
-h2 { font-size: 2rem; }
-h3 { font-size: 1.75rem; }
-h4 { font-size: 1.5rem; }
-h5 { font-size: 1.25rem; }
-h6 { font-size: 1rem; }
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
+h4 { font-size: 1rem; }
+h5 { font-size: 0.9375rem; }
+h6 { font-size: 0.875rem; }
 
 p {
   margin-bottom: var(--spacing-md);
-  color: var(--text-secondary);
+  color: var(--text-primary);
 }
 
 button,
@@ -55,13 +55,13 @@ textarea {
 }
 
 a {
-  color: var(--color-primary-700);
+  color: var(--color-highlight);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
 
 a:hover {
-  color: var(--color-primary-500);
+  color: var(--color-primary-600);
 }
 
 /* Code */
@@ -71,7 +71,7 @@ code {
   padding: 0.125rem 0.375rem;
   border-radius: var(--radius-sm);
   font-size: 0.875em;
-  color: var(--color-secondary-600);
+  color: var(--color-highlight);
 }
 
 pre {
@@ -115,16 +115,16 @@ pre {
 
 /* Focus Styles */
 :focus-visible {
-  outline: 2px solid var(--color-primary-500);
+  outline: 2px solid rgba(62, 207, 255, 0.45);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
 
 /* Utility Classes */
 .container {
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 0 auto;
-  padding: 0 1.5rem;
+  padding: 0 var(--spacing-xl);
 }
 
 .sr-only {
@@ -170,4 +170,18 @@ pre {
 
 .animate-slide-in {
   animation: slideIn var(--transition-base) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

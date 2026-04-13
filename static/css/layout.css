@@ -3,7 +3,7 @@
  */
 
 body {
-  background: var(--layout-bg);
+  background: linear-gradient(180deg, #f7f7fb 0%, #edf5fb 100%);
 }
 
 .app-shell {
@@ -119,43 +119,58 @@ body {
   margin-top: 1rem;
 }
 
+/* Keep sidebar button contrast independent from global button theming. */
+.sidebar .btn-secondary {
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a2e47;
+  border-color: rgba(255, 255, 255, 0.95);
+  transition: background-color var(--transition-base), border-color var(--transition-base), color var(--transition-base);
+}
+
+.sidebar .btn-secondary:hover {
+  background-color: var(--color-primary);
+  color: #1a2e47;
+  border-color: var(--color-primary);
+}
+
 .app-main {
   min-width: 0;
   margin-left: 300px;
-  padding: 24px;
+  padding: var(--spacing-xl);
 }
 
 .content-container {
-  max-width: 1080px;
+  max-width: 1120px;
   margin: 0 auto;
 }
 
 .page-intro-card,
 .page-header {
   margin-bottom: var(--spacing-2xl);
-  padding: 1.75rem 1.95rem;
-  background: #ffffff;
-  border: 1px solid #d9e2eb;
-  border-radius: 1rem;
+  padding: var(--spacing-xl);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
 }
 
 .page-kicker {
   display: inline-block;
-  margin-bottom: 0.75rem;
-  color: var(--color-primary-700);
-  font-size: 0.8rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  margin-bottom: var(--spacing-sm);
+  color: var(--color-highlight);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: none;
 }
 
 .page-title,
 .page-heading {
-  margin-bottom: 0.75rem;
-  font-size: 2.5rem;
-  color: var(--color-secondary-500);
-  letter-spacing: -0.02em;
+  margin-bottom: var(--spacing-sm);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-highlight);
+  letter-spacing: 0;
 }
 
 .page-subtitle,
@@ -182,17 +197,17 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
 }
 
 .section-title {
-  font-size: 2rem;
+  font-size: 1.25rem;
   margin-bottom: 0;
   display: flex;
   align-items: center;
   gap: var(--spacing-md);
-  color: #2f4f78;
+  color: var(--color-highlight);
 }
 
 .section-title::before {
@@ -201,7 +216,7 @@ body {
 
 .grid {
   display: grid;
-  gap: var(--spacing-xl);
+  gap: var(--spacing-lg);
 }
 
 .grid-2 {
@@ -214,7 +229,7 @@ body {
 
 .footer {
   margin-top: var(--spacing-3xl);
-  padding: var(--spacing-xl) 0 2rem;
+  padding: var(--spacing-xl) 0 var(--spacing-xl);
   color: var(--text-tertiary);
   text-align: center;
 }
