@@ -235,7 +235,8 @@ def regenerate_section(
 
     # Normalise slug if title was regenerated
     if "slug" in result and result.get("slug"):
-        result["slug"] = result["slug"].lower().replace(" ", "-").replace("_", "-")
+        result["slug"] = result["slug"].lower().replace(
+            " ", "-").replace("_", "-")
 
     return result
 

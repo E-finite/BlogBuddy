@@ -870,7 +870,8 @@ def regenerate_text_section():
                     merged = {**db_draft.get("draft_data", {}), **updated}
                     db.update_draft(int(draft_id), current_user.id, merged)
             except Exception as merge_err:
-                logger.warning(f"Could not auto-save regenerated section: {merge_err}")
+                logger.warning(
+                    f"Could not auto-save regenerated section: {merge_err}")
 
         db.increment_user_usage(current_user.id, text_regen_delta=1)
 
