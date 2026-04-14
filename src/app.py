@@ -17,6 +17,7 @@ from src import wp_client
 from src.mailer import build_reset_password_url, send_password_reset_email
 from src.models import ConnectSiteRequest, GeneratePostRequest, PublishPostRequest
 from src.generator.draft_builder import build_draft, build_multilang_drafts
+from src.generator.text_openai import regenerate_section, REGENERATABLE_SECTIONS, regenerate_inline_selection
 from src.jobs.queue import enqueue_job
 from src.auth import User
 
@@ -819,6 +820,101 @@ def generate_post():
 
     except Exception as e:
         logger.error(f"Error generating post: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/posts/text/regenerate", methods=["POST"])
+@login_required
+def regenerate_text_section():
+    """Regenerate one section (or the full text) of an existing draft."""
+    try:
+        can_regen, regen_msg = db.can_regenerate_text(current_user.id)
+        if not can_regen:
+            return jsonify({"error": regen_msg}), 429
+
+        data = request.get_json() or {}
+        section = (data.get("section") or "").strip()
+        instruction = (data.get("instruction") or "").strip()
+        current_draft = data.get("currentDraft") or {}
+        draft_id = data.get("draftId")
+        language = (data.get("language") or "nl").strip()
+
+        if section not in REGENERATABLE_SECTIONS:
+            return jsonify({"error": f"Onbekend onderdeel '{section}'"}), 400
+
+        if not instruction:
+            return jsonify({"error": "Aanpasinstructie is verplicht"}), 400
+
+        if not current_draft:
+            # Try to load from database if draftId provided
+            if draft_id:
+                db_draft = db.get_draft(int(draft_id), current_user.id)
+                if not db_draft:
+                    return jsonify({"error": "Draft niet gevonden"}), 404
+                current_draft = db_draft.get("draft_data", {})
+            else:
+                return jsonify({"error": "currentDraft of draftId is verplicht"}), 400
+
+        updated = regenerate_section(
+            section=section,
+            instruction=instruction,
+            current_draft=current_draft,
+            language=language,
+        )
+
+        # Optionally persist updated fields back to the draft in the database
+        if draft_id:
+            try:
+                db_draft = db.get_draft(int(draft_id), current_user.id)
+                if db_draft:
+                    merged = {**db_draft.get("draft_data", {}), **updated}
+                    db.update_draft(int(draft_id), current_user.id, merged)
+            except Exception as merge_err:
+                logger.warning(f"Could not auto-save regenerated section: {merge_err}")
+
+        db.increment_user_usage(current_user.id, text_regen_delta=1)
+
+        return jsonify({"ok": True, "updated": updated}), 200
+
+    except Exception as e:
+        logger.error(f"Error regenerating text section: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 400
+
+
+@app.route("/api/posts/text/regenerate-inline", methods=["POST"])
+@login_required
+def regenerate_text_inline():
+    """Regenerate a selected text fragment based on a user instruction."""
+    try:
+        can_regen, regen_msg = db.can_regenerate_text(current_user.id)
+        if not can_regen:
+            return jsonify({"error": regen_msg}), 429
+
+        data = request.get_json() or {}
+        selected_text = (data.get("selectedText") or "").strip()
+        instruction = (data.get("instruction") or "").strip()
+        context_before = (data.get("contextBefore") or "")[:400]
+        context_after = (data.get("contextAfter") or "")[:400]
+        language = (data.get("language") or "nl").strip()
+
+        if not selected_text:
+            return jsonify({"error": "selectedText is verplicht"}), 400
+        if not instruction:
+            return jsonify({"error": "instruction is verplicht"}), 400
+
+        replacement = regenerate_inline_selection(
+            selected_text=selected_text,
+            instruction=instruction,
+            context_before=context_before,
+            context_after=context_after,
+            language=language,
+        )
+
+        db.increment_user_usage(current_user.id, text_regen_delta=1)
+        return jsonify({"ok": True, "replacementText": replacement}), 200
+
+    except Exception as e:
+        logger.error(f"Error regenerating inline text: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 400
 
 

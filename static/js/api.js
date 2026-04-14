@@ -120,6 +120,27 @@ export const api = {
     return apiRequest(`/api/images/${imageId}`);
   },
 
+  // Text regeneration
+  async regenerateSection(section, instruction, currentDraft, draftId, language) {
+    return apiRequest('/api/posts/text/regenerate', {
+      method: 'POST',
+      body: { section, instruction, currentDraft, draftId: draftId || null, language: language || 'nl' },
+    });
+  },
+
+  async regenerateInline(selectedText, instruction, contextBefore, contextAfter, language) {
+    return apiRequest('/api/posts/text/regenerate-inline', {
+      method: 'POST',
+      body: {
+        selectedText,
+        instruction,
+        contextBefore: contextBefore || '',
+        contextAfter: contextAfter || '',
+        language: language || 'nl',
+      },
+    });
+  },
+
   // Health
   async health() {
     return apiRequest('/health');
