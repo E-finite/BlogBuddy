@@ -19,7 +19,7 @@ We willen GEEN generieke content die op elke andere website staat.
 - **Diepgang:** Ga verder dan de basis. Leg niet alleen uit WAT iets is, maar ook HOE je het toepast en WAAROM het vaak misgaat.
 
 ### 3. SEO & GEO
-- **Focus Keyword:** {focus_keyword} (Gebruik in Titel, Intro, minstens 1x H2, en verspreid in tekst).
+- **Focus Keyword:** {focus_keyword} (Gebruik in Titel, Intro, minstens 1x H2, en verspreid in tekst maar zonder "-" tussen de woorden).
 - **Secondary Keywords:** {secondary_keywords}
 - **Snippet-ready:** Zorg dat definities helder en direct na een kopje staan.
 
