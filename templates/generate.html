@@ -1,14 +1,17 @@
 {% extends 'app_base.html' %} {% block title %}Genereren - E-finite{% endblock
 %} {% block content %}
-<section class="page-intro-card">
-  <div class="page-intro-copy">
-    <span class="page-kicker">Content studio</span>
-    <h1 class="page-heading">Blog Post Genereren</h1>
-    <p class="page-description">
-      Bouw nieuwe artikelen op basis van websitecontext, doelgroep en
-      beeldinstellingen, met dezelfde componenten als in je redesign.
+<section class="workspace-hero card">
+  <div class="workspace-hero-copy">
+    <span class="workspace-hero-kicker">Content studio</span>
+    <h1 class="workspace-hero-title">Blog Post Genereren</h1>
+    <p class="workspace-hero-description">
+      Stel in een heldere workflow je onderwerp, doelgroep en beeldstijl samen,
+      en genereer direct een publiceerbaar concept.
     </p>
   </div>
 </section>
 
-{% include 'dashboard/partials/_generate_section.html' %} {% endblock %}
+<div class="workspace-main-stack">
+  {% include 'dashboard/partials/_generate_section.html' %}
+</div>
+{% endblock %}

@@ -13,6 +13,7 @@ let lastSavedDraftSignature = null;
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
   initializeActiveDraftId();
+  initConnectFallbackActions();
   loadSitesDropdowns(); // Load sites into dropdowns
   initConnectSite();
   initGeneratePost();
@@ -22,6 +23,77 @@ document.addEventListener('DOMContentLoaded', () => {
   // Check API health
   checkHealth();
 });
+
+function initConnectFallbackActions() {
+  if (window.__connectFallbackActionsInitialized) {
+    return;
+  }
+  window.__connectFallbackActionsInitialized = true;
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('#show-connect-form-btn');
+    if (!trigger) {
+      return;
+    }
+
+    const connectFormPanel = document.getElementById('connect-form-panel');
+    if (!connectFormPanel) {
+      return;
+    }
+
+    const connectorSitesPanel = document.getElementById('connector-sites-panel');
+    const connectorSelect = document.getElementById('connectorType');
+    const connectFormTitle = document.getElementById('connect-form-title');
+    const connectFormDescription = document.getElementById('connect-form-description');
+    const connectFormContext = document.getElementById('connect-form-context');
+    const connectForm = document.getElementById('connect-site-form');
+    const baseUrlInput = document.getElementById('wpBaseUrl');
+
+    if (connectorSelect && !connectorSelect.value) {
+      const hasWordPressOption = Array.from(connectorSelect.options || []).some((option) => option.value === 'wordpress');
+      if (hasWordPressOption) {
+        connectorSelect.value = 'wordpress';
+      }
+    }
+
+    if (connectorSitesPanel) {
+      connectorSitesPanel.classList.remove('hidden');
+    }
+
+    if (connectFormTitle) {
+      connectFormTitle.textContent = 'Nieuwe WordPress Site Verbinden';
+    }
+    if (connectFormDescription) {
+      connectFormDescription.textContent = 'Vul je WordPress-gegevens in om een nieuwe verbinding te maken.';
+    }
+    if (connectForm) {
+      connectForm.reset();
+    }
+
+    if (connectFormContext) {
+      connectFormContext.classList.remove('hidden');
+      connectFormContext.classList.remove('alert-info');
+      connectFormContext.classList.add('alert-warning');
+      connectFormContext.innerHTML = '<span>Vul hieronder je WordPress verbinding in.</span>';
+    }
+
+    connectFormPanel.classList.remove('hidden');
+    connectFormPanel.classList.remove('workspace-card-attention');
+    void connectFormPanel.offsetWidth;
+    connectFormPanel.classList.add('workspace-card-attention');
+    connectFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    window.setTimeout(() => {
+      if (baseUrlInput) {
+        baseUrlInput.focus();
+      }
+    }, 130);
+
+    window.setTimeout(() => {
+      connectFormPanel.classList.remove('workspace-card-attention');
+    }, 820);
+  });
+}
 
 function initializeActiveDraftId() {
   const storedDraftId = sessionStorage.getItem('currentDraftId');
@@ -340,7 +412,50 @@ function initConnectSite() {
   const passwordInput = document.getElementById('wpApplicationPassword');
   if (!form) return;
 
+  // Auto-select WordPress when it's the only available connector.
+  if (connectorSelect && !connectorSelect.value) {
+    const hasWordPressOption = Array.from(connectorSelect.options || []).some((option) => option.value === 'wordpress');
+    if (hasWordPressOption) {
+      connectorSelect.value = 'wordpress';
+    }
+  }
+
   let connectedSites = [];
+
+  function revealConnectForm(options = {}) {
+    if (!connectFormPanel) {
+      return;
+    }
+
+    const {
+      focusInput = false,
+      scrollToForm = false,
+      emphasize = false
+    } = options;
+
+    connectFormPanel.classList.remove('hidden');
+
+    if (emphasize) {
+      connectFormPanel.classList.remove('workspace-card-attention');
+
+      // Force reflow so the highlight animation restarts on repeated clicks.
+      void connectFormPanel.offsetWidth;
+      connectFormPanel.classList.add('workspace-card-attention');
+      window.setTimeout(() => {
+        connectFormPanel.classList.remove('workspace-card-attention');
+      }, 780);
+    }
+
+    if (scrollToForm) {
+      connectFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    if (focusInput && baseUrlInput) {
+      window.setTimeout(() => {
+        baseUrlInput.focus();
+      }, 130);
+    }
+  }
 
   function renderConnectedSites() {
     if (!connectedSitesList) {
@@ -367,12 +482,14 @@ function initConnectSite() {
     `).join('');
   }
 
-  function showFormForSite(site = null) {
+  function showFormForSite(site = null, options = {}) {
     if (!connectFormPanel || !connectFormTitle || !connectFormDescription || !connectFormContext) {
       return;
     }
 
-    connectFormPanel.classList.remove('hidden');
+    const focusInput = Boolean(options.focusInput);
+    const scrollToForm = Boolean(options.scrollToForm);
+    const emphasize = Boolean(options.emphasize);
 
     if (site) {
       connectFormTitle.textContent = 'Verbonden WordPress Site';
@@ -397,6 +514,12 @@ function initConnectSite() {
         ? '<span>Je hebt al een WordPress site verbonden. Als je nu opslaat, wordt de bestaande verbinding vervangen.</span>'
         : '<span>Vul hieronder je eerste WordPress verbinding in.</span>';
     }
+
+    revealConnectForm({
+      focusInput,
+      scrollToForm,
+      emphasize
+    });
   }
 
   async function loadConnectedSites() {
@@ -417,6 +540,10 @@ function initConnectSite() {
       if (connectorSitesPanel) {
         connectorSitesPanel.classList.remove('hidden');
       }
+
+      if (connectedSites.length === 0) {
+        showFormForSite();
+      }
     } catch (error) {
       console.error('Error loading connected sites:', error);
       connectedSites = [];
@@ -430,6 +557,8 @@ function initConnectSite() {
       if (connectorSitesPanel) {
         connectorSitesPanel.classList.remove('hidden');
       }
+
+      showFormForSite();
     }
   }
 
@@ -455,7 +584,11 @@ function initConnectSite() {
 
   if (showConnectFormBtn) {
     showConnectFormBtn.addEventListener('click', () => {
-      showFormForSite();
+      showFormForSite(null, {
+        focusInput: true,
+        scrollToForm: true,
+        emphasize: true
+      });
     });
   }
   
@@ -594,7 +727,7 @@ function initGeneratePost() {
         if (confirmSiteBtn) {
           confirmSiteBtn.style.display = 'block';
           confirmSiteBtn.disabled = false;
-          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+          confirmSiteBtn.textContent = 'Gebruik deze website';
         }
         contextUrlInput.value = ''; // Clear URL input
         crawlBtn.style.display = 'none';
@@ -627,7 +760,7 @@ function initGeneratePost() {
     if (selectedSiteId && confirmSiteBtn) {
       confirmSiteBtn.style.display = 'block';
       confirmSiteBtn.disabled = false;
-      confirmSiteBtn.textContent = '✓ Gebruik deze website';
+      confirmSiteBtn.textContent = 'Gebruik deze website';
       crawlBtn.style.display = 'none';
     }
   }
@@ -640,13 +773,13 @@ function initGeneratePost() {
       
       // Disable button during loading
       confirmSiteBtn.disabled = true;
-      confirmSiteBtn.textContent = '⏳ Laden...';
+      confirmSiteBtn.textContent = 'Laden...';
       
       contextSiteId = selectedSiteId;
       
       // Show loading status
       contextStatusDiv.style.display = 'block';
-      contextStatusDiv.querySelector('.alert').textContent = '⏳ Website gegevens laden...';
+      contextStatusDiv.querySelector('.alert').textContent = 'Website gegevens laden...';
       contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
       
       try {
@@ -657,11 +790,11 @@ function initGeneratePost() {
           
           // Show detailed status like after crawl
           contextStatusDiv.querySelector('.alert').textContent = 
-            `✅ ${details.baseUrl} geselecteerd! ${details.pagesCount} pagina's, ${details.chunksCount} chunks. ${details.hasDna ? 'Site DNA beschikbaar.' : 'Geen Site DNA.'}`;
+            `${details.baseUrl} geselecteerd. ${details.pagesCount} pagina's, ${details.chunksCount} chunks. ${details.hasDna ? 'Site DNA beschikbaar.' : 'Geen Site DNA.'}`;
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
         } else {
           // Fallback to simple message
-          contextStatusDiv.querySelector('.alert').textContent = '✅ Website geselecteerd!';
+          contextStatusDiv.querySelector('.alert').textContent = 'Website geselecteerd.';
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
         }
         
@@ -669,15 +802,15 @@ function initGeneratePost() {
         await autoFillFromSiteDNA(selectedSiteId);
         
         // Update button to show success
-        confirmSiteBtn.textContent = '✅ Geladen';
+        confirmSiteBtn.textContent = 'Geladen';
         confirmSiteBtn.disabled = true;
       } catch (error) {
         console.error('Error loading site details:', error);
-        contextStatusDiv.querySelector('.alert').textContent = '❌ Fout bij laden site gegevens';
+        contextStatusDiv.querySelector('.alert').textContent = 'Fout bij laden site gegevens';
         contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
         
         // Re-enable button
-        confirmSiteBtn.textContent = '✓ Gebruik deze website';
+        confirmSiteBtn.textContent = 'Gebruik deze website';
         confirmSiteBtn.disabled = false;
       }
     });
@@ -743,13 +876,13 @@ function initGeneratePost() {
       }
       
       if (fieldsFilledCount > 0) {
-        showAlert(`✅ ${fieldsFilledCount} velden automatisch ingevuld met Site DNA`, 'success', 3000);
+        showAlert(`${fieldsFilledCount} velden automatisch ingevuld met Site DNA`, 'success', 3000);
       } else {
         console.warn('No fields were filled - DNA data may be empty');
       }
     } catch (error) {
       console.error('Error loading Site DNA:', error);
-      showAlert('❌ Fout bij laden Site DNA', 'error', 3000);
+      showAlert('Fout bij laden Site DNA', 'error', 3000);
     }
   }
   
@@ -767,7 +900,7 @@ function initGeneratePost() {
         if (confirmSiteBtn) {
           confirmSiteBtn.style.display = 'none';
           confirmSiteBtn.disabled = false;
-          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+          confirmSiteBtn.textContent = 'Gebruik deze website';
         }
       } else {
         crawlBtn.style.display = 'none';
@@ -787,7 +920,7 @@ function initGeneratePost() {
       
       setButtonLoading(crawlBtn, true);
       contextStatusDiv.style.display = 'block';
-      contextStatusDiv.querySelector('.alert').textContent = '🕷️ Crawling website... (dit kan 30-60 seconden duren)';
+      contextStatusDiv.querySelector('.alert').textContent = 'Website wordt gecrawld (dit kan 30-60 seconden duren).';
       contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
       
       try {
@@ -821,22 +954,22 @@ function initGeneratePost() {
         if (data.pages_stored === 0) {
           if (data.is_js_site) {
             contextStatusDiv.querySelector('.alert').innerHTML = 
-              `⚠️ <strong>JavaScript-website gedetecteerd!</strong><br>
+              `<strong>JavaScript-website gedetecteerd.</strong><br>
               Deze site laadt content via JavaScript (React/Vue/SPA).<br>
-              💡 <em>Tip: Gebruik een statische site of WordPress/traditionele CMS.</em>`;
+              <em>Tip: gebruik een statische site of WordPress/traditionele CMS.</em>`;
           } else {
             contextStatusDiv.querySelector('.alert').textContent = 
-              `⚠️ Geen pagina's gecrawld! De website is mogelijk niet bereikbaar.`;
+              `Geen pagina's gecrawld. De website is mogelijk niet bereikbaar.`;
           }
           contextStatusDiv.querySelector('.alert').className = 'alert alert-warning';
-          crawlBtn.textContent = '⚠️ Geen Content';
+          crawlBtn.textContent = 'Geen content gevonden';
           crawlBtn.disabled = false;
         } else {
           contextStatusDiv.querySelector('.alert').textContent = 
-            `✅ Website gecrawld! ${data.pages_stored} pagina's, ${data.chunks_stored} chunks. ${data.site_dna_generated ? 'Site DNA gegenereerd.' : 'Site DNA kon niet worden gegenereerd.'}`;
+            `Website gecrawld: ${data.pages_stored} pagina's, ${data.chunks_stored} chunks. ${data.site_dna_generated ? 'Site DNA gegenereerd.' : 'Site DNA kon niet worden gegenereerd.'}`;
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
           
-          crawlBtn.textContent = '✅ Context Geladen';
+          crawlBtn.textContent = 'Context geladen';
           crawlBtn.disabled = true;
           
           // Store for use in generation
@@ -854,7 +987,7 @@ function initGeneratePost() {
       } catch (error) {
         console.error('Crawl error:', error);
         contextStatusDiv.querySelector('.alert').textContent = 
-          `❌ Fout bij crawlen: ${error.message}. Check of de Flask app draait en de URL correct is.`;
+          `Fout bij crawlen: ${error.message}. Controleer of de Flask app draait en de URL correct is.`;
         contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
       } finally {
         setButtonLoading(crawlBtn, false);
@@ -1072,7 +1205,7 @@ function initPublishPost() {
         return;
       }
 
-      const warningMessage = '⚠️ WAARSCHUWING: Dit verwijdert het geladen concept permanent.\n\nDeze actie kan niet ongedaan worden gemaakt.\n\nWeet je zeker dat je wilt doorgaan?';
+      const warningMessage = 'Waarschuwing: dit verwijdert het geladen concept permanent.\n\nDeze actie kan niet ongedaan worden gemaakt.\n\nWeet je zeker dat je wilt doorgaan?';
       const confirmed = confirm(warningMessage);
       if (!confirmed) {
         return;
@@ -1196,7 +1329,7 @@ function _buildRegenPopup() {
   popup.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:0.78rem;font-weight:600;color:#555;">✍ Herschrijf selectie</span>
+        <span style="font-size:0.78rem;font-weight:600;color:#555;">Herschrijf selectie</span>
         <button id="regen-sel-close" style="background:none;border:none;cursor:pointer;font-size:1rem;color:#888;padding:0;line-height:1;" title="Sluiten">✕</button>
       </div>
       <div id="regen-sel-preview" style="font-size:0.74rem;color:#777;background:#f5f5f5;padding:4px 7px;border-radius:4px;max-height:42px;overflow:hidden;font-style:italic;"></div>
@@ -1880,14 +2013,14 @@ function renderPreview(draft, previewDiv) {
         `;
       });
       previewHtml += '</div>';
-      previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;">💡 <strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
+      previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;"><strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
       
       // Add regeneration controls for selected image
       previewHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div class="card">
             <div class="card-header">
-              <h4>🔄 Regenereer Geselecteerde Afbeelding</h4>
+              <h4>Regenereer geselecteerde afbeelding</h4>
             </div>
             <div class="card-body">
               <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
@@ -1901,7 +2034,7 @@ function renderPreview(draft, previewDiv) {
                         onclick="regenerateImage()"
                         class="btn btn-primary"
                         style="display: inline-flex; align-items: center; gap: 8px;">
-                  <span>🔄 Regenereer</span>
+                  <span>Regenereren</span>
                 </button>
               </div>
               <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
@@ -1936,7 +2069,7 @@ function renderPreview(draft, previewDiv) {
       previewHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div style="padding: 16px; background: #f9fafb; border: 2px solid #e2e8f0; border-radius: 8px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">🔄 Regenereer Afbeelding</h4>
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">Afbeelding regenereren</h4>
             <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
             <textarea id="regenerate-feedback" 
                       placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
@@ -1949,7 +2082,7 @@ function renderPreview(draft, previewDiv) {
                       class="btn btn-primary"
                       ${generationNumber >= 3 ? 'disabled' : ''}
                       style="display: inline-flex; align-items: center; gap: 8px;">
-                <span>${generationNumber >= 3 ? '✓ Maximum bereikt' : '🔄 Regenereer'}</span>
+                <span>${generationNumber >= 3 ? 'Maximum bereikt' : 'Regenereren'}</span>
               </button>
             </div>
             <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
@@ -2130,13 +2263,13 @@ async function regenerateImage() {
   
   if (!feedback) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Voer feedback in om de afbeelding te regenereren.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Voer feedback in om de afbeelding te regenereren.</div>';
     return;
   }
   
   if (feedback.length < 5) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Feedback moet minimaal 5 karakters bevatten.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Feedback moet minimaal 5 karakters bevatten.</div>';
     return;
   }
   
@@ -2144,7 +2277,7 @@ async function regenerateImage() {
   const draft = window._currentDraftWithImages;
   if (!draft || !draft.image || !draft.image.imageId) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Geen afbeelding geselecteerd voor regeneratie.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Geen afbeelding geselecteerd voor regeneratie.</div>';
     return;
   }
   
@@ -2152,9 +2285,9 @@ async function regenerateImage() {
   
   // Disable button and show loading
   regenerateBtn.disabled = true;
-  regenerateBtn.innerHTML = '<span>⏳ Regenereren...</span>';
+  regenerateBtn.innerHTML = '<span>Regenereren...</span>';
   statusDiv.style.display = 'block';
-  statusDiv.innerHTML = '<div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; border-radius: 4px;">🔄 Afbeelding wordt gegenereerd met je feedback...</div>';
+  statusDiv.innerHTML = '<div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; border-radius: 4px;">Afbeelding wordt gegenereerd met je feedback...</div>';
   
   try {
     const response = await fetch('/api/image/regenerate', {
@@ -2221,9 +2354,9 @@ async function regenerateImage() {
     
   } catch (error) {
     console.error('Regeneration error:', error);
-    statusDiv.innerHTML = `<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">❌ ${error.message}</div>`;
+    statusDiv.innerHTML = `<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">${error.message}</div>`;
     regenerateBtn.disabled = false;
-    regenerateBtn.innerHTML = '<span>🔄 Regenereer</span>';
+    regenerateBtn.innerHTML = '<span>Regenereren</span>';
   }
 }
 

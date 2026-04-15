@@ -1,99 +1,131 @@
-<section class="dashboard-panel">
+<section class="dashboard-panel workspace-page-panel workspace-publish-panel">
   <div class="section">
-    <h2 class="section-title">Post Publiceren naar WordPress</h2>
-
-    <div class="card section-spaced">
-      <div class="card-header">
-        <h3>Opgeslagen Concepten</h3>
-      </div>
-      <div class="card-body">
-        <div id="drafts-list">
-          <p class="text-muted">Laden...</p>
-        </div>
-      </div>
+    <div class="workspace-section-heading">
+      <h2 class="section-title">Publicatie Workflow</h2>
+      <p>
+        Werk vanuit links naar rechts: kies een concept, controleer de inhoud,
+        en publiceer direct of plan voor later.
+      </p>
     </div>
 
-    <div class="card">
-      <form id="publish-post-form">
-        <div class="form-group">
-          <label class="form-label" for="pubSiteId"
-            >Selecteer WordPress Site</label
-          >
-          <select id="pubSiteId" name="pubSiteId" class="form-input" required>
-            <option value="">-- Kies een site --</option>
-          </select>
+    <div class="workspace-publish-grid">
+      <div class="card workspace-card workspace-publish-drafts">
+        <div class="card-header">
+          <h3 class="card-title">Opgeslagen concepten</h3>
+          <p class="form-help mb-0">
+            Selecteer een concept om het formulier automatisch te vullen.
+          </p>
         </div>
-
-        <div class="form-group">
-          <label class="form-label" for="title">Post Titel</label>
-          <input
-            type="text"
-            id="title"
-            name="title"
-            class="form-input"
-            placeholder="bijv. '10 Tips voor Betere Productiviteit'"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="content">Post Content (HTML)</label>
-          <textarea
-            id="content"
-            name="content"
-            class="form-input"
-            rows="10"
-            placeholder="<p>Je HTML content hier...</p>"
-            required
-          ></textarea>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">
-            <input type="checkbox" id="isDraft" name="isDraft" checked />
-            Publiceer als concept
-          </label>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">
-            <input type="checkbox" id="isScheduled" name="isScheduled" />
-            Inplannen voor later
-          </label>
-        </div>
-
-        <div class="form-group schedule-date-group" id="schedule-date-group">
-          <label class="form-label" for="scheduleDateLocal"
-            >Publicatiedatum en tijd</label
-          >
-          <input
-            type="datetime-local"
-            id="scheduleDateLocal"
-            name="scheduleDateLocal"
-            class="form-input"
-          />
-          <div class="form-help">
-            Wordt opgeslagen als GMT en gepubliceerd door WordPress op het
-            gekozen moment.
+        <div class="card-body">
+          <div id="drafts-list">
+            <p class="text-muted">Laden...</p>
           </div>
         </div>
+      </div>
 
-        <div class="stack-actions">
-          <button
-            type="button"
-            id="delete-active-draft-btn"
-            class="btn btn-danger"
-          >
-            Draft verwijderen
-          </button>
-          <button type="button" id="save-draft-btn" class="btn btn-secondary">
-            Draft opslaan
-          </button>
-          <button type="submit" class="btn btn-primary">Publiceren</button>
+      <div class="card workspace-card workspace-publish-form">
+        <div class="card-header">
+          <h3 class="card-title">Publicatie instellingen</h3>
+          <p class="form-help mb-0">
+            Controleer eerst titel en inhoud, kies daarna de gewenste
+            publicatiemodus.
+          </p>
         </div>
-      </form>
+
+        <div class="card-body">
+          <form id="publish-post-form">
+            <div class="form-group">
+              <label class="form-label" for="pubSiteId">Doel WordPress site</label>
+              <select id="pubSiteId" name="pubSiteId" class="form-input" required>
+                <option value="">-- Kies een site --</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="title">Post titel</label>
+              <input
+                type="text"
+                id="title"
+                name="title"
+                class="form-input"
+                placeholder="Bijvoorbeeld: 10 tips voor betere productiviteit"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="content">Post content (HTML)</label>
+              <textarea
+                id="content"
+                name="content"
+                class="form-input"
+                rows="10"
+                placeholder="<p>Je HTML content hier...</p>"
+                required
+              ></textarea>
+            </div>
+
+            <div class="workspace-publish-toggle-grid">
+              <label class="workspace-image-check-card workspace-publish-toggle-card" for="isDraft">
+                <input
+                  type="checkbox"
+                  id="isDraft"
+                  name="isDraft"
+                  class="workspace-image-check-input"
+                  checked
+                />
+                <span class="workspace-image-check-copy">
+                  <span class="material-icons-outlined">edit_note</span>
+                  <span>Publiceer als concept</span>
+                </span>
+              </label>
+
+              <label class="workspace-image-check-card workspace-publish-toggle-card" for="isScheduled">
+                <input
+                  type="checkbox"
+                  id="isScheduled"
+                  name="isScheduled"
+                  class="workspace-image-check-input"
+                />
+                <span class="workspace-image-check-copy">
+                  <span class="material-icons-outlined">schedule</span>
+                  <span>Inplannen voor later</span>
+                </span>
+              </label>
+            </div>
+
+            <div class="form-group schedule-date-group" id="schedule-date-group">
+              <label class="form-label" for="scheduleDateLocal">Publicatiedatum en tijd</label>
+              <input
+                type="datetime-local"
+                id="scheduleDateLocal"
+                name="scheduleDateLocal"
+                class="form-input"
+              />
+              <div class="form-help">
+                Wordt als GMT opgeslagen en door WordPress op het gekozen moment
+                gepubliceerd.
+              </div>
+            </div>
+
+            <div class="stack-actions">
+              <button
+                type="button"
+                id="delete-active-draft-btn"
+                class="btn btn-danger"
+              >
+                Concept verwijderen
+              </button>
+              <button type="button" id="save-draft-btn" class="btn btn-secondary">
+                Concept opslaan
+              </button>
+              <button type="submit" class="btn btn-primary">Publiceren</button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
 
-    <div id="publish-preview" class="publish-preview"></div>
+    <div id="publish-preview" class="publish-preview workspace-publish-preview"></div>
   </div>
 </section>

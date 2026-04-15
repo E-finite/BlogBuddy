@@ -1,14 +1,17 @@
 {% extends 'app_base.html' %} {% block title %}Publiceren - E-finite{% endblock
 %} {% block content %}
-<section class="page-intro-card">
-  <div class="page-intro-copy">
-    <span class="page-kicker">Publishing desk</span>
-    <h1 class="page-heading">Post Publiceren naar WordPress</h1>
-    <p class="page-description">
-      Beheer opgeslagen concepten, herstelde previews en geplande publicaties op
-      een aparte publicatiepagina.
+<section class="workspace-hero card">
+  <div class="workspace-hero-copy">
+    <span class="workspace-hero-kicker">Publishing desk</span>
+    <h1 class="workspace-hero-title">Post Publiceren naar WordPress</h1>
+    <p class="workspace-hero-description">
+      Selecteer een concept, controleer de inhoud en plan of publiceer direct
+      naar je verbonden website.
     </p>
   </div>
 </section>
 
-{% include 'dashboard/partials/_publish_section.html' %} {% endblock %}
+<div class="workspace-main-stack">
+  {% include 'dashboard/partials/_publish_section.html' %}
+</div>
+{% endblock %}

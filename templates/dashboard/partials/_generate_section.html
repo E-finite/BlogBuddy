@@ -1,398 +1,388 @@
-<section class="dashboard-panel">
+<section class="dashboard-panel workspace-page-panel workspace-generate-panel">
   <div class="section">
-    <h2 class="section-title">Blog Post Genereren</h2>
-    <div class="card card-spaced-sm">
-      <div class="form-help form-help-strong">
-        Limieten deze maand: blogs {{ quota.blogs_used }}/{{ quota.blogs_limit
-        }}, tekst-regens {{ quota.text_regen_used }}/{{ quota.text_regen_limit
-        }}, image-regens per afbeelding: {{ quota.image_regen_limit }}.
+    <div class="workspace-section-heading">
+      <h2 class="section-title">Genereer een nieuwe blogpost</h2>
+      <p>
+        Werk stap voor stap: context kiezen, briefing invullen en optioneel een
+        afbeelding laten genereren.
+      </p>
+    </div>
+
+    <div class="card workspace-limit-card card-spaced-sm">
+      <h3 class="card-title">Beschikbare limieten deze maand</h3>
+      <div class="workspace-limit-grid">
+        <div>
+          <small>Blogs</small>
+          <strong>{{ quota.blogs_used }}/{{ quota.blogs_limit }}</strong>
+        </div>
+        <div>
+          <small>Tekst-regeneraties</small>
+          <strong>{{ quota.text_regen_used }}/{{ quota.text_regen_limit }}</strong>
+        </div>
+        <div>
+          <small>Image-regens per afbeelding</small>
+          <strong>{{ quota.image_regen_limit }}</strong>
+        </div>
       </div>
     </div>
-    <div class="card">
-      <form id="generate-post-form">
-        <!-- Website Context Sectie -->
-        <div class="form-group context-card">
-          <label class="form-label row-inline">
-            <span>🧬 Website Context (optioneel)</span>
-          </label>
 
-          <!-- Existing crawled sites dropdown -->
-          <div id="existing-sites-section" class="mb-md hidden">
-            <label class="form-label field-sm"
-              >Gebruik eerder gecrawlde website:</label
+    <div class="card workspace-card">
+      <form id="generate-post-form">
+        <section class="workspace-form-section">
+          <h3 class="workspace-form-title">1. Website context (optioneel)</h3>
+          <p class="workspace-form-copy">
+            Gebruik een eerder gecrawlde website of crawl een nieuwe URL om
+            tone of voice en merkcontext mee te nemen.
+          </p>
+
+          <div class="form-group context-card">
+            <div id="existing-sites-section" class="mb-md hidden">
+              <label class="form-label field-sm" for="existingSiteSelect"
+                >Gebruik eerder gecrawlde website</label
+              >
+              <select id="existingSiteSelect" class="form-select">
+                <option value="">-- Kies een website --</option>
+              </select>
+              <button
+                type="button"
+                id="confirm-site-btn"
+                class="btn btn-primary mt-md hidden"
+              >
+                Gebruik deze website
+              </button>
+            </div>
+
+            <div
+              id="existing-sites-divider"
+              class="text-center field-sm text-muted mb-md hidden"
             >
-            <select id="existingSiteSelect" class="form-select">
-              <option value="">-- Kies een website --</option>
-            </select>
+              of
+            </div>
+
+            <label class="form-label field-sm" for="contextWebsiteUrl"
+              >Crawl nieuwe website</label
+            >
+            <input
+              type="url"
+              id="contextWebsiteUrl"
+              name="contextWebsiteUrl"
+              class="form-input"
+              placeholder="https://jouwsite.nl"
+            />
+            <div class="form-help">
+              De website wordt gecrawld om inhoud, stijl en merkcontext te
+              analyseren.
+            </div>
+
+            <div id="context-status" class="context-status">
+              <div class="alert"></div>
+            </div>
             <button
               type="button"
-              id="confirm-site-btn"
-              class="btn btn-primary mt-md hidden"
+              id="crawl-context-btn"
+              class="btn btn-secondary mt-md hidden"
             >
-              ✓ Gebruik deze website
+              Websitecontext laden
             </button>
           </div>
+        </section>
 
-          <div id="existing-sites-divider" class="text-center field-sm text-muted mb-md hidden">
-            of
-          </div>
+        <section class="workspace-form-section">
+          <h3 class="workspace-form-title">2. Content briefing</h3>
 
-          <!-- New URL input -->
-          <label class="form-label field-sm"
-            >Crawl nieuwe website:</label
-          >
-          <input
-            type="url"
-            id="contextWebsiteUrl"
-            name="contextWebsiteUrl"
-            class="form-input"
-            placeholder="https://jouwsite.nl (laat leeg voor generic content)"
-          />
-          <div class="form-help">
-            Als je een website URL invult, wordt deze eerst gecrawld om
-            authentieke content, tone of voice en brand identity te extraheren.
-            Je blog wordt dan consistent met deze website en maakt geen
-            hallucinerende claims.
-          </div>
-          <div id="context-status" class="context-status">
-            <div class="alert"></div>
-          </div>
-          <button
-            type="button"
-            id="crawl-context-btn"
-            class="btn btn-secondary mt-md hidden"
-          >
-            🕷️ Crawl Website voor Context
-          </button>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="topic">Onderwerp</label>
-          <input
-            type="text"
-            id="topic"
-            name="topic"
-            class="form-input"
-            placeholder="Hoe maak je een WordPress blog?"
-            required
-          />
-        </div>
-
-        <input type="hidden" id="focusKeyword" name="focusKeyword" />
-
-        <div class="grid grid-2">
           <div class="form-group">
-            <label class="form-label" for="audienceMarket"
-              >Doelgroep Markt</label
-            >
+            <label class="form-label" for="topic">Onderwerp</label>
             <input
               type="text"
-              id="audienceMarket"
-              name="audienceMarket"
+              id="topic"
+              name="topic"
               class="form-input"
-              placeholder="kleine ondernemers"
+              placeholder="Bijvoorbeeld: Hoe maak je een WordPress blog"
               required
             />
           </div>
 
-          <div class="form-group">
-            <label class="form-label" for="audienceLevel">Niveau</label>
-            <select
-              id="audienceLevel"
-              name="audienceLevel"
-              class="form-select"
-              required
-            >
-              <option value="beginner">Beginner</option>
-              <option value="intermediate" selected>Intermediate</option>
-              <option value="expert">Expert</option>
-            </select>
+          <input type="hidden" id="focusKeyword" name="focusKeyword" />
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" for="audienceMarket">Doelgroep</label>
+              <input
+                type="text"
+                id="audienceMarket"
+                name="audienceMarket"
+                class="form-input"
+                placeholder="Kleine ondernemers"
+                required
+              />
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="audienceLevel">Niveau</label>
+              <select
+                id="audienceLevel"
+                name="audienceLevel"
+                class="form-select"
+                required
+              >
+                <option value="beginner">Beginner</option>
+                <option value="intermediate" selected>Intermediate</option>
+                <option value="expert">Expert</option>
+              </select>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label class="form-label" for="painPoints"
-            >Pijnpunten (comma gescheiden)</label
-          >
-          <input
-            type="text"
-            id="painPoints"
-            name="painPoints"
-            class="form-input"
-            placeholder="geen technische kennis, tijd tekort"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="brandName">Brand Naam</label>
-          <input
-            type="text"
-            id="brandName"
-            name="brandName"
-            class="form-input"
-            placeholder="My Brand"
-            required
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="toneStyle"
-            >Tone of Voice Stijl (comma gescheiden)</label
-          >
-          <input
-            type="text"
-            id="toneStyle"
-            name="toneStyle"
-            class="form-input"
-            placeholder="nuchter, direct"
-            value="nuchter, direct"
-          />
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="formality">Formaliteit</label>
-          <select id="formality" name="formality" class="form-select" required>
-            <option value="je" selected>Je</option>
-            <option value="u">U</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="status">Status</label>
-          <select id="status" name="status" class="form-select" required>
-            <option value="draft" selected>Draft</option>
-            <option value="publish">Publish</option>
-          </select>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label row-inline">
+          <div class="form-group">
+            <label class="form-label" for="painPoints">Pijnpunten (komma-gescheiden)</label>
             <input
-              type="checkbox"
-              id="generateImage"
-              name="generateImage"
-              checked
+              type="text"
+              id="painPoints"
+              name="painPoints"
+              class="form-input"
+              placeholder="Geen technische kennis, tijd tekort"
             />
-            <span>🎨 Genereer Featured Image (Gemini Imagen)</span>
-          </label>
-          <div class="form-help">
-            Automatisch een professionele featured image genereren voor deze
-            blog post
           </div>
-        </div>
 
-        <!-- Image Settings -->
-        <div id="image-settings-panel" class="form-group">
-          <h4>
-            🎨 Image Settings
-            <span class="badge badge-primary">Powered by Gemini Imagen</span>
-          </h4>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" for="brandName">Merknaam</label>
+              <input
+                type="text"
+                id="brandName"
+                name="brandName"
+                class="form-input"
+                placeholder="Mijn merk"
+                required
+              />
+            </div>
 
-          <!-- Preset -->
-          <div class="form-group">
-            <label class="form-label" for="imagePreset">
-              🎭 Style Preset
+            <div class="form-group">
+              <label class="form-label" for="toneStyle">Tone of voice (komma-gescheiden)</label>
+              <input
+                type="text"
+                id="toneStyle"
+                name="toneStyle"
+                class="form-input"
+                placeholder="Nuchter, direct"
+                value="nuchter, direct"
+              />
+            </div>
+          </div>
+
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" for="formality">Aanspreekvorm</label>
+              <select id="formality" name="formality" class="form-select" required>
+                <option value="je" selected>Je</option>
+                <option value="u">U</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="status">Outputstatus</label>
+              <select id="status" name="status" class="form-select" required>
+                <option value="draft" selected>Concept</option>
+                <option value="publish">Publiceren</option>
+              </select>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-form-section workspace-image-section">
+          <h3 class="workspace-form-title">3. Afbeelding instellingen</h3>
+          <p class="workspace-form-copy">
+            Stel hier de visuele stijl in. Alle velden blijven beschikbaar,
+            maar de structuur is opgedeeld in duidelijke blokken.
+          </p>
+
+          <div class="workspace-image-toggle form-group">
+            <label class="workspace-image-check-card" for="generateImage">
+              <input
+                type="checkbox"
+                id="generateImage"
+                name="generateImage"
+                class="workspace-image-check-input"
+                checked
+              />
+              <span class="workspace-image-check-copy">
+                <span class="material-icons-outlined">image</span>
+                <span>Genereer featured image met Gemini Imagen</span>
+              </span>
             </label>
-            <select id="imagePreset" name="imagePreset" class="form-select">
-              <option value="minimal-tech" selected>✨ Minimal Tech</option>
-              <option value="bold-creative">🎨 Bold Creative</option>
-              <option value="professional">💼 Professional</option>
-              <option value="modern-gradient">🌈 Modern Gradient</option>
-              <option value="flat-illustration">🎯 Flat Illustration</option>
-            </select>
-          </div>
-
-          <!-- Quick Controls Grid -->
-          <div class="image-quick-grid">
-            <div class="image-quick-item">
-              <label class="form-label" for="aspectRatio">
-                📐 Aspect Ratio
-              </label>
-              <select
-                id="aspectRatio"
-                name="aspectRatio"
-                class="form-select"
-              >
-                <option value="16:9" selected>16:9 Blog</option>
-                <option value="1:1">1:1 Square</option>
-                <option value="4:5">4:5 Portrait</option>
-              </select>
-            </div>
-
-            <div class="image-quick-item">
-              <label class="form-label" for="styleStrength">
-                💪 Style Strength
-              </label>
-              <select
-                id="styleStrength"
-                name="styleStrength"
-                class="form-select"
-              >
-                <option value="low">🌱 Low (Subtle)</option>
-                <option value="medium" selected>⚡ Medium</option>
-                <option value="high">🔥 High (Bold)</option>
-              </select>
-            </div>
-
-            <div class="image-quick-item">
-              <label class="form-label">
-                🎨 Brand Colors
-              </label>
-              <label class="inline-checkbox mt-md">
-                <input
-                  type="checkbox"
-                  id="useBrandColors"
-                  name="useBrandColors"
-                  checked
-                />
-                <span>Use brand palette</span>
-              </label>
+            <div class="form-help">
+              Schakel uit als je alleen tekst wilt genereren.
             </div>
           </div>
 
-          <!-- Advanced Settings Toggle -->
-          <details class="mt-lg">
-            <summary>
-              <span>⚙️</span>
-              <span>Advanced Settings</span>
-              <span class="ml-auto field-sm text-muted"
-                >Click to expand</span
-              >
-            </summary>
+          <div id="image-settings-panel" class="form-group workspace-image-config">
+            <div class="workspace-image-block">
+              <h4>
+                Basis instellingen
+                <span class="badge badge-primary">Gemini Imagen</span>
+              </h4>
 
-            <div class="image-advanced-panel">
-              <div class="image-advanced-grid">
-                <!-- Color Strictness -->
+              <div class="workspace-image-grid">
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="colorStrictness">
-                    🎯 Brand Color Strictness
-                  </label>
-                  <select
-                    id="colorStrictness"
-                    name="colorStrictness"
-                    class="form-select"
-                  >
-                    <option value="low">💡 Low (Inspiration)</option>
-                    <option value="medium" selected>⚖️ Medium</option>
-                    <option value="high">🎯 High (Strict)</option>
+                  <label class="form-label" for="imagePreset">Stijl preset</label>
+                  <select id="imagePreset" name="imagePreset" class="form-select">
+                    <option value="minimal-tech" selected>Minimal Tech</option>
+                    <option value="bold-creative">Bold Creative</option>
+                    <option value="professional">Professional</option>
+                    <option value="modern-gradient">Modern Gradient</option>
+                    <option value="flat-illustration">Flat Illustration</option>
                   </select>
                 </div>
 
-                <!-- Composition -->
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="composition">
-                    📸 Composition
-                  </label>
-                  <select
-                    id="composition"
-                    name="composition"
-                    class="form-select"
-                  >
-                    <option value="auto" selected>🤖 Auto</option>
-                    <option value="centered">🎯 Centered Hero</option>
-                    <option value="left-whitespace">◀️ Left + Space</option>
-                    <option value="flat-lay">📋 Flat Lay</option>
-                    <option value="isometric">📦 Isometric</option>
+                  <label class="form-label" for="aspectRatio">Aspect ratio</label>
+                  <select id="aspectRatio" name="aspectRatio" class="form-select">
+                    <option value="16:9" selected>16:9 Blog</option>
+                    <option value="1:1">1:1 Square</option>
+                    <option value="4:5">4:5 Portrait</option>
                   </select>
                 </div>
 
-                <!-- Lighting -->
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="lighting">
-                    💡 Lighting
-                  </label>
-                  <select
-                    id="lighting"
-                    name="lighting"
-                    class="form-select"
-                  >
-                    <option value="soft-studio" selected>✨ Soft Studio</option>
-                    <option value="natural">☀️ Natural Light</option>
-                    <option value="dramatic">🌟 Dramatic</option>
-                    <option value="backlit">💫 Backlit</option>
+                  <label class="form-label" for="styleStrength">Stijlsterkte</label>
+                  <select id="styleStrength" name="styleStrength" class="form-select">
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
                   </select>
                 </div>
 
-                <!-- Variations -->
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="variations">
-                    🔄 Variations
-                  </label>
-                  <select
-                    id="variations"
-                    name="variations"
-                    class="form-select"
-                  >
+                  <label class="form-label" for="variations">Variaties</label>
+                  <select id="variations" name="variations" class="form-select">
                     <option value="1" selected>1 image</option>
                     <option value="2">2 variations</option>
                     <option value="4">4 variations</option>
                   </select>
                 </div>
               </div>
+            </div>
 
-              <!-- Brand Colors -->
-              <div class="form-group form-group-top">
-                <label class="form-label" for="brandColors">
-                  🎨 Brand Kleuren (HEX codes)
-                </label>
-                <input
-                  type="text"
-                  id="brandColors"
-                  name="brandColors"
-                  class="form-input"
-                  placeholder="#3ECFFF, #355176, #E2E2E2"
-                />
-                <div class="form-help">
-                  Comma-gescheiden HEX codes voor jouw merk kleuren (bijv.
-                  #3ECFFF, #355176)
+            <div class="workspace-image-block">
+              <h4>Stijl en merk</h4>
+
+              <div class="workspace-image-grid">
+                <div class="form-group form-group-no-margin">
+                  <label class="form-label" for="composition">Compositie</label>
+                  <select
+                    id="composition"
+                    name="composition"
+                    class="form-select"
+                  >
+                    <option value="auto" selected>Auto</option>
+                    <option value="centered">Centered Hero</option>
+                    <option value="left-whitespace">Left + Space</option>
+                    <option value="flat-lay">Flat Lay</option>
+                    <option value="isometric">Isometric</option>
+                  </select>
+                </div>
+
+                <div class="form-group form-group-no-margin">
+                  <label class="form-label" for="lighting">Belichting</label>
+                  <select
+                    id="lighting"
+                    name="lighting"
+                    class="form-select"
+                  >
+                    <option value="soft-studio" selected>Soft Studio</option>
+                    <option value="natural">Natural</option>
+                    <option value="dramatic">Dramatic</option>
+                    <option value="backlit">Backlit</option>
+                  </select>
+                </div>
+
+                <div class="form-group form-group-no-margin">
+                  <label class="form-label" for="colorStrictness">Kleur strictheid</label>
+                  <select
+                    id="colorStrictness"
+                    name="colorStrictness"
+                    class="form-select"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium" selected>Medium</option>
+                    <option value="high">High</option>
+                  </select>
+                </div>
+
+                <div class="form-group form-group-no-margin">
+                  <label class="form-label" for="brandColors">Merkkleuren (HEX)</label>
+                  <input
+                    type="text"
+                    id="brandColors"
+                    name="brandColors"
+                    class="form-input"
+                    placeholder="#3ECFFF, #355176, #E2E2E2"
+                  />
                 </div>
               </div>
 
-              <!-- Consistency Seed -->
-              <div class="form-group form-group-top">
-                <label class="form-label row-inline">
-                  <input type="checkbox" id="lockSeed" name="lockSeed" />
-                  <span>🔒 Lock Seed (Consistency)</span>
+              <div class="workspace-image-switch-grid">
+                <label class="workspace-image-check-card workspace-image-check-card-compact" for="useBrandColors">
+                  <input
+                    type="checkbox"
+                    id="useBrandColors"
+                    name="useBrandColors"
+                    class="workspace-image-check-input"
+                    checked
+                  />
+                  <span class="workspace-image-check-copy">
+                    <span class="material-icons-outlined">palette</span>
+                    <span>Gebruik merkkleuren</span>
+                  </span>
                 </label>
-                <div class="form-help mb-md">
-                  Use same seed for consistent style across images
-                </div>
+
+                <label class="workspace-image-check-card workspace-image-check-card-compact" for="lockSeed">
+                  <input
+                    type="checkbox"
+                    id="lockSeed"
+                    name="lockSeed"
+                    class="workspace-image-check-input"
+                  />
+                  <span class="workspace-image-check-copy">
+                    <span class="material-icons-outlined">tune</span>
+                    <span>Gebruik vaste seed voor consistente stijl</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="form-group form-group-top workspace-seed-input">
+                <label class="form-label" for="seedValue">Seed (optioneel)</label>
                 <input
                   type="number"
                   id="seedValue"
                   name="seedValue"
                   class="form-input"
-                  placeholder="Auto (leave empty)"
+                  placeholder="Automatisch (leeg laten)"
                 />
               </div>
+            </div>
 
-              <!-- Negative Prompt -->
-              <div class="form-group form-group-top">
-                <label class="form-label" for="negativePrompt">
-                  🚫 Negative Prompt
-                </label>
+            <div class="workspace-image-block">
+              <h4>Kwaliteitscontrole</h4>
+              <div class="form-group form-group-no-margin">
+                <label class="form-label" for="negativePrompt">Negatieve prompt</label>
                 <textarea
                   id="negativePrompt"
                   name="negativePrompt"
                   class="form-input"
                   rows="2"
-                  placeholder="Things to avoid..."
+                  placeholder="Elementen die je wilt vermijden"
                 >
 blurry, low quality, watermark, jpeg artifacts, deformed, pixelated</textarea
                 >
                 <div class="form-help">
-                  Quality control - things to avoid in the image. Leave
-                  text-related terms out if you want visible typography in the
-                  result.
+                  Geef aan wat je wilt vermijden in de output.
                 </div>
               </div>
             </div>
-          </details>
-        </div>
+          </div>
+        </section>
 
-        <button type="submit" class="btn btn-primary">
-          🚀 Genereer Blog Post
-        </button>
+        <button type="submit" class="btn btn-primary">Blogpost genereren</button>
       </form>
     </div>
   </div>

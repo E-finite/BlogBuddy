@@ -1,14 +1,17 @@
 {% extends 'app_base.html' %} {% block title %}Verbinden - E-finite{% endblock
 %} {% block content %}
-<section class="page-intro-card">
-  <div class="page-intro-copy">
-    <span class="page-kicker">WordPress integratie</span>
-    <h1 class="page-heading">WordPress Site Verbinden</h1>
-    <p class="page-description">
-      Koppel je WordPress-omgeving zodat concepten, afbeeldingen en publicaties
-      rechtstreeks vanuit de app doorstromen.
+<section class="workspace-hero card">
+  <div class="workspace-hero-copy">
+    <span class="workspace-hero-kicker">WordPress integratie</span>
+    <h1 class="workspace-hero-title">WordPress Site Verbinden</h1>
+    <p class="workspace-hero-description">
+      Beheer hier je WordPress-koppelingen, zodat genereren en publiceren zonder
+      extra stappen verloopt.
     </p>
   </div>
 </section>
 
-{% include 'dashboard/partials/_connect_section.html' %} {% endblock %}
+<div class="workspace-main-stack">
+  {% include 'dashboard/partials/_connect_section.html' %}
+</div>
+{% endblock %}
