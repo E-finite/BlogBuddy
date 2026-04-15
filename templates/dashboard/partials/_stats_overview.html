@@ -1,22 +1,98 @@
-<div class="section section-spaced">
-  <h2 class="section-title">Jouw Limieten ({{ quota.usage_month }})</h2>
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div class="stat-value">{{ quota.blogs_remaining }}</div>
-      <div class="stat-label">
-        Blogs over deze maand ({{ quota.blogs_used }}/{{ quota.blogs_limit }})
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value">{{ quota.text_regen_remaining }}</div>
-      <div class="stat-label">
-        Tekst-regens over deze maand ({{ quota.text_regen_used }}/{{
-        quota.text_regen_limit }})
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-value">{{ quota.image_regen_limit }}</div>
-      <div class="stat-label">Image-regens per afbeelding</div>
-    </div>
+{% set month_label = quota.usage_month if quota and quota.usage_month else
+'Onbekend' %} {% set blogs_limit = quota.blogs_limit if quota else 0 %} {% set
+blogs_used = quota.blogs_used if quota else 0 %} {% set blogs_remaining =
+quota.blogs_remaining if quota else 0 %} {% set text_limit =
+quota.text_regen_limit if quota else 0 %} {% set text_used =
+quota.text_regen_used if quota else 0 %} {% set text_remaining =
+quota.text_regen_remaining if quota else 0 %} {% set image_limit =
+quota.image_regen_limit if quota else 0 %} {% set sites_count = stats.sites if
+stats else 0 %} {% set blogs_pct_raw = (blogs_used * 100 / blogs_limit) if
+blogs_limit else 0 %} {% set blogs_pct = 100 if blogs_pct_raw > 100 else
+blogs_pct_raw %} {% set text_pct_raw = (text_used * 100 / text_limit) if
+text_limit else 0 %} {% set text_pct = 100 if text_pct_raw > 100 else
+text_pct_raw %} {% set blogs_state = 'critical' if blogs_pct >= 90 else
+('warning' if blogs_pct >= 70 else 'good') %} {% set text_state = 'critical'
+if text_pct >= 90 else ('warning' if text_pct >= 70 else 'good') %}
+
+<section class="dashboard-cockpit section section-spaced">
+  <div class="dashboard-cockpit-header">
+    <h2 class="section-title">Quota Cockpit ({{ month_label }})</h2>
+    <p class="dashboard-cockpit-subtitle">
+      Monitor je maandgebruik en houd ruimte vrij voor snelle iteraties.
+    </p>
   </div>
-</div>
+
+  <div class="dashboard-cockpit-grid">
+    <article class="dashboard-usage-card card">
+      <div class="dashboard-usage-top">
+        <span class="dashboard-usage-icon"
+          ><span class="material-icons-outlined dashboard-usage-icon-glyph"
+            >article</span
+          ></span
+        >
+        <span class="dashboard-usage-label">Blogs Beschikbaar</span>
+      </div>
+      <div class="dashboard-usage-value">{{ blogs_remaining }}</div>
+      <p class="dashboard-usage-meta">{{ blogs_used }} van {{ blogs_limit }} gebruikt</p>
+      <progress
+        class="dashboard-usage-progress is-{{ blogs_state }}"
+        max="100"
+        value="{{ blogs_pct|round|int }}"
+      ></progress>
+    </article>
+
+    <article class="dashboard-usage-card card">
+      <div class="dashboard-usage-top">
+        <span class="dashboard-usage-icon"
+          ><span class="material-icons-outlined dashboard-usage-icon-glyph"
+            >auto_fix_high</span
+          ></span
+        >
+        <span class="dashboard-usage-label">Tekst-Regens Over</span>
+      </div>
+      <div class="dashboard-usage-value">{{ text_remaining }}</div>
+      <p class="dashboard-usage-meta">{{ text_used }} van {{ text_limit }} gebruikt</p>
+      <progress
+        class="dashboard-usage-progress is-{{ text_state }}"
+        max="100"
+        value="{{ text_pct|round|int }}"
+      ></progress>
+    </article>
+
+    <article class="dashboard-usage-card card">
+      <div class="dashboard-usage-top">
+        <span class="dashboard-usage-icon"
+          ><span class="material-icons-outlined dashboard-usage-icon-glyph"
+            >image</span
+          ></span
+        >
+        <span class="dashboard-usage-label">Image-Regens / Afbeelding</span>
+      </div>
+      <div class="dashboard-usage-value">{{ image_limit }}</div>
+      <p class="dashboard-usage-meta">Maximale feedback-iteraties per visual</p>
+      <div class="dashboard-token-row">
+        <span class="badge badge-info">Cap ingesteld</span>
+      </div>
+    </article>
+
+    <article class="dashboard-usage-card card">
+      <div class="dashboard-usage-top">
+        <span class="dashboard-usage-icon"
+          ><span class="material-icons-outlined dashboard-usage-icon-glyph"
+            >lan</span
+          ></span
+        >
+        <span class="dashboard-usage-label">Verbonden Websites</span>
+      </div>
+      <div class="dashboard-usage-value">{{ sites_count }}</div>
+      <p class="dashboard-usage-meta">Actieve WordPress-verbindingen</p>
+      <div class="dashboard-token-row">
+        {% if sites_count > 0 %}
+        <span class="badge badge-success">Klaar om te publiceren</span>
+        {% else %}
+        <span class="badge badge-warning">Koppel eerst een site</span>
+        {% endif %}
+      </div>
+    </article>
+  </div>
+</section>

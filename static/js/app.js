@@ -3,7 +3,7 @@
  */
 
 import { api, pollJob } from './api.js';
-import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus } from './ui.js';
+import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus, escapeHtml } from './ui.js';
 
 let activeDraftId = null;
 let draftAutosaveTimeout = null;
@@ -1531,12 +1531,19 @@ async function loadJobs() {
   const jobsContainer = document.getElementById('jobs-list');
   if (!jobsContainer) return;
 
+  const safe = (value) => escapeHtml(String(value ?? '-'));
+
   try {
     const response = await api.getJobs(50);
     const jobs = response.jobs || [];
 
     if (jobs.length === 0) {
-      jobsContainer.innerHTML = '<p class="text-secondary">Nog geen jobs gevonden.</p>';
+      jobsContainer.innerHTML = `
+        <div class="dashboard-jobs-empty">
+          <span class="material-icons-outlined">inventory_2</span>
+          <span>Nog geen jobs gevonden.</span>
+        </div>
+      `;
       return;
     }
 
@@ -1544,51 +1551,107 @@ async function loadJobs() {
       const draftId = job.payload?.draftId;
       const siteId = job.payload?.siteId || '-';
       const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
+      const updatedAt = job.updatedAt ? formatDate(job.updatedAt) : '-';
       const statusBadge = formatJobStatus(job.status);
+      const jobCode = safe(job.jobId || job.id || '-');
+      const type = safe(job.type || '-');
 
       return `
-        <div class="card" style="margin-bottom: 0.75rem;">
-          <div class="card-body">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-              <div>
-                <div><strong>Job:</strong> ${job.jobId}</div>
-                <div><strong>Type:</strong> ${job.type}</div>
-                <div><strong>Site:</strong> ${siteId}</div>
-                <div><strong>Draft:</strong> ${draftId || '-'}</div>
-                <div><strong>Aangemaakt:</strong> ${createdAt}</div>
-              </div>
-              <div>${statusBadge}</div>
+        <article class="dashboard-job-item">
+          <div class="dashboard-job-top">
+            <div class="dashboard-job-id-wrap">
+              <span class="dashboard-job-code">${jobCode}</span>
+              <span class="dashboard-job-type">${type}</span>
             </div>
+            <div class="dashboard-job-status">${statusBadge}</div>
           </div>
-        </div>
+
+          <dl class="dashboard-job-grid">
+            <div>
+              <dt>Site</dt>
+              <dd>${safe(siteId)}</dd>
+            </div>
+            <div>
+              <dt>Draft</dt>
+              <dd>${safe(draftId || '-')}</dd>
+            </div>
+            <div>
+              <dt>Aangemaakt</dt>
+              <dd>${safe(createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Laatst bijgewerkt</dt>
+              <dd>${safe(updatedAt)}</dd>
+            </div>
+          </dl>
+        </article>
       `;
     }).join('');
   } catch (error) {
     console.error('Error loading jobs:', error);
-    jobsContainer.innerHTML = '<p class="text-secondary" style="color: var(--color-error);">Fout bij laden van jobs.</p>';
+    jobsContainer.innerHTML = `
+      <div class="dashboard-jobs-error">
+        <span class="material-icons-outlined">error</span>
+        <span>Fout bij laden van jobs.</span>
+      </div>
+    `;
   }
 }
 
 function updateJobStatus(job) {
   const statusContainer = document.getElementById('job-status');
   if (!statusContainer) return;
+
+  const safe = (value) => escapeHtml(String(value ?? '-'));
+  const resultJson = job.result
+    ? `<pre class="dashboard-status-pre">${escapeHtml(JSON.stringify(job.result, null, 2))}</pre>`
+    : '';
+  const errorJson = job.error
+    ? `<pre class="dashboard-status-pre">${escapeHtml(JSON.stringify(job.error, null, 2))}</pre>`
+    : '';
+  const steps = Array.isArray(job.steps) ? job.steps : [];
+  const stepsHtml = steps.length > 0
+    ? `
+      <ol class="dashboard-status-steps">
+        ${steps.map((step) => `<li>${safe(step.step)}: ${safe(step.status)}</li>`).join('')}
+      </ol>
+    `
+    : '<p class="text-muted">Geen stappen beschikbaar.</p>';
   
   statusContainer.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Job Status: ${formatJobStatus(job.status)}</h3>
+    <div class="dashboard-status-block">
+      <div>
+        ${formatJobStatus(job.status)}
       </div>
-      <div class="card-body">
-        <p><strong>Job ID:</strong> ${job.jobId}</p>
-        <p><strong>Status:</strong> ${job.status}</p>
-        ${job.result ? `<pre>${JSON.stringify(job.result, null, 2)}</pre>` : ''}
-        ${job.error ? `<div class="alert alert-error">${JSON.stringify(job.error, null, 2)}</div>` : ''}
-        ${job.steps ? `
-          <h4>Stappen:</h4>
-          <ul>
-            ${job.steps.map(step => `<li>${step.step}: ${step.status}</li>`).join('')}
-          </ul>
-        ` : ''}
+
+      <div class="dashboard-status-kv">
+        <div class="dashboard-status-kv-item">
+          <small>Job ID</small>
+          <span>${safe(job.jobId || job.id || '-')}</span>
+        </div>
+        <div class="dashboard-status-kv-item">
+          <small>Type</small>
+          <span>${safe(job.type || '-')}</span>
+        </div>
+      </div>
+
+      ${resultJson ? `
+        <div>
+          <h4>Resultaat</h4>
+          ${resultJson}
+        </div>
+      ` : ''}
+
+      ${errorJson ? `
+        <div>
+          <h4>Foutmelding</h4>
+          ${errorJson}
+        </div>
+      ` : ''}
+
+      <div>
+        <h4>Stappen</h4>
+        ${stepsHtml}
       </div>
     </div>
   `;
