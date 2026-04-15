@@ -413,7 +413,10 @@ def _try_gemini_generate(
             ],
         }
         if image_size:
-            response_config["image_config"]["image_size"] = image_size
+            # image_size is not supported when editing an existing image (reference_image_bytes).
+            # Sending it together with a reference image causes a 500 from the Gemini API.
+            if not reference_image_bytes:
+                response_config["image_config"]["image_size"] = image_size
 
         from google.genai import types as genai_types
 
