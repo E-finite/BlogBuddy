@@ -1,17 +1,178 @@
 {% extends 'app_base.html' %} {% block title %}Publiceren - E-finite{% endblock
 %} {% block content %}
+
+<!-- ── 1. Hero ─────────────────────────────────────────────────── -->
 <section class="workspace-hero card">
   <div class="workspace-hero-copy">
     <span class="workspace-hero-kicker">Publishing desk</span>
-    <h1 class="workspace-hero-title">Post Publiceren naar WordPress</h1>
+    <h1 class="workspace-hero-title">Welkom terug, {{ user.username }}.</h1>
     <p class="workspace-hero-description">
-      Selecteer een concept, controleer de inhoud en plan of publiceer direct
-      naar je verbonden website.
+      Selecteer een concept, controleer de inhoud en publiceer direct naar je
+      verbonden website.
     </p>
   </div>
 </section>
 
-<div class="workspace-main-stack">
-  {% include 'dashboard/partials/_publish_section.html' %}
+<!-- ── 2. Concepten ────────────────────────────────────────────── -->
+<section class="pub-drafts-panel card">
+  <div class="pub-drafts-header">
+    <div>
+      <h2 class="card-title">Opgeslagen concepten</h2>
+      <p class="form-help mb-0">
+        Selecteer een concept om het formulier automatisch te vullen.
+      </p>
+    </div>
+    <span class="material-icons-outlined pub-drafts-icon">file_download</span>
+  </div>
+  <div id="drafts-list" class="pub-drafts-body">
+    <p class="text-muted">Laden...</p>
+  </div>
+</section>
+
+<!-- ── 3. Image aanpassen blok (door JS gevuld) ────────────────── -->
+<section id="publish-preview" class="publish-preview pub-image-panel"></section>
+
+<!-- ── 4. Twee kolommen: instellingen + content ────────────────── -->
+<form id="publish-post-form" class="pub-dual-grid">
+  <!-- Links: Publicatie instellingen -->
+  <div class="card pub-settings-col">
+    <div class="card-header">
+      <h3 class="card-title">Publicatie instellingen</h3>
+      <p class="form-help mb-0">
+        Controleer titel en inhoud, kies daarna de gewenste publicatiemodus.
+      </p>
+    </div>
+    <div class="card-body">
+      <div class="form-group">
+        <label class="form-label" for="pubSiteId">Doel WordPress site</label>
+        <select id="pubSiteId" name="pubSiteId" class="form-input" required>
+          <option value="">-- Kies een site --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="title">Post titel</label>
+        <input
+          type="text"
+          id="title"
+          name="title"
+          class="form-input"
+          placeholder="Bijvoorbeeld: 10 tips voor betere productiviteit"
+          required
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="content">Post content (HTML)</label>
+        <textarea
+          id="content"
+          name="content"
+          class="form-input"
+          rows="8"
+          placeholder="<p>Je HTML content hier...</p>"
+          required
+        ></textarea>
+      </div>
+
+      <!-- Publicatiemodus toggles -->
+      <div class="workspace-publish-toggle-grid">
+        <label
+          class="workspace-image-check-card workspace-publish-toggle-card"
+          for="isDraft"
+        >
+          <input
+            type="checkbox"
+            id="isDraft"
+            name="isDraft"
+            class="workspace-image-check-input"
+            checked
+          />
+          <span class="workspace-image-check-copy">
+            <span class="material-icons-outlined">edit_note</span>
+            <span>Publiceer als concept</span>
+          </span>
+        </label>
+
+        <label
+          class="workspace-image-check-card workspace-publish-toggle-card"
+          for="isScheduled"
+        >
+          <input
+            type="checkbox"
+            id="isScheduled"
+            name="isScheduled"
+            class="workspace-image-check-input"
+          />
+          <span class="workspace-image-check-copy">
+            <span class="material-icons-outlined">schedule</span>
+            <span>Inplannen voor later</span>
+          </span>
+        </label>
+      </div>
+
+      <div class="form-group schedule-date-group" id="schedule-date-group">
+        <label class="form-label" for="scheduleDateLocal"
+          >Publicatiedatum en tijd</label
+        >
+        <input
+          type="datetime-local"
+          id="scheduleDateLocal"
+          name="scheduleDateLocal"
+          class="form-input"
+        />
+        <div class="form-help">
+          Wordt als GMT opgeslagen en door WordPress op het gekozen moment
+          gepubliceerd.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Rechts: Content preview (live sync) -->
+  <div class="card pub-preview-col">
+    <div class="card-header">
+      <h3 class="card-title">Content preview</h3>
+      <p class="form-help mb-0">
+        Live weergave van je post. Selecteer tekst om inline te herschrijven.
+      </p>
+    </div>
+    <div class="card-body" id="pub-content-preview">
+      <p class="text-muted">Laad een concept of genereer eerst een post.</p>
+    </div>
+  </div>
+</form>
+
+<!-- ── 5. Sticky actie-balk ────────────────────────────────────── -->
+<div class="pub-action-bar">
+  <div class="pub-action-bar-inner">
+    <button
+      type="button"
+      id="delete-active-draft-btn"
+      class="btn btn-danger btn-sm"
+    >
+      <span class="material-icons-outlined" style="font-size: 1.1rem"
+        >delete</span
+      >
+      Verwijderen
+    </button>
+    <div class="pub-action-spacer"></div>
+    <button type="button" id="save-draft-btn" class="btn btn-secondary btn-sm">
+      <span class="material-icons-outlined" style="font-size: 1.1rem"
+        >save</span
+      >
+      Opslaan
+    </button>
+    <button
+      type="submit"
+      form="publish-post-form"
+      class="btn btn-primary btn-sm"
+    >
+      <span class="material-icons-outlined" style="font-size: 1.1rem"
+        >send</span
+      >
+      Publiceren
+    </button>
+  </div>
 </div>
+
 {% endblock %}

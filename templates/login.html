@@ -24,15 +24,33 @@
 
         {% with messages = get_flashed_messages(with_categories=true) %} {% if
         messages %}
-        <div class="mb-3">
+        <div class="toast-container">
           {% for category, message in messages %}
           <div
-            class="alert alert-{{ 'danger' if category == 'error' else category }}"
+            class="alert alert-{{ 'danger' if category == 'error' else category }} toast-slide-in"
           >
-            {{ message }}
+            <span>{{ message }}</span>
+            <button class="modal-close" onclick="this.parentElement.remove()">
+              ×
+            </button>
           </div>
           {% endfor %}
         </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", function () {
+            document
+              .querySelectorAll(".toast-container .alert")
+              .forEach(function (el) {
+                setTimeout(function () {
+                  el.classList.remove("toast-slide-in");
+                  el.classList.add("toast-slide-out");
+                  setTimeout(function () {
+                    el.remove();
+                  }, 300);
+                }, 5000);
+              });
+          });
+        </script>
         {% endif %} {% endwith %}
 
         <form method="post" class="mt-4 auth-form-centered">
@@ -61,7 +79,9 @@
 
           <div class="mb-3 admin-company-selector" id="admin-company-selector">
             <label for="admin_company_id" class="form-label">
-              <span class="material-icons admin-icon">admin_panel_settings</span>
+              <span class="material-icons admin-icon"
+                >admin_panel_settings</span
+              >
               Admin: Inloggen bij bedrijf (ID)
             </label>
             <input

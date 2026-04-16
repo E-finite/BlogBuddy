@@ -10,18 +10,31 @@ let draftAutosaveTimeout = null;
 let draftSaveInFlight = false;
 let lastSavedDraftSignature = null;
 
+function safeInit(name, fn) {
+  try {
+    const maybePromise = fn();
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      maybePromise.catch((error) => {
+        console.error(`[init:${name}]`, error);
+      });
+    }
+  } catch (error) {
+    console.error(`[init:${name}]`, error);
+  }
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-  initializeActiveDraftId();
-  initConnectFallbackActions();
-  loadSitesDropdowns(); // Load sites into dropdowns
-  initConnectSite();
-  initGeneratePost();
-  initPublishPost();
-  initJobsView();
+  safeInit('initializeActiveDraftId', initializeActiveDraftId);
+  safeInit('initConnectFallbackActions', initConnectFallbackActions);
+  safeInit('loadSitesDropdowns', loadSitesDropdowns); // Load sites into dropdowns
+  safeInit('initConnectSite', initConnectSite);
+  safeInit('initGeneratePost', initGeneratePost);
+  safeInit('initPublishPost', initPublishPost);
+  safeInit('initJobsView', initJobsView);
   
   // Check API health
-  checkHealth();
+  safeInit('checkHealth', checkHealth);
 });
 
 function initConnectFallbackActions() {
@@ -128,10 +141,15 @@ function setActiveDraftId(draftId) {
 
 function clearPublishPreview() {
   const previewDiv = document.getElementById('publish-preview');
-  if (!previewDiv) return;
+  if (previewDiv) {
+    previewDiv.innerHTML = '';
+    previewDiv.style.display = 'none';
+  }
 
-  previewDiv.innerHTML = '';
-  previewDiv.style.display = 'none';
+  const contentPreview = document.getElementById('pub-content-preview');
+  if (contentPreview) {
+    contentPreview.innerHTML = '<p class="text-muted">Laad een concept of genereer eerst een post.</p>';
+  }
 }
 
 function toDraftMetadata(draft) {
@@ -1438,11 +1456,12 @@ function initSelectionRegenPopup() {
         return;
       }
 
-      const previewDiv = document.getElementById('publish-preview');
-      if (!previewDiv) return;
-
+      const contentPreviewDiv = document.getElementById('pub-content-preview');
+      const imagePreviewDiv = document.getElementById('publish-preview');
       const range = sel.getRangeAt(0);
-      if (!previewDiv.contains(range.commonAncestorContainer)) {
+      const inContent = contentPreviewDiv && contentPreviewDiv.contains(range.commonAncestorContainer);
+      const inImage = imagePreviewDiv && imagePreviewDiv.contains(range.commonAncestorContainer);
+      if (!inContent && !inImage) {
         if (_regenSel?.mode === 'preview') _hideRegenPopup();
         return;
       }
@@ -1491,8 +1510,11 @@ function initSelectionRegenPopup() {
 
   // ── mouseup on preview div: show popup at release point ──────────────────
   document.addEventListener('mouseup', (e) => {
-    const previewDiv = document.getElementById('publish-preview');
-    if (!previewDiv || !previewDiv.contains(e.target)) return;
+    const contentPreviewDiv = document.getElementById('pub-content-preview');
+    const imagePreviewDiv = document.getElementById('publish-preview');
+    const inContent = contentPreviewDiv && contentPreviewDiv.contains(e.target);
+    const inImage = imagePreviewDiv && imagePreviewDiv.contains(e.target);
+    if (!inContent && !inImage) return;
     if (popup.contains(e.target)) return;
 
     setTimeout(() => {
@@ -1500,7 +1522,9 @@ function initSelectionRegenPopup() {
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
 
       const range = sel.getRangeAt(0);
-      if (!previewDiv.contains(range.commonAncestorContainer)) return;
+      const rangeInContent = contentPreviewDiv && contentPreviewDiv.contains(range.commonAncestorContainer);
+      const rangeInImage = imagePreviewDiv && imagePreviewDiv.contains(range.commonAncestorContainer);
+      if (!rangeInContent && !rangeInImage) return;
 
       const selectedText = sel.toString().trim();
       if (!selectedText) return;
@@ -1527,7 +1551,9 @@ function initSelectionRegenPopup() {
     if (popup.contains(e.target)) return;
     if (textareaEls.includes(e.target)) return;
     const previewDiv = document.getElementById('publish-preview');
+    const contentPreviewDiv = document.getElementById('pub-content-preview');
     if (previewDiv && previewDiv.contains(e.target)) return;
+    if (contentPreviewDiv && contentPreviewDiv.contains(e.target)) return;
     _hideRegenPopup();
   });
 
@@ -1683,17 +1709,18 @@ async function loadJobs() {
     jobsContainer.innerHTML = jobs.map((job) => {
       const draftId = job.payload?.draftId;
       const siteId = job.payload?.siteId || '-';
+      const siteName = job.siteName || siteId;
+      const title = job.title || safe(job.jobId || job.id || '-');
       const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
       const updatedAt = job.updatedAt ? formatDate(job.updatedAt) : '-';
       const statusBadge = formatJobStatus(job.status);
-      const jobCode = safe(job.jobId || job.id || '-');
       const type = safe(job.type || '-');
 
       return `
         <article class="dashboard-job-item">
           <div class="dashboard-job-top">
             <div class="dashboard-job-id-wrap">
-              <span class="dashboard-job-code">${jobCode}</span>
+              <span class="dashboard-job-code">${safe(title)}</span>
               <span class="dashboard-job-type">${type}</span>
             </div>
             <div class="dashboard-job-status">${statusBadge}</div>
@@ -1702,7 +1729,7 @@ async function loadJobs() {
           <dl class="dashboard-job-grid">
             <div>
               <dt>Site</dt>
-              <dd>${safe(siteId)}</dd>
+              <dd>${safe(siteName)}</dd>
             </div>
             <div>
               <dt>Draft</dt>
@@ -1913,43 +1940,37 @@ function restorePublishPreview() {
 function updatePublishPreviewFromForm() {
   const titleInput = document.getElementById('title');
   const contentInput = document.getElementById('content');
-  const previewDiv = document.getElementById('publish-preview');
+  const contentPreview = document.getElementById('pub-content-preview');
   const draftData = sessionStorage.getItem('currentDraft');
   
-  if (!previewDiv || !titleInput || !contentInput) return;
+  if (!titleInput || !contentInput) return;
 
   if (!activeDraftId) {
     clearPublishPreview();
     return;
   }
-  
-  // Build draft from current form values
-  const draft = {
-    title: titleInput.value || 'Geen titel',
-    contentHtml: contentInput.value || 'Geen content'
-  };
-  
-  // Add stored excerpt if available
-  if (draftData) {
-    try {
-      const storedDraft = JSON.parse(draftData);
-      if (storedDraft.excerpt) {
-        draft.excerpt = storedDraft.excerpt;
-      }
-    } catch (e) {
-      // Ignore parse errors
+
+  // Update content preview panel directly for fast live sync
+  if (contentPreview) {
+    const titleBody = contentPreview.querySelector('#preview-title-body');
+    const contentBody = contentPreview.querySelector('#preview-content-body');
+
+    if (titleBody) {
+      titleBody.textContent = titleInput.value || 'Geen titel';
+    }
+    if (contentBody) {
+      contentBody.innerHTML = contentInput.value || 'Geen content';
     }
   }
-  
-  // Add image data from memory (has full base64 data)
-  if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
-    draft.image = window._currentDraftWithImages.image;
+
+  // Also update image panel if images changed (rare during typing, but keep full render path)
+  const previewDiv = document.getElementById('publish-preview');
+  if (previewDiv && window._currentDraftWithImages && window._currentDraftWithImages.image) {
+    // Image panel stays as-is during text edits; no need to re-render
   }
-  
-  renderPreview(draft, previewDiv);
 }
 
-// Render preview HTML
+// Render preview HTML — splits output between the image panel and the content panel.
 function renderPreview(draft, previewDiv) {
   console.log('renderPreview called with draft:', draft);
 
@@ -1960,7 +1981,8 @@ function renderPreview(draft, previewDiv) {
     contentHtml: draft.contentHtml || 'Geen content'
   };
   
-  let previewHtml = '';
+  // ── Image panel (goes into #publish-preview) ──────────────────
+  let imageHtml = '';
   
   // Featured image(s) - handle single or multiple variations
   const images = imageSourceDraft.images || (imageSourceDraft.image ? [imageSourceDraft.image] : []);
@@ -1970,28 +1992,25 @@ function renderPreview(draft, previewDiv) {
   console.log('Images array length:', images.length);
   
   if (images.length > 0) {
-    previewHtml += `
-      <div class="card" style="margin-bottom: var(--spacing-lg);">
+    imageHtml += `
+      <div class="card">
         <div class="card-header">
-          <h3>Featured Image ${images.length > 1 ? `(${images.length} variations)` : ''}</h3>
+          <h3 class="card-title">Featured Image ${images.length > 1 ? `(${images.length} variations)` : ''}</h3>
         </div>
         <div class="card-body">
     `;
     
     // Show all variations if multiple
     if (images.length > 1) {
-      previewHtml += '<div id="image-variations-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">';
+      imageHtml += '<div id="image-variations-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">';
       images.forEach((img, index) => {
-        const isSelected = index === 0; // First one is default
+        const isSelected = index === 0;
         const borderStyle = isSelected ? '4px solid #10b981' : '2px solid #e2e8f0';
         const boxShadow = isSelected ? '0 0 0 3px rgba(16, 185, 129, 0.2)' : 'none';
-        
-        // Extract feedback chain if available
         const feedbackChain = img.feedbackChain || [];
-        const generationNumber = img.generationNumber || 1;
         const imageId = img.imageId;
         
-        previewHtml += `
+        imageHtml += `
           <div class="image-variation-card" style="position: relative; border: ${borderStyle}; box-shadow: ${boxShadow}; border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.2s ease;" 
                data-variation-index="${index}"
                data-image-id="${imageId || ''}">
@@ -2000,7 +2019,6 @@ function renderPreview(draft, previewDiv) {
                  alt="Variation ${index + 1}" 
                  style="max-width: 100%; height: auto; border-radius: 4px; pointer-events: none;" />
             <div style="text-align: center; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Variation ${index + 1}</div>
-            
             ${feedbackChain.length > 0 ? `
               <div class="feedback-history" style="margin-top: 12px; padding: 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px;">
                 <div style="font-weight: 600; color: #374151; margin-bottom: 4px;">Toegepaste feedback:</div>
@@ -2012,30 +2030,20 @@ function renderPreview(draft, previewDiv) {
           </div>
         `;
       });
-      previewHtml += '</div>';
-      previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;"><strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
+      imageHtml += '</div>';
+      imageHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;"><strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
       
-      // Add regeneration controls for selected image
-      previewHtml += `
+      imageHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div class="card">
-            <div class="card-header">
-              <h4>Regenereer geselecteerde afbeelding</h4>
-            </div>
+            <div class="card-header"><h4>Regenereer geselecteerde afbeelding</h4></div>
             <div class="card-body">
-              <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
-              <textarea id="regenerate-feedback" 
-                        placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
-                        rows="3"
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren.</p>
+              <textarea id="regenerate-feedback" placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond'..." rows="3"
                         style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
               <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
                 <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">1</span> van 3</span>
-                <button id="regenerate-btn" 
-                        onclick="regenerateImage()"
-                        class="btn btn-primary"
-                        style="display: inline-flex; align-items: center; gap: 8px;">
-                  <span>Regenereren</span>
-                </button>
+                <button id="regenerate-btn" onclick="regenerateImage()" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;"><span>Regenereren</span></button>
               </div>
               <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
             </div>
@@ -2043,17 +2051,15 @@ function renderPreview(draft, previewDiv) {
         </div>
       `;
     } else if (imageToDisplay && imageToDisplay.bytes_base64) {
-      // Single image
       const feedbackChain = imageToDisplay.feedbackChain || [];
       const generationNumber = imageToDisplay.generationNumber || 1;
       const imageId = imageToDisplay.imageId;
       
-      previewHtml += `
+      imageHtml += `
         <div data-image-id="${imageId || ''}">
           <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
                alt="Featured Image" 
                style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
-          
           ${feedbackChain.length > 0 ? `
             <div class="feedback-history" style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">
               <div style="font-weight: 600; color: #374151; margin-bottom: 8px;">Toegepaste feedback:</div>
@@ -2065,22 +2071,16 @@ function renderPreview(draft, previewDiv) {
         </div>
       `;
       
-      // Add regeneration controls
-      previewHtml += `
+      imageHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div style="padding: 16px; background: #f9fafb; border: 2px solid #e2e8f0; border-radius: 8px;">
             <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">Afbeelding regenereren</h4>
-            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
-            <textarea id="regenerate-feedback" 
-                      placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
-                      rows="3"
+            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren.</p>
+            <textarea id="regenerate-feedback" placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond'..." rows="3"
                       style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
               <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">${generationNumber}</span> van 3 ${generationNumber >= 3 ? '(Maximum bereikt)' : ''}</span>
-              <button id="regenerate-btn" 
-                      onclick="regenerateImage()"
-                      class="btn btn-primary"
-                      ${generationNumber >= 3 ? 'disabled' : ''}
+              <button id="regenerate-btn" onclick="regenerateImage()" class="btn btn-primary" ${generationNumber >= 3 ? 'disabled' : ''}
                       style="display: inline-flex; align-items: center; gap: 8px;">
                 <span>${generationNumber >= 3 ? 'Maximum bereikt' : 'Regenereren'}</span>
               </button>
@@ -2091,37 +2091,43 @@ function renderPreview(draft, previewDiv) {
       `;
     }
     
-    previewHtml += `
+    imageHtml += `
         </div>
       </div>
     `;
   }
-  
-  // Content preview - separate card
-  previewHtml += '<div class="card" style="margin-bottom: var(--spacing-lg);">';
-  previewHtml += '<div class="card-header"><h3>Content Preview</h3></div>';
-  previewHtml += '<div class="card-body">';
-  previewHtml += `<h2 id="preview-title-body" style="user-select:text;cursor:text;">${previewDraft.title}</h2>`;
-  if (previewDraft.excerpt) {
-    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${previewDraft.excerpt}</p>`;
+
+  // Put image HTML into the image panel
+  if (previewDiv) {
+    previewDiv.innerHTML = imageHtml;
+    previewDiv.style.display = imageHtml ? 'block' : 'none';
   }
-  previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-  previewHtml += `<div id="preview-content-body" style="line-height: 1.6; user-select:text; cursor:text;">${previewDraft.contentHtml}</div>`;
-  previewHtml += '</div></div>';
-  
-  previewDiv.innerHTML = previewHtml;
-  previewDiv.style.display = 'block';
-  
+
   // Setup event delegation for image variation selection
-  const variationsContainer = previewDiv.querySelector('#image-variations-container');
-  if (variationsContainer) {
-    variationsContainer.addEventListener('click', (e) => {
-      const card = e.target.closest('.image-variation-card');
-      if (card) {
-        const index = parseInt(card.dataset.variationIndex);
-        selectImageVariation(index);
-      }
-    });
+  if (previewDiv) {
+    const variationsContainer = previewDiv.querySelector('#image-variations-container');
+    if (variationsContainer) {
+      variationsContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.image-variation-card');
+        if (card) {
+          const index = parseInt(card.dataset.variationIndex);
+          selectImageVariation(index);
+        }
+      });
+    }
+  }
+  
+  // ── Content panel (goes into #pub-content-preview) ────────────
+  const contentPreview = document.getElementById('pub-content-preview');
+  if (contentPreview) {
+    let contentHtml = '';
+    contentHtml += `<h2 id="preview-title-body" style="user-select:text;cursor:text;">${previewDraft.title}</h2>`;
+    if (previewDraft.excerpt) {
+      contentHtml += `<p style="color: var(--text-secondary); font-style: italic;">${previewDraft.excerpt}</p>`;
+    }
+    contentHtml += '<hr style="margin: var(--spacing-lg) 0;">';
+    contentHtml += `<div id="preview-content-body" style="line-height: 1.6; user-select:text; cursor:text;">${previewDraft.contentHtml}</div>`;
+    contentPreview.innerHTML = contentHtml;
   }
 }
 
@@ -2210,7 +2216,8 @@ async function loadSitesDropdowns() {
       return;
     }
     
-    const sites = await response.json();
+    const sitesPayload = await response.json();
+    const sites = Array.isArray(sitesPayload) ? sitesPayload : [];
     
     // Update both dropdowns
     const siteIdSelect = document.getElementById('siteId');
@@ -2360,13 +2367,6 @@ async function regenerateImage() {
   }
 }
 
-// HTML escape utility
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 // Load drafts from database
 async function loadDrafts() {
   const draftsListDiv = document.getElementById('drafts-list');
@@ -2396,38 +2396,12 @@ async function loadDrafts() {
         : excerpt;
 
       html += `
-        <div class="draft-item" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary);">
-          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
-            <div style="flex: 1;">
-              <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-primary); display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                <span>${escapeHtml(title)}</span>
-                ${item.publish_job_id ? '<span class="badge badge-success">Naar WP verstuurd</span>' : ''}
-              </h4>
-              ${truncatedExcerpt ? `<p style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(truncatedExcerpt)}</p>` : ''}
-              <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
-                Aangemaakt: ${formatDate(createdAt)}
-              </p>
-              ${item.publish_site_url ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website: ${escapeHtml(item.publish_site_url)}</p>` : (item.publish_site_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website ID: ${escapeHtml(String(item.publish_site_id))}</p>` : '')}
-              ${item.publish_sent_at ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Verstuurd: ${formatDate(item.publish_sent_at)}</p>` : ''}
-              ${item.publish_job_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Job: ${item.publish_job_id}</p>` : ''}
-            </div>
-            <div style="display: flex; gap: 0.5rem;">
-              <button 
-                class="btn btn-primary btn-sm" 
-                onclick="loadDraft(${item.id})"
-                style="white-space: nowrap;"
-              >
-                Laden
-              </button>
-              <button 
-                class="btn btn-sm" 
-                onclick="deleteDraftById(${item.id})"
-                style="white-space: nowrap; background: var(--color-error); border-color: var(--color-error); color: white;"
-              >
-                Verwijderen
-              </button>
-            </div>
-          </div>
+        <div class="draft-item" style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-secondary); cursor:pointer;" onclick="loadDraft(${item.id})">
+          <span style="flex:1; font-weight:600; font-size:0.95rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(title)}</span>
+          ${item.publish_job_id ? '<span class="badge badge-success" style="flex-shrink:0;">Naar WP verstuurd</span>' : ''}
+          <button class="btn btn-sm" onclick="event.stopPropagation(); deleteDraftById(${item.id})" style="flex-shrink:0; padding:0.3rem 0.5rem; min-height:0; background:transparent; border-color:var(--border-color); color:var(--text-secondary);" title="Verwijderen">
+            <span class="material-icons-outlined" style="font-size:1.1rem;">delete</span>
+          </button>
         </div>
       `;
     }

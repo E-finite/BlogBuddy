@@ -27,16 +27,33 @@
 
         {% with messages = get_flashed_messages(with_categories=true) %} {% if
         messages %}
-        <div class="mb-3">
+        <div class="toast-container">
           {% for category, message in messages %}
           <div
-            class="alert alert-{{ 'danger' if category == 'error' else category }}"
-            role="alert"
+            class="alert alert-{{ 'danger' if category == 'error' else category }} toast-slide-in"
           >
-            {{ message }}
+            <span>{{ message }}</span>
+            <button class="modal-close" onclick="this.parentElement.remove()">
+              ×
+            </button>
           </div>
           {% endfor %}
         </div>
+        <script>
+          document.addEventListener("DOMContentLoaded", function () {
+            document
+              .querySelectorAll(".toast-container .alert")
+              .forEach(function (el) {
+                setTimeout(function () {
+                  el.classList.remove("toast-slide-in");
+                  el.classList.add("toast-slide-out");
+                  setTimeout(function () {
+                    el.remove();
+                  }, 300);
+                }, 5000);
+              });
+          });
+        </script>
         {% endif %} {% endwith %}
 
         <form method="post" class="mt-4 auth-form-centered">
@@ -75,11 +92,15 @@
               placeholder=""
               required
             />
-            <small class="form-text text-muted auth-hint">Minimaal 8 tekens</small>
+            <small class="form-text text-muted auth-hint"
+              >Minimaal 8 tekens</small
+            >
           </div>
 
           <div class="mb-3">
-            <label for="confirm_password" class="form-label">Bevestig wachtwoord</label>
+            <label for="confirm_password" class="form-label"
+              >Bevestig wachtwoord</label
+            >
             <input
               type="password"
               class="form-control input-field"

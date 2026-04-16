@@ -4,19 +4,27 @@
 
 // Show alert/toast
 export function showAlert(message, type = 'info', duration = 5000) {
+  // Ensure toast container exists
+  let container = document.querySelector('.toast-container');
+  if (!container) {
+    container = document.createElement('div');
+    container.className = 'toast-container';
+    document.body.appendChild(container);
+  }
+
   const alert = document.createElement('div');
-  alert.className = `alert alert-${type}`;
+  alert.className = `alert alert-${type} toast-slide-in`;
   alert.innerHTML = `
     <span>${escapeHtml(message)}</span>
     <button class="modal-close" onclick="this.parentElement.remove()">×</button>
   `;
   
-  document.body.appendChild(alert);
-  alert.classList.add('animate-fade-in');
+  container.appendChild(alert);
   
   if (duration > 0) {
     setTimeout(() => {
-      alert.style.opacity = '0';
+      alert.classList.remove('toast-slide-in');
+      alert.classList.add('toast-slide-out');
       setTimeout(() => alert.remove(), 300);
     }, duration);
   }

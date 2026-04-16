@@ -108,11 +108,23 @@ def get_db_connection():
     return None
 
 
+def _require_db_connection(operation: str):
+    """Return a DB connection or raise a user-facing runtime error."""
+    conn = get_db_connection()
+    if conn is None:
+        raise RuntimeError(
+            f"MySQL is momenteel niet bereikbaar tijdens: {operation}. "
+            "Controleer je MYSQL_* instellingen en of de database draait."
+        )
+    return conn
+
+
 def init_db():
     """Initialize the database schema."""
     conn = get_db_connection()
     if conn is None:
-        logger.info("Skipping database initialization because SQL is unavailable.")
+        logger.info(
+            "Skipping database initialization because SQL is unavailable.")
         return False
 
     cursor = conn.cursor()
@@ -592,7 +604,7 @@ def init_db():
 
 def create_site(site_id: str, user_id: int, wp_base_url: str, wp_username: str, wp_app_password_enc: str, default_author_id: Optional[int] = None) -> None:
     """Create a new site record for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress site opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sites (id, user_id, wp_base_url, wp_username, wp_app_password_enc, default_author_id, created_at)
@@ -623,7 +635,7 @@ def get_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, 
 
 def delete_site(site_id: str, user_id: int) -> bool:
     """Delete a site and all its related data for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress site verwijderen")
     cursor = conn.cursor()
     try:
         # Check if site belongs to user
@@ -644,7 +656,7 @@ def delete_site(site_id: str, user_id: int) -> bool:
 
 def delete_user_sites(user_id: int) -> int:
     """Delete all WordPress sites for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress sites vervangen")
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -660,7 +672,7 @@ def delete_user_sites(user_id: int) -> int:
 # Context Sites functions
 def create_context_site(site_id: str, user_id: int, base_url: str) -> None:
     """Create a new context site record for scraped websites."""
-    conn = get_db_connection()
+    conn = _require_db_connection("context site opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO context_sites (id, user_id, base_url, created_at)
@@ -707,7 +719,7 @@ def get_user_context_sites(user_id: int) -> List[Dict[str, Any]]:
 
 def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
     """Delete context sites older than specified days for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("oude context sites opschonen")
     cursor = conn.cursor()
     try:
         _delete_context_site_related_data(
@@ -731,7 +743,7 @@ def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
 
 def delete_all_context_sites(user_id: int) -> int:
     """Delete all context sites for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("alle context sites verwijderen")
     cursor = conn.cursor()
     try:
         _delete_context_site_related_data(cursor, user_id=user_id)
@@ -749,7 +761,7 @@ def delete_all_context_sites(user_id: int) -> int:
 
 def delete_context_site(site_id: str, user_id: int) -> bool:
     """Delete a specific context site and its related data."""
-    conn = get_db_connection()
+    conn = _require_db_connection("context site verwijderen")
     cursor = conn.cursor()
     try:
         # Check if site belongs to user
@@ -783,7 +795,7 @@ def delete_context_site(site_id: str, user_id: int) -> bool:
 
 def create_job(job_id: str, user_id: int, job_type: str, payload: Dict[str, Any]) -> None:
     """Create a new job for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job aanmaken")
     cursor = conn.cursor()
     now = datetime.utcnow()
     cursor.execute("""
@@ -797,7 +809,7 @@ def create_job(job_id: str, user_id: int, job_type: str, payload: Dict[str, Any]
 
 def update_job(job_id: str, status: str, result: Optional[Dict[str, Any]] = None, error: Optional[Dict[str, Any]] = None) -> None:
     """Update a job's status, result, and/or error."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job status bijwerken")
     cursor = conn.cursor()
 
     updates = ["status = %s", "updated_at = %s"]
@@ -861,7 +873,7 @@ def get_queued_jobs() -> List[Dict[str, Any]]:
 
 def add_job_step(job_id: str, step: str, status: str, detail: Optional[Dict[str, Any]] = None) -> None:
     """Add a step to a job."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job stap opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO job_steps (job_id, step, status, detail_json, ts)
@@ -1121,7 +1133,7 @@ def bootstrap_admin_users(admin_emails: List[str]) -> int:
     if not normalized_emails:
         return 0
 
-    conn = get_db_connection()
+    conn = _require_db_connection("admin accounts initialiseren")
     cursor = conn.cursor()
     placeholders = ",".join(["%s"] * len(normalized_emails))
 
@@ -1213,7 +1225,7 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
 
 def increment_user_usage(user_id: int, blogs_delta: int = 0, text_regen_delta: int = 0) -> None:
     """Increment monthly usage counters for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("gebruikstellers bijwerken")
     cursor = conn.cursor()
 
     month_key = _current_month_key()
@@ -1314,7 +1326,7 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
 
 def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int) -> None:
     """Update quota settings for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("quota bijwerken")
     cursor = conn.cursor()
 
     month_key = _current_month_key()
@@ -1509,7 +1521,7 @@ def save_image_generation(
         logger.error("CRITICAL: Truncating image as last resort")
         image_data = image_data[:TARGET_SIZE]
 
-    conn = get_db_connection()
+    conn = _require_db_connection("afbeelding opslaan")
     cursor = conn.cursor()
 
     # Determine generation number
@@ -1634,7 +1646,7 @@ def update_image_uploaded(image_id: int, wordpress_media_id: int) -> None:
     """
     Mark an image as uploaded to WordPress with media ID.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("uploadstatus afbeelding bijwerken")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1653,7 +1665,7 @@ def cleanup_job_images(job_id: str) -> int:
     Delete images for a job that have been successfully uploaded to WordPress.
     Returns count of deleted images.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("oude job-afbeeldingen opruimen")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1678,7 +1690,7 @@ def create_draft(user_id: int, site_id: Optional[str], draft_data: dict) -> int:
     Save a generated draft to the database.
     Returns the draft ID.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept opslaan")
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -1799,7 +1811,7 @@ def update_draft(draft_id: int, user_id: int, draft_data: dict) -> bool:
     Update an existing draft, ensuring it belongs to the user.
     Returns True if updated, False if not found.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept bijwerken")
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -1824,7 +1836,7 @@ def delete_draft(draft_id: int, user_id: int) -> bool:
     Delete a draft, ensuring it belongs to the user.
     Returns True if deleted, False if not found.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept verwijderen")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1842,7 +1854,7 @@ def delete_draft(draft_id: int, user_id: int) -> bool:
 
 def mark_draft_sent_for_publish(draft_id: int, user_id: int, job_id: str, publish_site_id: str) -> bool:
     """Mark a draft as sent to WordPress by storing publish job reference and timestamp."""
-    conn = get_db_connection()
+    conn = _require_db_connection("publicatiestatus concept opslaan")
     cursor = conn.cursor()
 
     cursor.execute("""

@@ -671,7 +671,7 @@ def get_user_sites_api():
     """Get all WordPress sites for the logged-in user."""
     try:
         if not db.is_database_configured():
-            return jsonify(None), 200
+            return jsonify([]), 200
 
         sites = db.get_user_sites(current_user.id)
         return jsonify(sites), 200
@@ -1214,6 +1214,8 @@ def get_context_site_details(site_id: str):
 
         # Get page and chunk counts
         conn = db.get_db_connection()
+        if conn is None:
+            return jsonify({"error": "MySQL is momenteel niet beschikbaar"}), 503
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -1486,6 +1488,10 @@ def get_jobs():
         limit = max(1, min(limit or 50, 200))
 
         jobs = db.get_user_jobs(current_user.id, limit=limit)
+
+        # Build site name lookup for all referenced sites
+        site_name_cache = {}
+
         response_jobs = []
 
         for row in jobs:
@@ -1496,6 +1502,22 @@ def get_jobs():
             error = json.loads(row["error_json"]) if row.get(
                 "error_json") else None
 
+            # Resolve site name
+            site_id = payload.get("siteId")
+            site_name = None
+            if site_id:
+                if site_id not in site_name_cache:
+                    site = db.get_site(str(site_id), user_id=current_user.id)
+                    site_name_cache[site_id] = site.get(
+                        "wp_base_url", "") if site else None
+                site_name = site_name_cache[site_id]
+
+            # Resolve title from draft payload
+            title = None
+            draft_payload = payload.get("draft")
+            if isinstance(draft_payload, dict):
+                title = draft_payload.get("title")
+
             response_jobs.append({
                 "jobId": row["id"],
                 "type": row["type"],
@@ -1503,6 +1525,8 @@ def get_jobs():
                 "payload": payload,
                 "result": result,
                 "error": error,
+                "title": title,
+                "siteName": site_name,
                 "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
                 "updatedAt": row["updated_at"].isoformat() if row.get("updated_at") else None,
             })

@@ -1,11 +1,24 @@
 {% with messages = get_flashed_messages(with_categories=true) %} {% if messages
 %}
-<div class="flash-messages section-spaced">
+<div class="toast-container">
   {% for category, message in messages %}
-  <div class="alert alert-{{ category }}">
+  <div class="alert alert-{{ category }} toast-slide-in">
     <span>{{ message }}</span>
     <button class="modal-close" onclick="this.parentElement.remove()">×</button>
   </div>
   {% endfor %}
 </div>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".toast-container .alert").forEach(function (el) {
+      setTimeout(function () {
+        el.classList.remove("toast-slide-in");
+        el.classList.add("toast-slide-out");
+        setTimeout(function () {
+          el.remove();
+        }, 300);
+      }, 5000);
+    });
+  });
+</script>
 {% endif %} {% endwith %}
