@@ -107,6 +107,21 @@ endblock %} {% block content %}
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-checkbox" for="new-translation-enabled">
+          <input
+            id="new-translation-enabled"
+            name="translation_enabled"
+            type="checkbox"
+          />
+          <span>Vertalingen inschakelen</span>
+        </label>
+        <div class="form-help">
+          Stelt de gebruiker in staat om blogposts te vertalen naar andere
+          talen.
+        </div>
+      </div>
+
       <button class="btn btn-primary" type="submit">Account aanmaken</button>
     </form>
   </div>
@@ -117,13 +132,9 @@ endblock %} {% block content %}
 
   {% for account in users %}
   <div class="card card-spaced-sm">
-    <div
-      class="card-header card-header-wrap"
-    >
+    <div class="card-header card-header-wrap">
       <div>
-        <h3 class="card-title">
-          {{ account.username }}
-        </h3>
+        <h3 class="card-title">{{ account.username }}</h3>
         <div class="form-help">{{ account.email }}</div>
       </div>
       <div class="status-badges">
@@ -132,9 +143,7 @@ endblock %} {% block content %}
         {% endif %} {% if account.is_active %}
         <span class="badge badge-primary">Actief</span>
         {% else %}
-        <span class="badge admin-badge-inactive"
-          >Inactief</span
-        >
+        <span class="badge admin-badge-inactive">Inactief</span>
         {% endif %}
       </div>
     </div>
@@ -197,6 +206,26 @@ endblock %} {% block content %}
               required
             />
           </div>
+        </div>
+
+        <div class="form-group">
+          <label
+            class="form-checkbox"
+            for="translation-enabled-{{ account.id }}"
+          >
+            <input
+              id="translation-enabled-{{ account.id }}"
+              name="translation_enabled"
+              type="checkbox"
+              {%
+              if
+              account.translation_enabled
+              %}checked{%
+              endif
+              %}
+            />
+            <span>Vertalingen inschakelen</span>
+          </label>
         </div>
 
         <button class="btn btn-secondary" type="submit">

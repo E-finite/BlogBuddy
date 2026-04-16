@@ -1,0 +1,4 @@
+Translate the following blog post to {target_language}. Return a JSON object with the exact same keys, but with all text content translated.
+
+Original blog post:
+{blog_json}

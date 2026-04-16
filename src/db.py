@@ -580,6 +580,47 @@ def init_db():
     except Exception as e:
         print(f"⚠️ Migration note (drafts publish_sent_at): {e}")
 
+    # Migration: Add translation_enabled column to user_quotas if missing
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'user_quotas'
+            AND column_name = 'translation_enabled'
+        """, (config.MYSQL_DATABASE,))
+        has_translation_enabled = cursor.fetchone()[0] > 0
+
+        if not has_translation_enabled:
+            cursor.execute(
+                "ALTER TABLE user_quotas ADD COLUMN translation_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER image_regen_limit")
+            print("✅ Added translation_enabled column to user_quotas table")
+    except Exception as e:
+        print(f"⚠️ Migration note (user_quotas translation_enabled): {e}")
+
+    # Draft translations table - stores translated versions of drafts
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS draft_translations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            original_draft_id INT NOT NULL,
+            language VARCHAR(10) NOT NULL,
+            translated_json LONGTEXT NOT NULL,
+            image_id INT NULL,
+            publish_job_id VARCHAR(36) NULL,
+            publish_sent_at DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (original_draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
+            FOREIGN KEY (image_id) REFERENCES image_generations(id) ON DELETE SET NULL,
+            UNIQUE KEY uq_draft_language (original_draft_id, language),
+            INDEX idx_user_id (user_id),
+            INDEX idx_original_draft_id (original_draft_id),
+            INDEX idx_language (language)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
     # Backfill quota rows for existing users
     try:
         current_month = datetime.utcnow().strftime("%Y-%m")
@@ -1180,6 +1221,7 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
             "blogs_monthly_limit": 20,
             "text_regen_monthly_limit": 20,
             "image_regen_limit": 3,
+            "translation_enabled": 0,
             "usage_month": month_key,
             "blogs_used": 0,
             "text_regen_used": 0,
@@ -1198,7 +1240,8 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
 
     cursor.execute("""
         SELECT user_id, blogs_monthly_limit, text_regen_monthly_limit,
-               image_regen_limit, usage_month, blogs_used, text_regen_used, updated_at
+               image_regen_limit, translation_enabled,
+               usage_month, blogs_used, text_regen_used, updated_at
         FROM user_quotas
         WHERE user_id = %s
     """, (user_id,))
@@ -1214,6 +1257,7 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
             "blogs_monthly_limit": 20,
             "text_regen_monthly_limit": 20,
             "image_regen_limit": 3,
+            "translation_enabled": 0,
             "usage_month": month_key,
             "blogs_used": 0,
             "text_regen_used": 0,
@@ -1286,7 +1330,7 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
             SELECT u.id, u.username, u.email, u.created_at, u.last_login,
                    u.is_active, u.is_admin,
                    q.blogs_monthly_limit, q.text_regen_monthly_limit,
-                   q.image_regen_limit,
+                   q.image_regen_limit, q.translation_enabled,
                    CASE
                         WHEN q.usage_month = %s THEN q.blogs_used
                         ELSE 0
@@ -1313,6 +1357,8 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
                 row["text_regen_monthly_limit"] = 20
             if row.get("image_regen_limit") is None:
                 row["image_regen_limit"] = 3
+            if row.get("translation_enabled") is None:
+                row["translation_enabled"] = 0
             if row.get("blogs_used") is None:
                 row["blogs_used"] = 0
             if row.get("text_regen_used") is None:
@@ -1324,7 +1370,7 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
         return []
 
 
-def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int) -> None:
+def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int, translation_enabled: bool = False) -> None:
     """Update quota settings for a user."""
     conn = _require_db_connection("quota bijwerken")
     cursor = conn.cursor()
@@ -1338,16 +1384,18 @@ def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly
             blogs_monthly_limit,
             text_regen_monthly_limit,
             image_regen_limit,
+            translation_enabled,
             usage_month,
             updated_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             blogs_monthly_limit = VALUES(blogs_monthly_limit),
             text_regen_monthly_limit = VALUES(text_regen_monthly_limit),
             image_regen_limit = VALUES(image_regen_limit),
+            translation_enabled = VALUES(translation_enabled),
             updated_at = VALUES(updated_at)
-    """, (user_id, blogs_monthly_limit, text_regen_monthly_limit, image_regen_limit, month_key, now))
+    """, (user_id, blogs_monthly_limit, text_regen_monthly_limit, image_regen_limit, int(translation_enabled), month_key, now))
 
     conn.commit()
     cursor.close()
@@ -1862,6 +1910,150 @@ def mark_draft_sent_for_publish(draft_id: int, user_id: int, job_id: str, publis
         SET publish_job_id = %s, publish_site_id = %s, publish_sent_at = %s, updated_at = %s
         WHERE id = %s AND user_id = %s
     """, (job_id, publish_site_id, datetime.utcnow(), datetime.utcnow(), draft_id, user_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return updated
+
+
+# ============================================
+# DRAFT TRANSLATIONS
+# ============================================
+
+def create_or_update_draft_translation(
+    user_id: int,
+    original_draft_id: int,
+    language: str,
+    translated_data: dict,
+    image_id: Optional[int] = None
+) -> int:
+    """Create or update a draft translation. Returns the translation ID."""
+    conn = _require_db_connection("vertaling opslaan")
+    cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    translated_json = json.dumps(translated_data)
+
+    # Check if translation already exists
+    cursor.execute("""
+        SELECT id FROM draft_translations
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (original_draft_id, language, user_id))
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute("""
+            UPDATE draft_translations
+            SET translated_json = %s, image_id = %s, updated_at = %s
+            WHERE id = %s
+        """, (translated_json, image_id, now, existing[0]))
+        translation_id = existing[0]
+    else:
+        cursor.execute("""
+            INSERT INTO draft_translations
+                (user_id, original_draft_id, language, translated_json, image_id, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, original_draft_id, language, translated_json, image_id, now, now))
+        translation_id = cursor.lastrowid
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return translation_id
+
+
+def get_draft_translations(draft_id: int, user_id: int) -> List[Dict[str, Any]]:
+    """Get all translations for a draft."""
+    conn = get_db_connection()
+    if conn is None:
+        return []
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, original_draft_id, language, translated_json, image_id,
+               publish_job_id, publish_sent_at, created_at, updated_at
+        FROM draft_translations
+        WHERE original_draft_id = %s AND user_id = %s
+        ORDER BY language ASC
+    """, (draft_id, user_id))
+
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    translations = []
+    for row in rows:
+        translations.append({
+            'id': row['id'],
+            'originalDraftId': row['original_draft_id'],
+            'language': row['language'],
+            'translated': json.loads(row['translated_json']) if row['translated_json'] else {},
+            'imageId': row['image_id'],
+            'publishJobId': row.get('publish_job_id'),
+            'publishSentAt': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
+            'createdAt': row['created_at'].isoformat() if row['created_at'] else None,
+            'updatedAt': row['updated_at'].isoformat() if row['updated_at'] else None,
+        })
+
+    return translations
+
+
+def get_draft_translation(draft_id: int, language: str, user_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific translation for a draft."""
+    conn = get_db_connection()
+    if conn is None:
+        return None
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, original_draft_id, language, translated_json, image_id,
+               publish_job_id, publish_sent_at, created_at, updated_at
+        FROM draft_translations
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (draft_id, language, user_id))
+
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        'id': row['id'],
+        'originalDraftId': row['original_draft_id'],
+        'language': row['language'],
+        'translated': json.loads(row['translated_json']) if row['translated_json'] else {},
+        'imageId': row['image_id'],
+        'publishJobId': row.get('publish_job_id'),
+        'publishSentAt': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
+        'createdAt': row['created_at'].isoformat() if row['created_at'] else None,
+        'updatedAt': row['updated_at'].isoformat() if row['updated_at'] else None,
+    }
+
+
+def update_draft_translation(
+    draft_id: int,
+    language: str,
+    user_id: int,
+    translated_data: dict
+) -> bool:
+    """Update translated content for an existing translation. Returns True if updated."""
+    conn = _require_db_connection("vertaling bijwerken")
+    cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    translated_json = json.dumps(translated_data)
+
+    cursor.execute("""
+        UPDATE draft_translations
+        SET translated_json = %s, updated_at = %s
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (translated_json, now, draft_id, language, user_id))
 
     updated = cursor.rowcount > 0
     conn.commit()

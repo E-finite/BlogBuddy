@@ -145,6 +145,29 @@ export const api = {
   async health() {
     return apiRequest('/health');
   },
+
+  // Translations
+  async translateDraft(draftId, language, translateImage = true) {
+    return apiRequest(`/api/drafts/${draftId}/translate`, {
+      method: 'POST',
+      body: { language, translateImage },
+    });
+  },
+
+  async getDraftTranslations(draftId) {
+    return apiRequest(`/api/drafts/${draftId}/translations`);
+  },
+
+  async getDraftTranslation(draftId, language) {
+    return apiRequest(`/api/drafts/${draftId}/translations/${language}`);
+  },
+
+  async updateDraftTranslation(draftId, language, translated) {
+    return apiRequest(`/api/drafts/${draftId}/translations/${language}`, {
+      method: 'PUT',
+      body: { translated },
+    });
+  },
 };
 
 // Polling utility

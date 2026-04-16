@@ -156,6 +156,19 @@
       Verwijderen
     </button>
     <div class="pub-action-spacer"></div>
+    {% if translation_enabled %}
+    <button
+      type="button"
+      id="translate-draft-btn"
+      class="btn btn-secondary btn-sm"
+    >
+      <span class="material-icons-outlined" style="font-size: 1.1rem"
+        >translate</span
+      >
+      Vertalen
+      <span id="translation-badges" style="display: none"></span>
+    </button>
+    {% endif %}
     <button type="button" id="save-draft-btn" class="btn btn-secondary btn-sm">
       <span class="material-icons-outlined" style="font-size: 1.1rem"
         >save</span

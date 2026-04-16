@@ -35,8 +35,15 @@
         <div class="card-body">
           <form id="publish-post-form">
             <div class="form-group">
-              <label class="form-label" for="pubSiteId">Doel WordPress site</label>
-              <select id="pubSiteId" name="pubSiteId" class="form-input" required>
+              <label class="form-label" for="pubSiteId"
+                >Doel WordPress site</label
+              >
+              <select
+                id="pubSiteId"
+                name="pubSiteId"
+                class="form-input"
+                required
+              >
                 <option value="">-- Kies een site --</option>
               </select>
             </div>
@@ -54,7 +61,9 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="content">Post content (HTML)</label>
+              <label class="form-label" for="content"
+                >Post content (HTML)</label
+              >
               <textarea
                 id="content"
                 name="content"
@@ -66,7 +75,10 @@
             </div>
 
             <div class="workspace-publish-toggle-grid">
-              <label class="workspace-image-check-card workspace-publish-toggle-card" for="isDraft">
+              <label
+                class="workspace-image-check-card workspace-publish-toggle-card"
+                for="isDraft"
+              >
                 <input
                   type="checkbox"
                   id="isDraft"
@@ -80,7 +92,10 @@
                 </span>
               </label>
 
-              <label class="workspace-image-check-card workspace-publish-toggle-card" for="isScheduled">
+              <label
+                class="workspace-image-check-card workspace-publish-toggle-card"
+                for="isScheduled"
+              >
                 <input
                   type="checkbox"
                   id="isScheduled"
@@ -94,8 +109,13 @@
               </label>
             </div>
 
-            <div class="form-group schedule-date-group" id="schedule-date-group">
-              <label class="form-label" for="scheduleDateLocal">Publicatiedatum en tijd</label>
+            <div
+              class="form-group schedule-date-group"
+              id="schedule-date-group"
+            >
+              <label class="form-label" for="scheduleDateLocal"
+                >Publicatiedatum en tijd</label
+              >
               <input
                 type="datetime-local"
                 id="scheduleDateLocal"
@@ -116,7 +136,24 @@
               >
                 Concept verwijderen
               </button>
-              <button type="button" id="save-draft-btn" class="btn btn-secondary">
+              {% if translation_enabled %}
+              <button
+                type="button"
+                id="translate-draft-btn"
+                class="btn btn-secondary"
+              >
+                <span class="material-icons-outlined" style="font-size: 1.1rem"
+                  >translate</span
+                >
+                Vertalen
+                <span id="translation-badges" style="display: none"></span>
+              </button>
+              {% endif %}
+              <button
+                type="button"
+                id="save-draft-btn"
+                class="btn btn-secondary"
+              >
                 Concept opslaan
               </button>
               <button type="submit" class="btn btn-primary">Publiceren</button>
@@ -126,6 +163,9 @@
       </div>
     </div>
 
-    <div id="publish-preview" class="publish-preview workspace-publish-preview"></div>
+    <div
+      id="publish-preview"
+      class="publish-preview workspace-publish-preview"
+    ></div>
   </div>
 </section>
