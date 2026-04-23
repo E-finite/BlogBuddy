@@ -43,22 +43,13 @@ body {
 }
 
 .logo-mark {
-  display: inline-grid;
-  place-items: center;
-  width: 2rem;
-  height: 2rem;
-  margin-right: 0.625rem;
-  border: 1px solid rgba(62, 207, 255, 0.35);
-  border-radius: 0.5rem;
-  background: rgba(62, 207, 255, 0.12);
-  color: #59d6ff;
-  font-size: 1rem;
-  letter-spacing: 0;
+  width: auto;
+  height: 4rem;
+  margin-right: 0;
+  object-fit: contain;
 }
 
-.logo-text {
-  line-height: 1;
-}
+
 
 .sidebar-nav {
   display: flex;
