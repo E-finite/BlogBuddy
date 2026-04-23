@@ -45,3 +45,14 @@ Geef ALLEEN de JSON terug.
   "tags": [],
   "categories": []
 }
+
+**Belangrijk voor yoast.focuskw:**
+De focuskw is de zoekterm (focus keyphrase) waarvoor je wilt ranken in Google. Dit is de term die een gebruiker letterlijk in Google zou typen om dit artikel te vinden. Het is GEEN slug, GEEN herhaling van de titel, maar een kort zoekwoord of zoekfrase (1-4 woorden) dat het beste bij het onderwerp past. Gebruik {focus_keyword} als basis, maar maak het een natuurlijke zoekterm zonder koppeltekens.
+
+**Belangrijk voor yoast.seo_title:**
+De seo_title is de titel die zichtbaar is in de zoekresultaten van Google (het blauwe klikbare linkje). Dit is NIET dezelfde titel als de blog title. De seo_title moet:
+- Tussen de 50 en 60 karakters zijn (STRIKT, nooit langer dan 60)
+- Een alternatieve, pakkende titel zijn die aandacht trekt in de zoekresultaten
+- De focus keyphrase bevatten (bij voorkeur aan het begin)
+- Nieuwsgierigheid opwekken of een belofte doen (bijv. met woorden als "Ontdek", "Zo doe je", een getal, of een duidelijk voordeel)
+- Niet eindigen met "..." (hij moet volledig passen binnen 60 karakters)

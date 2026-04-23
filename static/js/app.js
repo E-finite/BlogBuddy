@@ -3,25 +3,110 @@
  */
 
 import { api, pollJob } from './api.js';
-import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus } from './ui.js';
+import { showAlert, showModal, setButtonLoading, formatDate, formatJobStatus, escapeHtml } from './ui.js';
 
 let activeDraftId = null;
 let draftAutosaveTimeout = null;
 let draftSaveInFlight = false;
 let lastSavedDraftSignature = null;
 
+function safeInit(name, fn) {
+  try {
+    const maybePromise = fn();
+    if (maybePromise && typeof maybePromise.then === 'function') {
+      maybePromise.catch((error) => {
+        console.error(`[init:${name}]`, error);
+      });
+    }
+  } catch (error) {
+    console.error(`[init:${name}]`, error);
+  }
+}
+
 // Initialize app
 document.addEventListener('DOMContentLoaded', () => {
-  initializeActiveDraftId();
-  loadSitesDropdowns(); // Load sites into dropdowns
-  initConnectSite();
-  initGeneratePost();
-  initPublishPost();
-  initJobsView();
+  safeInit('initializeActiveDraftId', initializeActiveDraftId);
+  safeInit('initConnectFallbackActions', initConnectFallbackActions);
+  safeInit('loadSitesDropdowns', loadSitesDropdowns); // Load sites into dropdowns
+  safeInit('initConnectSite', initConnectSite);
+  safeInit('initGeneratePost', initGeneratePost);
+  safeInit('initPublishPost', initPublishPost);
+  safeInit('initJobsView', initJobsView);
   
   // Check API health
-  checkHealth();
+  safeInit('checkHealth', checkHealth);
 });
+
+function initConnectFallbackActions() {
+  if (window.__connectFallbackActionsInitialized) {
+    return;
+  }
+  window.__connectFallbackActionsInitialized = true;
+
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('#show-connect-form-btn');
+    if (!trigger) {
+      return;
+    }
+
+    const connectFormPanel = document.getElementById('connect-form-panel');
+    if (!connectFormPanel) {
+      return;
+    }
+
+    const connectorSitesPanel = document.getElementById('connector-sites-panel');
+    const connectorSelect = document.getElementById('connectorType');
+    const connectFormTitle = document.getElementById('connect-form-title');
+    const connectFormDescription = document.getElementById('connect-form-description');
+    const connectFormContext = document.getElementById('connect-form-context');
+    const connectForm = document.getElementById('connect-site-form');
+    const baseUrlInput = document.getElementById('wpBaseUrl');
+
+    if (connectorSelect && !connectorSelect.value) {
+      const hasWordPressOption = Array.from(connectorSelect.options || []).some((option) => option.value === 'wordpress');
+      if (hasWordPressOption) {
+        connectorSelect.value = 'wordpress';
+      }
+    }
+
+    if (connectorSitesPanel) {
+      connectorSitesPanel.classList.remove('hidden');
+    }
+
+    if (connectFormTitle) {
+      connectFormTitle.textContent = 'Nieuwe WordPress Site Verbinden';
+    }
+    if (connectFormDescription) {
+      connectFormDescription.textContent = 'Vul je WordPress-gegevens in om een nieuwe verbinding te maken.';
+    }
+    if (connectForm) {
+      connectForm.reset();
+    }
+
+    if (connectFormContext) {
+      connectFormContext.classList.remove('hidden');
+      connectFormContext.classList.remove('alert-info');
+      connectFormContext.classList.add('alert-warning');
+      connectFormContext.innerHTML = '<span>Vul hieronder je WordPress verbinding in.</span>';
+    }
+
+    connectFormPanel.classList.remove('hidden');
+    connectFormPanel.classList.remove('workspace-card-attention');
+    void connectFormPanel.offsetWidth;
+    connectFormPanel.classList.add('workspace-card-attention');
+    connectFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    window.setTimeout(() => {
+      if (baseUrlInput) {
+        baseUrlInput.focus();
+      }
+    }, 130);
+
+    window.setTimeout(() => {
+      connectFormPanel.classList.remove('workspace-card-attention');
+    }, 820);
+  });
+}
 
 function initializeActiveDraftId() {
   const storedDraftId = sessionStorage.getItem('currentDraftId');
@@ -56,10 +141,15 @@ function setActiveDraftId(draftId) {
 
 function clearPublishPreview() {
   const previewDiv = document.getElementById('publish-preview');
-  if (!previewDiv) return;
+  if (previewDiv) {
+    previewDiv.innerHTML = '';
+    previewDiv.style.display = 'none';
+  }
 
-  previewDiv.innerHTML = '';
-  previewDiv.style.display = 'none';
+  const contentPreview = document.getElementById('pub-content-preview');
+  if (contentPreview) {
+    contentPreview.innerHTML = '<p class="text-muted">Laad een concept of genereer eerst een post.</p>';
+  }
 }
 
 function toDraftMetadata(draft) {
@@ -340,7 +430,50 @@ function initConnectSite() {
   const passwordInput = document.getElementById('wpApplicationPassword');
   if (!form) return;
 
+  // Auto-select WordPress when it's the only available connector.
+  if (connectorSelect && !connectorSelect.value) {
+    const hasWordPressOption = Array.from(connectorSelect.options || []).some((option) => option.value === 'wordpress');
+    if (hasWordPressOption) {
+      connectorSelect.value = 'wordpress';
+    }
+  }
+
   let connectedSites = [];
+
+  function revealConnectForm(options = {}) {
+    if (!connectFormPanel) {
+      return;
+    }
+
+    const {
+      focusInput = false,
+      scrollToForm = false,
+      emphasize = false
+    } = options;
+
+    connectFormPanel.classList.remove('hidden');
+
+    if (emphasize) {
+      connectFormPanel.classList.remove('workspace-card-attention');
+
+      // Force reflow so the highlight animation restarts on repeated clicks.
+      void connectFormPanel.offsetWidth;
+      connectFormPanel.classList.add('workspace-card-attention');
+      window.setTimeout(() => {
+        connectFormPanel.classList.remove('workspace-card-attention');
+      }, 780);
+    }
+
+    if (scrollToForm) {
+      connectFormPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    if (focusInput && baseUrlInput) {
+      window.setTimeout(() => {
+        baseUrlInput.focus();
+      }, 130);
+    }
+  }
 
   function renderConnectedSites() {
     if (!connectedSitesList) {
@@ -367,12 +500,14 @@ function initConnectSite() {
     `).join('');
   }
 
-  function showFormForSite(site = null) {
+  function showFormForSite(site = null, options = {}) {
     if (!connectFormPanel || !connectFormTitle || !connectFormDescription || !connectFormContext) {
       return;
     }
 
-    connectFormPanel.classList.remove('hidden');
+    const focusInput = Boolean(options.focusInput);
+    const scrollToForm = Boolean(options.scrollToForm);
+    const emphasize = Boolean(options.emphasize);
 
     if (site) {
       connectFormTitle.textContent = 'Verbonden WordPress Site';
@@ -397,6 +532,12 @@ function initConnectSite() {
         ? '<span>Je hebt al een WordPress site verbonden. Als je nu opslaat, wordt de bestaande verbinding vervangen.</span>'
         : '<span>Vul hieronder je eerste WordPress verbinding in.</span>';
     }
+
+    revealConnectForm({
+      focusInput,
+      scrollToForm,
+      emphasize
+    });
   }
 
   async function loadConnectedSites() {
@@ -417,6 +558,10 @@ function initConnectSite() {
       if (connectorSitesPanel) {
         connectorSitesPanel.classList.remove('hidden');
       }
+
+      if (connectedSites.length === 0) {
+        showFormForSite();
+      }
     } catch (error) {
       console.error('Error loading connected sites:', error);
       connectedSites = [];
@@ -430,6 +575,8 @@ function initConnectSite() {
       if (connectorSitesPanel) {
         connectorSitesPanel.classList.remove('hidden');
       }
+
+      showFormForSite();
     }
   }
 
@@ -455,7 +602,11 @@ function initConnectSite() {
 
   if (showConnectFormBtn) {
     showConnectFormBtn.addEventListener('click', () => {
-      showFormForSite();
+      showFormForSite(null, {
+        focusInput: true,
+        scrollToForm: true,
+        emphasize: true
+      });
     });
   }
   
@@ -594,7 +745,7 @@ function initGeneratePost() {
         if (confirmSiteBtn) {
           confirmSiteBtn.style.display = 'block';
           confirmSiteBtn.disabled = false;
-          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+          confirmSiteBtn.textContent = 'Gebruik deze website';
         }
         contextUrlInput.value = ''; // Clear URL input
         crawlBtn.style.display = 'none';
@@ -627,7 +778,7 @@ function initGeneratePost() {
     if (selectedSiteId && confirmSiteBtn) {
       confirmSiteBtn.style.display = 'block';
       confirmSiteBtn.disabled = false;
-      confirmSiteBtn.textContent = '✓ Gebruik deze website';
+      confirmSiteBtn.textContent = 'Gebruik deze website';
       crawlBtn.style.display = 'none';
     }
   }
@@ -640,13 +791,13 @@ function initGeneratePost() {
       
       // Disable button during loading
       confirmSiteBtn.disabled = true;
-      confirmSiteBtn.textContent = '⏳ Laden...';
+      confirmSiteBtn.textContent = 'Laden...';
       
       contextSiteId = selectedSiteId;
       
       // Show loading status
       contextStatusDiv.style.display = 'block';
-      contextStatusDiv.querySelector('.alert').textContent = '⏳ Website gegevens laden...';
+      contextStatusDiv.querySelector('.alert').textContent = 'Website gegevens laden...';
       contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
       
       try {
@@ -657,11 +808,11 @@ function initGeneratePost() {
           
           // Show detailed status like after crawl
           contextStatusDiv.querySelector('.alert').textContent = 
-            `✅ ${details.baseUrl} geselecteerd! ${details.pagesCount} pagina's, ${details.chunksCount} chunks. ${details.hasDna ? 'Site DNA beschikbaar.' : 'Geen Site DNA.'}`;
+            `${details.baseUrl} geselecteerd. ${details.pagesCount} pagina's, ${details.chunksCount} chunks. ${details.hasDna ? 'Site DNA beschikbaar.' : 'Geen Site DNA.'}`;
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
         } else {
           // Fallback to simple message
-          contextStatusDiv.querySelector('.alert').textContent = '✅ Website geselecteerd!';
+          contextStatusDiv.querySelector('.alert').textContent = 'Website geselecteerd.';
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
         }
         
@@ -669,15 +820,15 @@ function initGeneratePost() {
         await autoFillFromSiteDNA(selectedSiteId);
         
         // Update button to show success
-        confirmSiteBtn.textContent = '✅ Geladen';
+        confirmSiteBtn.textContent = 'Geladen';
         confirmSiteBtn.disabled = true;
       } catch (error) {
         console.error('Error loading site details:', error);
-        contextStatusDiv.querySelector('.alert').textContent = '❌ Fout bij laden site gegevens';
+        contextStatusDiv.querySelector('.alert').textContent = 'Fout bij laden site gegevens';
         contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
         
         // Re-enable button
-        confirmSiteBtn.textContent = '✓ Gebruik deze website';
+        confirmSiteBtn.textContent = 'Gebruik deze website';
         confirmSiteBtn.disabled = false;
       }
     });
@@ -691,8 +842,8 @@ function initGeneratePost() {
     topicInput.addEventListener('input', () => {
       const topic = topicInput.value.trim();
       if (topic) {
-        // Replace spaces with hyphens and convert to lowercase
-        focusKeywordInput.value = topic.replace(/\s+/g, '-').toLowerCase();
+        // Use the topic as-is (natural search phrase, no slugification)
+        focusKeywordInput.value = topic.toLowerCase();
       } else {
         focusKeywordInput.value = '';
       }
@@ -743,13 +894,13 @@ function initGeneratePost() {
       }
       
       if (fieldsFilledCount > 0) {
-        showAlert(`✅ ${fieldsFilledCount} velden automatisch ingevuld met Site DNA`, 'success', 3000);
+        showAlert(`${fieldsFilledCount} velden automatisch ingevuld met Site DNA`, 'success', 3000);
       } else {
         console.warn('No fields were filled - DNA data may be empty');
       }
     } catch (error) {
       console.error('Error loading Site DNA:', error);
-      showAlert('❌ Fout bij laden Site DNA', 'error', 3000);
+      showAlert('Fout bij laden Site DNA', 'error', 3000);
     }
   }
   
@@ -767,7 +918,7 @@ function initGeneratePost() {
         if (confirmSiteBtn) {
           confirmSiteBtn.style.display = 'none';
           confirmSiteBtn.disabled = false;
-          confirmSiteBtn.textContent = '✓ Gebruik deze website';
+          confirmSiteBtn.textContent = 'Gebruik deze website';
         }
       } else {
         crawlBtn.style.display = 'none';
@@ -787,7 +938,7 @@ function initGeneratePost() {
       
       setButtonLoading(crawlBtn, true);
       contextStatusDiv.style.display = 'block';
-      contextStatusDiv.querySelector('.alert').textContent = '🕷️ Crawling website... (dit kan 30-60 seconden duren)';
+      contextStatusDiv.querySelector('.alert').textContent = 'Website wordt gecrawld (dit kan 30-60 seconden duren).';
       contextStatusDiv.querySelector('.alert').className = 'alert alert-info';
       
       try {
@@ -821,22 +972,22 @@ function initGeneratePost() {
         if (data.pages_stored === 0) {
           if (data.is_js_site) {
             contextStatusDiv.querySelector('.alert').innerHTML = 
-              `⚠️ <strong>JavaScript-website gedetecteerd!</strong><br>
+              `<strong>JavaScript-website gedetecteerd.</strong><br>
               Deze site laadt content via JavaScript (React/Vue/SPA).<br>
-              💡 <em>Tip: Gebruik een statische site of WordPress/traditionele CMS.</em>`;
+              <em>Tip: gebruik een statische site of WordPress/traditionele CMS.</em>`;
           } else {
             contextStatusDiv.querySelector('.alert').textContent = 
-              `⚠️ Geen pagina's gecrawld! De website is mogelijk niet bereikbaar.`;
+              `Geen pagina's gecrawld. De website is mogelijk niet bereikbaar.`;
           }
           contextStatusDiv.querySelector('.alert').className = 'alert alert-warning';
-          crawlBtn.textContent = '⚠️ Geen Content';
+          crawlBtn.textContent = 'Geen content gevonden';
           crawlBtn.disabled = false;
         } else {
           contextStatusDiv.querySelector('.alert').textContent = 
-            `✅ Website gecrawld! ${data.pages_stored} pagina's, ${data.chunks_stored} chunks. ${data.site_dna_generated ? 'Site DNA gegenereerd.' : 'Site DNA kon niet worden gegenereerd.'}`;
+            `Website gecrawld: ${data.pages_stored} pagina's, ${data.chunks_stored} chunks. ${data.site_dna_generated ? 'Site DNA gegenereerd.' : 'Site DNA kon niet worden gegenereerd.'}`;
           contextStatusDiv.querySelector('.alert').className = 'alert alert-success';
           
-          crawlBtn.textContent = '✅ Context Geladen';
+          crawlBtn.textContent = 'Context geladen';
           crawlBtn.disabled = true;
           
           // Store for use in generation
@@ -854,7 +1005,7 @@ function initGeneratePost() {
       } catch (error) {
         console.error('Crawl error:', error);
         contextStatusDiv.querySelector('.alert').textContent = 
-          `❌ Fout bij crawlen: ${error.message}. Check of de Flask app draait en de URL correct is.`;
+          `Fout bij crawlen: ${error.message}. Controleer of de Flask app draait en de URL correct is.`;
         contextStatusDiv.querySelector('.alert').className = 'alert alert-error';
       } finally {
         setButtonLoading(crawlBtn, false);
@@ -1072,7 +1223,7 @@ function initPublishPost() {
         return;
       }
 
-      const warningMessage = '⚠️ WAARSCHUWING: Dit verwijdert het geladen concept permanent.\n\nDeze actie kan niet ongedaan worden gemaakt.\n\nWeet je zeker dat je wilt doorgaan?';
+      const warningMessage = 'Waarschuwing: dit verwijdert het geladen concept permanent.\n\nDeze actie kan niet ongedaan worden gemaakt.\n\nWeet je zeker dat je wilt doorgaan?';
       const confirmed = confirm(warningMessage);
       if (!confirmed) {
         return;
@@ -1161,6 +1312,14 @@ function initPublishPost() {
 
   // Tekst hergenereren via selectie-popup
   initSelectionRegenPopup();
+
+  // ── Vertaalknop handler ──
+  const translateBtn = document.getElementById('translate-draft-btn');
+  if (translateBtn) {
+    translateBtn.addEventListener('click', () => {
+      openTranslateModal();
+    });
+  }
 }
 
 // ── Floating selection regeneration popup ──────────────────────────────────
@@ -1196,7 +1355,7 @@ function _buildRegenPopup() {
   popup.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:8px;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
-        <span style="font-size:0.78rem;font-weight:600;color:#555;">✍ Herschrijf selectie</span>
+        <span style="font-size:0.78rem;font-weight:600;color:#555;">Herschrijf selectie</span>
         <button id="regen-sel-close" style="background:none;border:none;cursor:pointer;font-size:1rem;color:#888;padding:0;line-height:1;" title="Sluiten">✕</button>
       </div>
       <div id="regen-sel-preview" style="font-size:0.74rem;color:#777;background:#f5f5f5;padding:4px 7px;border-radius:4px;max-height:42px;overflow:hidden;font-style:italic;"></div>
@@ -1305,11 +1464,12 @@ function initSelectionRegenPopup() {
         return;
       }
 
-      const previewDiv = document.getElementById('publish-preview');
-      if (!previewDiv) return;
-
+      const contentPreviewDiv = document.getElementById('pub-content-preview');
+      const imagePreviewDiv = document.getElementById('publish-preview');
       const range = sel.getRangeAt(0);
-      if (!previewDiv.contains(range.commonAncestorContainer)) {
+      const inContent = contentPreviewDiv && contentPreviewDiv.contains(range.commonAncestorContainer);
+      const inImage = imagePreviewDiv && imagePreviewDiv.contains(range.commonAncestorContainer);
+      if (!inContent && !inImage) {
         if (_regenSel?.mode === 'preview') _hideRegenPopup();
         return;
       }
@@ -1358,8 +1518,11 @@ function initSelectionRegenPopup() {
 
   // ── mouseup on preview div: show popup at release point ──────────────────
   document.addEventListener('mouseup', (e) => {
-    const previewDiv = document.getElementById('publish-preview');
-    if (!previewDiv || !previewDiv.contains(e.target)) return;
+    const contentPreviewDiv = document.getElementById('pub-content-preview');
+    const imagePreviewDiv = document.getElementById('publish-preview');
+    const inContent = contentPreviewDiv && contentPreviewDiv.contains(e.target);
+    const inImage = imagePreviewDiv && imagePreviewDiv.contains(e.target);
+    if (!inContent && !inImage) return;
     if (popup.contains(e.target)) return;
 
     setTimeout(() => {
@@ -1367,7 +1530,9 @@ function initSelectionRegenPopup() {
       if (!sel || sel.isCollapsed || sel.rangeCount === 0) return;
 
       const range = sel.getRangeAt(0);
-      if (!previewDiv.contains(range.commonAncestorContainer)) return;
+      const rangeInContent = contentPreviewDiv && contentPreviewDiv.contains(range.commonAncestorContainer);
+      const rangeInImage = imagePreviewDiv && imagePreviewDiv.contains(range.commonAncestorContainer);
+      if (!rangeInContent && !rangeInImage) return;
 
       const selectedText = sel.toString().trim();
       if (!selectedText) return;
@@ -1394,7 +1559,9 @@ function initSelectionRegenPopup() {
     if (popup.contains(e.target)) return;
     if (textareaEls.includes(e.target)) return;
     const previewDiv = document.getElementById('publish-preview');
+    const contentPreviewDiv = document.getElementById('pub-content-preview');
     if (previewDiv && previewDiv.contains(e.target)) return;
+    if (contentPreviewDiv && contentPreviewDiv.contains(e.target)) return;
     _hideRegenPopup();
   });
 
@@ -1531,64 +1698,128 @@ async function loadJobs() {
   const jobsContainer = document.getElementById('jobs-list');
   if (!jobsContainer) return;
 
+  const safe = (value) => escapeHtml(String(value ?? '-'));
+
   try {
     const response = await api.getJobs(50);
     const jobs = response.jobs || [];
 
     if (jobs.length === 0) {
-      jobsContainer.innerHTML = '<p class="text-secondary">Nog geen jobs gevonden.</p>';
+      jobsContainer.innerHTML = `
+        <div class="dashboard-jobs-empty">
+          <span class="material-icons-outlined">inventory_2</span>
+          <span>Nog geen jobs gevonden.</span>
+        </div>
+      `;
       return;
     }
 
     jobsContainer.innerHTML = jobs.map((job) => {
       const draftId = job.payload?.draftId;
       const siteId = job.payload?.siteId || '-';
+      const siteName = job.siteName || siteId;
+      const title = job.title || safe(job.jobId || job.id || '-');
       const createdAt = job.createdAt ? formatDate(job.createdAt) : '-';
+      const updatedAt = job.updatedAt ? formatDate(job.updatedAt) : '-';
       const statusBadge = formatJobStatus(job.status);
+      const type = safe(job.type || '-');
 
       return `
-        <div class="card" style="margin-bottom: 0.75rem;">
-          <div class="card-body">
-            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.75rem; flex-wrap:wrap;">
-              <div>
-                <div><strong>Job:</strong> ${job.jobId}</div>
-                <div><strong>Type:</strong> ${job.type}</div>
-                <div><strong>Site:</strong> ${siteId}</div>
-                <div><strong>Draft:</strong> ${draftId || '-'}</div>
-                <div><strong>Aangemaakt:</strong> ${createdAt}</div>
-              </div>
-              <div>${statusBadge}</div>
+        <article class="dashboard-job-item">
+          <div class="dashboard-job-top">
+            <div class="dashboard-job-id-wrap">
+              <span class="dashboard-job-code">${safe(title)}</span>
+              <span class="dashboard-job-type">${type}</span>
             </div>
+            <div class="dashboard-job-status">${statusBadge}</div>
           </div>
-        </div>
+
+          <dl class="dashboard-job-grid">
+            <div>
+              <dt>Site</dt>
+              <dd>${safe(siteName)}</dd>
+            </div>
+            <div>
+              <dt>Draft</dt>
+              <dd>${safe(draftId || '-')}</dd>
+            </div>
+            <div>
+              <dt>Aangemaakt</dt>
+              <dd>${safe(createdAt)}</dd>
+            </div>
+            <div>
+              <dt>Laatst bijgewerkt</dt>
+              <dd>${safe(updatedAt)}</dd>
+            </div>
+          </dl>
+        </article>
       `;
     }).join('');
   } catch (error) {
     console.error('Error loading jobs:', error);
-    jobsContainer.innerHTML = '<p class="text-secondary" style="color: var(--color-error);">Fout bij laden van jobs.</p>';
+    jobsContainer.innerHTML = `
+      <div class="dashboard-jobs-error">
+        <span class="material-icons-outlined">error</span>
+        <span>Fout bij laden van jobs.</span>
+      </div>
+    `;
   }
 }
 
 function updateJobStatus(job) {
   const statusContainer = document.getElementById('job-status');
   if (!statusContainer) return;
+
+  const safe = (value) => escapeHtml(String(value ?? '-'));
+  const resultJson = job.result
+    ? `<pre class="dashboard-status-pre">${escapeHtml(JSON.stringify(job.result, null, 2))}</pre>`
+    : '';
+  const errorJson = job.error
+    ? `<pre class="dashboard-status-pre">${escapeHtml(JSON.stringify(job.error, null, 2))}</pre>`
+    : '';
+  const steps = Array.isArray(job.steps) ? job.steps : [];
+  const stepsHtml = steps.length > 0
+    ? `
+      <ol class="dashboard-status-steps">
+        ${steps.map((step) => `<li>${safe(step.step)}: ${safe(step.status)}</li>`).join('')}
+      </ol>
+    `
+    : '<p class="text-muted">Geen stappen beschikbaar.</p>';
   
   statusContainer.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <h3 class="card-title">Job Status: ${formatJobStatus(job.status)}</h3>
+    <div class="dashboard-status-block">
+      <div>
+        ${formatJobStatus(job.status)}
       </div>
-      <div class="card-body">
-        <p><strong>Job ID:</strong> ${job.jobId}</p>
-        <p><strong>Status:</strong> ${job.status}</p>
-        ${job.result ? `<pre>${JSON.stringify(job.result, null, 2)}</pre>` : ''}
-        ${job.error ? `<div class="alert alert-error">${JSON.stringify(job.error, null, 2)}</div>` : ''}
-        ${job.steps ? `
-          <h4>Stappen:</h4>
-          <ul>
-            ${job.steps.map(step => `<li>${step.step}: ${step.status}</li>`).join('')}
-          </ul>
-        ` : ''}
+
+      <div class="dashboard-status-kv">
+        <div class="dashboard-status-kv-item">
+          <small>Job ID</small>
+          <span>${safe(job.jobId || job.id || '-')}</span>
+        </div>
+        <div class="dashboard-status-kv-item">
+          <small>Type</small>
+          <span>${safe(job.type || '-')}</span>
+        </div>
+      </div>
+
+      ${resultJson ? `
+        <div>
+          <h4>Resultaat</h4>
+          ${resultJson}
+        </div>
+      ` : ''}
+
+      ${errorJson ? `
+        <div>
+          <h4>Foutmelding</h4>
+          ${errorJson}
+        </div>
+      ` : ''}
+
+      <div>
+        <h4>Stappen</h4>
+        ${stepsHtml}
       </div>
     </div>
   `;
@@ -1717,43 +1948,37 @@ function restorePublishPreview() {
 function updatePublishPreviewFromForm() {
   const titleInput = document.getElementById('title');
   const contentInput = document.getElementById('content');
-  const previewDiv = document.getElementById('publish-preview');
+  const contentPreview = document.getElementById('pub-content-preview');
   const draftData = sessionStorage.getItem('currentDraft');
   
-  if (!previewDiv || !titleInput || !contentInput) return;
+  if (!titleInput || !contentInput) return;
 
   if (!activeDraftId) {
     clearPublishPreview();
     return;
   }
-  
-  // Build draft from current form values
-  const draft = {
-    title: titleInput.value || 'Geen titel',
-    contentHtml: contentInput.value || 'Geen content'
-  };
-  
-  // Add stored excerpt if available
-  if (draftData) {
-    try {
-      const storedDraft = JSON.parse(draftData);
-      if (storedDraft.excerpt) {
-        draft.excerpt = storedDraft.excerpt;
-      }
-    } catch (e) {
-      // Ignore parse errors
+
+  // Update content preview panel directly for fast live sync
+  if (contentPreview) {
+    const titleBody = contentPreview.querySelector('#preview-title-body');
+    const contentBody = contentPreview.querySelector('#preview-content-body');
+
+    if (titleBody) {
+      titleBody.textContent = titleInput.value || 'Geen titel';
+    }
+    if (contentBody) {
+      contentBody.innerHTML = contentInput.value || 'Geen content';
     }
   }
-  
-  // Add image data from memory (has full base64 data)
-  if (window._currentDraftWithImages && window._currentDraftWithImages.image) {
-    draft.image = window._currentDraftWithImages.image;
+
+  // Also update image panel if images changed (rare during typing, but keep full render path)
+  const previewDiv = document.getElementById('publish-preview');
+  if (previewDiv && window._currentDraftWithImages && window._currentDraftWithImages.image) {
+    // Image panel stays as-is during text edits; no need to re-render
   }
-  
-  renderPreview(draft, previewDiv);
 }
 
-// Render preview HTML
+// Render preview HTML — splits output between the image panel and the content panel.
 function renderPreview(draft, previewDiv) {
   console.log('renderPreview called with draft:', draft);
 
@@ -1764,7 +1989,8 @@ function renderPreview(draft, previewDiv) {
     contentHtml: draft.contentHtml || 'Geen content'
   };
   
-  let previewHtml = '';
+  // ── Image panel (goes into #publish-preview) ──────────────────
+  let imageHtml = '';
   
   // Featured image(s) - handle single or multiple variations
   const images = imageSourceDraft.images || (imageSourceDraft.image ? [imageSourceDraft.image] : []);
@@ -1774,28 +2000,25 @@ function renderPreview(draft, previewDiv) {
   console.log('Images array length:', images.length);
   
   if (images.length > 0) {
-    previewHtml += `
-      <div class="card" style="margin-bottom: var(--spacing-lg);">
+    imageHtml += `
+      <div class="card">
         <div class="card-header">
-          <h3>Featured Image ${images.length > 1 ? `(${images.length} variations)` : ''}</h3>
+          <h3 class="card-title">Featured Image ${images.length > 1 ? `(${images.length} variations)` : ''}</h3>
         </div>
         <div class="card-body">
     `;
     
     // Show all variations if multiple
     if (images.length > 1) {
-      previewHtml += '<div id="image-variations-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">';
+      imageHtml += '<div id="image-variations-container" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px;">';
       images.forEach((img, index) => {
-        const isSelected = index === 0; // First one is default
+        const isSelected = index === 0;
         const borderStyle = isSelected ? '4px solid #10b981' : '2px solid #e2e8f0';
         const boxShadow = isSelected ? '0 0 0 3px rgba(16, 185, 129, 0.2)' : 'none';
-        
-        // Extract feedback chain if available
         const feedbackChain = img.feedbackChain || [];
-        const generationNumber = img.generationNumber || 1;
         const imageId = img.imageId;
         
-        previewHtml += `
+        imageHtml += `
           <div class="image-variation-card" style="position: relative; border: ${borderStyle}; box-shadow: ${boxShadow}; border-radius: 8px; padding: 8px; cursor: pointer; transition: all 0.2s ease;" 
                data-variation-index="${index}"
                data-image-id="${imageId || ''}">
@@ -1804,7 +2027,6 @@ function renderPreview(draft, previewDiv) {
                  alt="Variation ${index + 1}" 
                  style="max-width: 100%; height: auto; border-radius: 4px; pointer-events: none;" />
             <div style="text-align: center; margin-top: 8px; font-size: 13px; color: var(--text-secondary);">Variation ${index + 1}</div>
-            
             ${feedbackChain.length > 0 ? `
               <div class="feedback-history" style="margin-top: 12px; padding: 8px; background: #f3f4f6; border-radius: 4px; font-size: 12px;">
                 <div style="font-weight: 600; color: #374151; margin-bottom: 4px;">Toegepaste feedback:</div>
@@ -1816,30 +2038,20 @@ function renderPreview(draft, previewDiv) {
           </div>
         `;
       });
-      previewHtml += '</div>';
-      previewHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;">💡 <strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
+      imageHtml += '</div>';
+      imageHtml += '<div style="margin-top: 16px; padding: 12px; background: #ecfdf5; border-left: 4px solid #10b981; border-radius: 8px; color: #047857; font-size: 14px;"><strong>Tip:</strong> Klik op een image om deze te selecteren voor publicatie</div>';
       
-      // Add regeneration controls for selected image
-      previewHtml += `
+      imageHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div class="card">
-            <div class="card-header">
-              <h4>🔄 Regenereer Geselecteerde Afbeelding</h4>
-            </div>
+            <div class="card-header"><h4>Regenereer geselecteerde afbeelding</h4></div>
             <div class="card-body">
-              <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
-              <textarea id="regenerate-feedback" 
-                        placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
-                        rows="3"
+              <p style="color: var(--text-secondary); margin-bottom: 16px;">Geef feedback om de geselecteerde afbeelding te verbeteren.</p>
+              <textarea id="regenerate-feedback" placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond'..." rows="3"
                         style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
               <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
                 <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">1</span> van 3</span>
-                <button id="regenerate-btn" 
-                        onclick="regenerateImage()"
-                        class="btn btn-primary"
-                        style="display: inline-flex; align-items: center; gap: 8px;">
-                  <span>🔄 Regenereer</span>
-                </button>
+                <button id="regenerate-btn" onclick="regenerateImage()" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 8px;"><span>Regenereren</span></button>
               </div>
               <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
             </div>
@@ -1847,17 +2059,15 @@ function renderPreview(draft, previewDiv) {
         </div>
       `;
     } else if (imageToDisplay && imageToDisplay.bytes_base64) {
-      // Single image
       const feedbackChain = imageToDisplay.feedbackChain || [];
       const generationNumber = imageToDisplay.generationNumber || 1;
       const imageId = imageToDisplay.imageId;
       
-      previewHtml += `
+      imageHtml += `
         <div data-image-id="${imageId || ''}">
           <img src="data:${imageToDisplay.mime_type || imageToDisplay.mime};base64,${imageToDisplay.bytes_base64}" 
                alt="Featured Image" 
                style="max-width: 100%; height: auto; border-radius: var(--radius-md); box-shadow: 0 4px 12px rgba(0,0,0,0.15);" />
-          
           ${feedbackChain.length > 0 ? `
             <div class="feedback-history" style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 8px; font-size: 13px;">
               <div style="font-weight: 600; color: #374151; margin-bottom: 8px;">Toegepaste feedback:</div>
@@ -1869,24 +2079,18 @@ function renderPreview(draft, previewDiv) {
         </div>
       `;
       
-      // Add regeneration controls
-      previewHtml += `
+      imageHtml += `
         <div id="regenerate-section" style="margin-top: 24px;">
           <div style="padding: 16px; background: #f9fafb; border: 2px solid #e2e8f0; border-radius: 8px;">
-            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">🔄 Regenereer Afbeelding</h4>
-            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren. Alle vorige feedback blijft behouden.</p>
-            <textarea id="regenerate-feedback" 
-                      placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond', 'meer blauw gebruiken'..."
-                      rows="3"
+            <h4 style="margin: 0 0 12px 0; font-size: 16px; color: #111827;">Afbeelding regenereren</h4>
+            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">Geef feedback om de afbeelding te verbeteren.</p>
+            <textarea id="regenerate-feedback" placeholder="bijv. 'maak het feller', 'voeg bergen toe op de achtergrond'..." rows="3"
                       style="width: 100%; padding: 12px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical;"></textarea>
             <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 12px;">
               <span id="regenerate-counter" style="font-size: 13px; color: var(--text-secondary);">Generatie <span id="gen-current">${generationNumber}</span> van 3 ${generationNumber >= 3 ? '(Maximum bereikt)' : ''}</span>
-              <button id="regenerate-btn" 
-                      onclick="regenerateImage()"
-                      class="btn btn-primary"
-                      ${generationNumber >= 3 ? 'disabled' : ''}
+              <button id="regenerate-btn" onclick="regenerateImage()" class="btn btn-primary" ${generationNumber >= 3 ? 'disabled' : ''}
                       style="display: inline-flex; align-items: center; gap: 8px;">
-                <span>${generationNumber >= 3 ? '✓ Maximum bereikt' : '🔄 Regenereer'}</span>
+                <span>${generationNumber >= 3 ? 'Maximum bereikt' : 'Regenereren'}</span>
               </button>
             </div>
             <div id="regenerate-status" style="margin-top: 12px; display: none;"></div>
@@ -1895,37 +2099,43 @@ function renderPreview(draft, previewDiv) {
       `;
     }
     
-    previewHtml += `
+    imageHtml += `
         </div>
       </div>
     `;
   }
-  
-  // Content preview - separate card
-  previewHtml += '<div class="card" style="margin-bottom: var(--spacing-lg);">';
-  previewHtml += '<div class="card-header"><h3>Content Preview</h3></div>';
-  previewHtml += '<div class="card-body">';
-  previewHtml += `<h2 id="preview-title-body" style="user-select:text;cursor:text;">${previewDraft.title}</h2>`;
-  if (previewDraft.excerpt) {
-    previewHtml += `<p style="color: var(--text-secondary); font-style: italic;">${previewDraft.excerpt}</p>`;
+
+  // Put image HTML into the image panel
+  if (previewDiv) {
+    previewDiv.innerHTML = imageHtml;
+    previewDiv.style.display = imageHtml ? 'block' : 'none';
   }
-  previewHtml += '<hr style="margin: var(--spacing-lg) 0;">';
-  previewHtml += `<div id="preview-content-body" style="line-height: 1.6; user-select:text; cursor:text;">${previewDraft.contentHtml}</div>`;
-  previewHtml += '</div></div>';
-  
-  previewDiv.innerHTML = previewHtml;
-  previewDiv.style.display = 'block';
-  
+
   // Setup event delegation for image variation selection
-  const variationsContainer = previewDiv.querySelector('#image-variations-container');
-  if (variationsContainer) {
-    variationsContainer.addEventListener('click', (e) => {
-      const card = e.target.closest('.image-variation-card');
-      if (card) {
-        const index = parseInt(card.dataset.variationIndex);
-        selectImageVariation(index);
-      }
-    });
+  if (previewDiv) {
+    const variationsContainer = previewDiv.querySelector('#image-variations-container');
+    if (variationsContainer) {
+      variationsContainer.addEventListener('click', (e) => {
+        const card = e.target.closest('.image-variation-card');
+        if (card) {
+          const index = parseInt(card.dataset.variationIndex);
+          selectImageVariation(index);
+        }
+      });
+    }
+  }
+  
+  // ── Content panel (goes into #pub-content-preview) ────────────
+  const contentPreview = document.getElementById('pub-content-preview');
+  if (contentPreview) {
+    let contentHtml = '';
+    contentHtml += `<h2 id="preview-title-body" style="user-select:text;cursor:text;">${previewDraft.title}</h2>`;
+    if (previewDraft.excerpt) {
+      contentHtml += `<p style="color: var(--text-secondary); font-style: italic;">${previewDraft.excerpt}</p>`;
+    }
+    contentHtml += '<hr style="margin: var(--spacing-lg) 0;">';
+    contentHtml += `<div id="preview-content-body" style="line-height: 1.6; user-select:text; cursor:text;">${previewDraft.contentHtml}</div>`;
+    contentPreview.innerHTML = contentHtml;
   }
 }
 
@@ -2014,7 +2224,8 @@ async function loadSitesDropdowns() {
       return;
     }
     
-    const sites = await response.json();
+    const sitesPayload = await response.json();
+    const sites = Array.isArray(sitesPayload) ? sitesPayload : [];
     
     // Update both dropdowns
     const siteIdSelect = document.getElementById('siteId');
@@ -2067,13 +2278,13 @@ async function regenerateImage() {
   
   if (!feedback) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Voer feedback in om de afbeelding te regenereren.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Voer feedback in om de afbeelding te regenereren.</div>';
     return;
   }
   
   if (feedback.length < 5) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Feedback moet minimaal 5 karakters bevatten.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Feedback moet minimaal 5 karakters bevatten.</div>';
     return;
   }
   
@@ -2081,7 +2292,7 @@ async function regenerateImage() {
   const draft = window._currentDraftWithImages;
   if (!draft || !draft.image || !draft.image.imageId) {
     statusDiv.style.display = 'block';
-    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">⚠️ Geen afbeelding geselecteerd voor regeneratie.</div>';
+    statusDiv.innerHTML = '<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">Geen afbeelding geselecteerd voor regeneratie.</div>';
     return;
   }
   
@@ -2089,9 +2300,9 @@ async function regenerateImage() {
   
   // Disable button and show loading
   regenerateBtn.disabled = true;
-  regenerateBtn.innerHTML = '<span>⏳ Regenereren...</span>';
+  regenerateBtn.innerHTML = '<span>Regenereren...</span>';
   statusDiv.style.display = 'block';
-  statusDiv.innerHTML = '<div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; border-radius: 4px;">🔄 Afbeelding wordt gegenereerd met je feedback...</div>';
+  statusDiv.innerHTML = '<div style="padding: 12px; background: #eff6ff; border-left: 4px solid #3b82f6; color: #1e40af; border-radius: 4px;">Afbeelding wordt gegenereerd met je feedback...</div>';
   
   try {
     const response = await fetch('/api/image/regenerate', {
@@ -2158,17 +2369,10 @@ async function regenerateImage() {
     
   } catch (error) {
     console.error('Regeneration error:', error);
-    statusDiv.innerHTML = `<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">❌ ${error.message}</div>`;
+    statusDiv.innerHTML = `<div style="padding: 12px; background: #fef2f2; border-left: 4px solid #ef4444; color: #991b1b; border-radius: 4px;">${error.message}</div>`;
     regenerateBtn.disabled = false;
-    regenerateBtn.innerHTML = '<span>🔄 Regenereer</span>';
+    regenerateBtn.innerHTML = '<span>Regenereren</span>';
   }
-}
-
-// HTML escape utility
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // Load drafts from database
@@ -2200,38 +2404,12 @@ async function loadDrafts() {
         : excerpt;
 
       html += `
-        <div class="draft-item" style="padding: 1rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--bg-secondary);">
-          <div style="display: flex; justify-content: space-between; align-items: start; gap: 1rem;">
-            <div style="flex: 1;">
-              <h4 style="margin: 0 0 0.5rem 0; font-size: 1.1rem; color: var(--text-primary); display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
-                <span>${escapeHtml(title)}</span>
-                ${item.publish_job_id ? '<span class="badge badge-success">Naar WP verstuurd</span>' : ''}
-              </h4>
-              ${truncatedExcerpt ? `<p style="margin: 0 0 0.5rem 0; color: var(--text-secondary); font-size: 0.9rem;">${escapeHtml(truncatedExcerpt)}</p>` : ''}
-              <p style="margin: 0; color: var(--text-muted); font-size: 0.85rem;">
-                Aangemaakt: ${formatDate(createdAt)}
-              </p>
-              ${item.publish_site_url ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website: ${escapeHtml(item.publish_site_url)}</p>` : (item.publish_site_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Website ID: ${escapeHtml(String(item.publish_site_id))}</p>` : '')}
-              ${item.publish_sent_at ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Verstuurd: ${formatDate(item.publish_sent_at)}</p>` : ''}
-              ${item.publish_job_id ? `<p style="margin: 0.25rem 0 0 0; color: var(--text-muted); font-size: 0.85rem;">Job: ${item.publish_job_id}</p>` : ''}
-            </div>
-            <div style="display: flex; gap: 0.5rem;">
-              <button 
-                class="btn btn-primary btn-sm" 
-                onclick="loadDraft(${item.id})"
-                style="white-space: nowrap;"
-              >
-                Laden
-              </button>
-              <button 
-                class="btn btn-sm" 
-                onclick="deleteDraftById(${item.id})"
-                style="white-space: nowrap; background: var(--color-error); border-color: var(--color-error); color: white;"
-              >
-                Verwijderen
-              </button>
-            </div>
-          </div>
+        <div class="draft-item" style="display:flex; align-items:center; gap:0.75rem; padding:0.6rem 0.85rem; border:1px solid var(--border-color); border-radius:var(--radius-md); background:var(--bg-secondary); cursor:pointer;" onclick="loadDraft(${item.id})">
+          <span style="flex:1; font-weight:600; font-size:0.95rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(title)}</span>
+          ${item.publish_job_id ? '<span class="badge badge-success" style="flex-shrink:0;">Naar WP verstuurd</span>' : ''}
+          <button class="btn btn-sm" onclick="event.stopPropagation(); deleteDraftById(${item.id})" style="flex-shrink:0; padding:0.3rem 0.5rem; min-height:0; background:transparent; border-color:var(--border-color); color:var(--text-secondary);" title="Verwijderen">
+            <span class="material-icons-outlined" style="font-size:1.1rem;">delete</span>
+          </button>
         </div>
       `;
     }
@@ -2298,6 +2476,9 @@ async function loadDraft(draftId) {
     // Restore preview
     restorePublishPreview();
 
+    // Update translation badges
+    updateTranslationBadges();
+
     showAlert('Concept geladen!', 'success');
   } catch (error) {
     console.error('Error loading draft:', error);
@@ -2348,3 +2529,246 @@ window.regenerateImage = regenerateImage;
 window.escapeHtml = escapeHtml;
 window.loadDraft = loadDraft;
 window.deleteDraftById = deleteDraftById;
+
+// ============================================
+// TRANSLATION FUNCTIONS
+// ============================================
+
+const AVAILABLE_LANGUAGES = [
+  { code: 'en', label: 'Engels', flag: '🇬🇧' },
+  { code: 'de', label: 'Duits', flag: '🇩🇪' },
+  { code: 'fr', label: 'Frans', flag: '🇫🇷' },
+  { code: 'es', label: 'Spaans', flag: '🇪🇸' },
+];
+
+async function openTranslateModal() {
+  if (!activeDraftId) {
+    showAlert('Laad eerst een concept om te vertalen.', 'error');
+    return;
+  }
+
+  // First save the current draft
+  await saveCurrentDraft({ silent: true });
+
+  // Fetch existing translations
+  let existingTranslations = [];
+  try {
+    const resp = await api.getDraftTranslations(activeDraftId);
+    existingTranslations = resp.translations || [];
+  } catch (e) {
+    console.error('Error fetching translations:', e);
+  }
+
+  const existingLangs = new Set(existingTranslations.map(t => t.language));
+
+  // Build modal content
+  const languageRows = AVAILABLE_LANGUAGES.map(lang => {
+    const exists = existingLangs.has(lang.code);
+    const badge = exists
+      ? `<span class="badge badge-primary" style="margin-left:8px;font-size:0.75rem;">Vertaling aanwezig</span>`
+      : '';
+    return `
+      <label class="form-checkbox" style="display:flex;align-items:center;gap:8px;padding:8px 0;">
+        <input type="checkbox" name="translate-lang" value="${lang.code}" checked />
+        <span>${lang.flag} ${lang.label}${badge}</span>
+      </label>
+    `;
+  }).join('');
+
+  const content = `
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <p style="margin:0;color:#555;">Selecteer de talen waarnaar je dit concept wilt vertalen.</p>
+      <div>${languageRows}</div>
+      <label class="form-checkbox" style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="translate-image-check" checked />
+        <span>Afbeelding ook vertalen (als er tekst in staat)</span>
+      </label>
+      <div id="translate-status" style="display:none;"></div>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Annuleren</button>
+    <button class="btn btn-primary" id="translate-submit-btn">
+      <span class="material-icons-outlined" style="font-size:1.1rem;">translate</span>
+      Vertalen
+    </button>
+  `;
+
+  showModal('Blog vertalen', content, footer);
+
+  // Attach submit handler
+  const submitBtn = document.getElementById('translate-submit-btn');
+  if (submitBtn) {
+    submitBtn.addEventListener('click', async () => {
+      const checked = document.querySelectorAll('input[name="translate-lang"]:checked');
+      const languages = Array.from(checked).map(el => el.value);
+      const translateImage = document.getElementById('translate-image-check')?.checked ?? true;
+      const statusDiv = document.getElementById('translate-status');
+
+      if (languages.length === 0) {
+        showAlert('Selecteer minimaal één taal.', 'error');
+        return;
+      }
+
+      setButtonLoading(submitBtn, true);
+      statusDiv.style.display = 'block';
+      statusDiv.innerHTML = '<div style="padding:12px;background:#eff6ff;border-left:4px solid #3b82f6;color:#1e40af;border-radius:4px;">Bezig met vertalen... Dit kan even duren.</div>';
+
+      try {
+        for (const lang of languages) {
+          statusDiv.innerHTML = `<div style="padding:12px;background:#eff6ff;border-left:4px solid #3b82f6;color:#1e40af;border-radius:4px;">Vertalen naar ${AVAILABLE_LANGUAGES.find(l => l.code === lang)?.label || lang}...</div>`;
+
+          const result = await api.translateDraft(activeDraftId, lang, translateImage);
+
+          // Close modal and open edit modal
+          const overlay = submitBtn.closest('.modal-overlay');
+          if (overlay) overlay.remove();
+
+          openTranslationEditModal(result, lang);
+          updateTranslationBadges();
+          showAlert('Vertaling succesvol gegenereerd!', 'success');
+        }
+      } catch (error) {
+        console.error('Translation error:', error);
+        statusDiv.innerHTML = `<div style="padding:12px;background:#fef2f2;border-left:4px solid #ef4444;color:#991b1b;border-radius:4px;">Fout bij vertalen: ${escapeHtml(error.message)}</div>`;
+        setButtonLoading(submitBtn, false);
+      }
+    });
+  }
+}
+
+function openTranslationEditModal(translationResult, language) {
+  const translated = translationResult.translated || {};
+  const langInfo = AVAILABLE_LANGUAGES.find(l => l.code === language) || { label: language, flag: '' };
+
+  let imagePreviewHtml = '';
+  if (translationResult.translatedImage?.bytes_base64) {
+    imagePreviewHtml = `
+      <div style="margin-bottom:12px;">
+        <label class="form-label">Vertaalde afbeelding</label>
+        <img src="data:image/jpeg;base64,${translationResult.translatedImage.bytes_base64}"
+             style="max-width:100%;border-radius:8px;border:1px solid #e0e0e0;" alt="Translated image" />
+      </div>
+    `;
+  }
+
+  const content = `
+    <div style="display:flex;flex-direction:column;gap:12px;max-height:70vh;overflow-y:auto;">
+      ${imagePreviewHtml}
+      <div class="form-group">
+        <label class="form-label">Titel</label>
+        <input type="text" id="translation-edit-title" class="form-input" value="${escapeHtml(translated.title || '')}" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Excerpt</label>
+        <textarea id="translation-edit-excerpt" class="form-input" rows="2">${escapeHtml(translated.excerpt || '')}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Content (HTML)</label>
+        <textarea id="translation-edit-content" class="form-input" rows="10">${escapeHtml(translated.contentHtml || '')}</textarea>
+      </div>
+      <details style="margin-top:4px;">
+        <summary style="cursor:pointer;font-weight:600;color:#555;font-size:0.9rem;">SEO & Meta</summary>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+          <div class="form-group">
+            <label class="form-label">Slug</label>
+            <input type="text" id="translation-edit-slug" class="form-input" value="${escapeHtml(translated.slug || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Focus keyword</label>
+            <input type="text" id="translation-edit-focuskw" class="form-input" value="${escapeHtml(translated.yoast?.focusKeyword || translated.yoast?.focuskw || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Meta titel</label>
+            <input type="text" id="translation-edit-metatitle" class="form-input" value="${escapeHtml(translated.yoast?.metaTitle || translated.yoast?.seo_title || '')}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Meta beschrijving</label>
+            <textarea id="translation-edit-metadesc" class="form-input" rows="2">${escapeHtml(translated.yoast?.metaDescription || translated.yoast?.meta_desc || '')}</textarea>
+          </div>
+        </div>
+      </details>
+    </div>
+  `;
+
+  const footer = `
+    <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Sluiten</button>
+    <button class="btn btn-primary" id="translation-save-btn">Vertaling opslaan</button>
+  `;
+
+  showModal(`${langInfo.flag} Vertaling: ${langInfo.label}`, content, footer);
+
+  const saveBtn = document.getElementById('translation-save-btn');
+  if (saveBtn) {
+    saveBtn.addEventListener('click', async () => {
+      const updatedTranslation = {
+        ...translated,
+        title: document.getElementById('translation-edit-title')?.value || translated.title,
+        excerpt: document.getElementById('translation-edit-excerpt')?.value || translated.excerpt,
+        contentHtml: document.getElementById('translation-edit-content')?.value || translated.contentHtml,
+        slug: document.getElementById('translation-edit-slug')?.value || translated.slug,
+        yoast: {
+          ...(translated.yoast || {}),
+          focusKeyword: document.getElementById('translation-edit-focuskw')?.value || translated.yoast?.focusKeyword,
+          focuskw: document.getElementById('translation-edit-focuskw')?.value || translated.yoast?.focuskw,
+          metaTitle: document.getElementById('translation-edit-metatitle')?.value || translated.yoast?.metaTitle,
+          seo_title: document.getElementById('translation-edit-metatitle')?.value || translated.yoast?.seo_title,
+          metaDescription: document.getElementById('translation-edit-metadesc')?.value || translated.yoast?.metaDescription,
+          meta_desc: document.getElementById('translation-edit-metadesc')?.value || translated.yoast?.meta_desc,
+        },
+        language: language,
+      };
+
+      setButtonLoading(saveBtn, true);
+      try {
+        await api.updateDraftTranslation(activeDraftId, language, updatedTranslation);
+        showAlert('Vertaling opgeslagen!', 'success');
+        const overlay = saveBtn.closest('.modal-overlay');
+        if (overlay) overlay.remove();
+      } catch (error) {
+        showAlert('Fout bij opslaan: ' + error.message, 'error');
+        setButtonLoading(saveBtn, false);
+      }
+    });
+  }
+}
+
+async function updateTranslationBadges() {
+  const badgeContainer = document.getElementById('translation-badges');
+  if (!badgeContainer || !activeDraftId) return;
+
+  try {
+    const resp = await api.getDraftTranslations(activeDraftId);
+    const translations = resp.translations || [];
+
+    if (translations.length > 0) {
+      badgeContainer.style.display = 'inline';
+      badgeContainer.innerHTML = translations.map(t =>
+        `<span class="badge badge-primary" style="margin-left:4px;font-size:0.7rem;padding:2px 6px;cursor:pointer;" data-lang="${t.language}" title="Klik om vertaling te bewerken">${t.language.toUpperCase()}</span>`
+      ).join('');
+
+      // Add click handlers for badges
+      badgeContainer.querySelectorAll('[data-lang]').forEach(badge => {
+        badge.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const lang = badge.getAttribute('data-lang');
+          try {
+            const translation = await api.getDraftTranslation(activeDraftId, lang);
+            openTranslationEditModal({ translated: translation.translated }, lang);
+          } catch (err) {
+            showAlert('Fout bij laden vertaling: ' + err.message, 'error');
+          }
+        });
+      });
+    } else {
+      badgeContainer.style.display = 'none';
+      badgeContainer.innerHTML = '';
+    }
+  } catch (e) {
+    console.error('Error updating translation badges:', e);
+  }
+}
+
+// Make translation functions globally available
+window.openTranslateModal = openTranslateModal;

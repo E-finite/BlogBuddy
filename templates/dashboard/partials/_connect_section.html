@@ -1,98 +1,102 @@
-<section class="dashboard-panel">
+<section class="dashboard-panel workspace-page-panel workspace-connect-panel">
   <div class="section">
-    <h2 class="section-title">Connectoren</h2>
+    <div class="workspace-section-heading">
+      <h2 class="section-title">WordPress Verbindingen</h2>
+      <p>
+        Kies je connector, beheer bestaande koppelingen en werk
+        inloggegevens veilig bij vanuit een centraal overzicht.
+      </p>
+    </div>
 
-    <div class="card" style="margin-bottom: 1.5rem">
-      <div class="card-header">
-        <h3 class="card-title">Connector kiezen</h3>
+    <div class="card workspace-steps-card card-spaced">
+      <ol class="workspace-step-list">
+        <li>Kies de connector die je wilt gebruiken.</li>
+        <li>Open een bestaande site of start een nieuwe verbinding.</li>
+        <li>Sla je WordPress URL, gebruikersnaam en app-password op.</li>
+      </ol>
+    </div>
+
+    <div class="workspace-grid workspace-grid-2 card-spaced">
+      <div class="card workspace-card">
+        <div class="card-header">
+          <h3 class="card-title">Stap 1: Connector kiezen</h3>
+        </div>
+        <div class="card-body">
+          <div class="form-group mb-0">
+            <label class="form-label" for="connectorType">Beschikbare connectoren</label>
+            <select id="connectorType" class="form-select">
+              <option value="wordpress" selected>WordPress</option>
+            </select>
+            <div class="form-help">
+              Momenteel wordt WordPress ondersteund. Na je keuze zie je
+              direct je gekoppelde websites.
+            </div>
+          </div>
+        </div>
       </div>
-      <div class="card-body">
-        <div class="form-group" style="margin-bottom: 0">
-          <label class="form-label" for="connectorType"
-            >Beschikbare connectors</label
-          >
-          <select id="connectorType" class="form-select">
-            <option value="">-- Kies een connector --</option>
-            <option value="wordpress">WordPress</option>
-          </select>
-          <div class="form-help">
-            Voor nu is alleen WordPress beschikbaar. Na je keuze zie je je
-            verbonden websites of kan je een nieuwe verbinding openen.
+
+      <div id="connector-sites-panel" class="card workspace-card">
+        <div class="card-header">
+          <h3 class="card-title">Stap 2: Bestaande websites</h3>
+        </div>
+        <div class="card-body">
+          <div id="connected-sites-list" class="connector-sites-list"></div>
+          <div class="connector-actions-row">
+            <button
+              type="button"
+              id="show-connect-form-btn"
+              class="btn btn-primary"
+            >
+              Nieuwe website toevoegen
+            </button>
           </div>
         </div>
       </div>
     </div>
 
-    <div
-      id="connector-sites-panel"
-      class="card hidden"
-      style="margin-bottom: 1.5rem"
-    >
+    <div id="connect-form-panel" class="card hidden workspace-card workspace-connect-form">
       <div class="card-header">
-        <h3 class="card-title">Jouw WordPress Websites</h3>
-      </div>
-      <div class="card-body">
-        <div id="connected-sites-list" class="connector-sites-list"></div>
-        <div class="connector-actions-row">
-          <button
-            type="button"
-            id="show-connect-form-btn"
-            class="btn btn-primary"
-          >
-            Nieuwe WordPress site verbinden
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <div id="connect-form-panel" class="card hidden">
-      <div class="card-header">
-        <h3 id="connect-form-title" class="card-title">
-          WordPress Site Verbinden
-        </h3>
-        <p id="connect-form-description" class="form-help" style="margin: 0">
-          Vul je WordPress-gegevens in om een verbinding te maken.
+        <h3 id="connect-form-title" class="card-title">Stap 3: Gegevens opslaan</h3>
+        <p id="connect-form-description" class="form-help mb-0">
+          Vul de gegevens in om een nieuwe WordPress verbinding op te slaan.
         </p>
       </div>
       <div class="card-body">
         <div
           id="connect-form-context"
-          class="alert alert-info hidden"
-          style="margin-bottom: 1.5rem"
+          class="alert alert-info hidden card-spaced"
         ></div>
 
         <form id="connect-site-form">
-          <div class="form-group">
-            <label class="form-label" for="wpBaseUrl">WordPress Base URL</label>
-            <input
-              type="url"
-              id="wpBaseUrl"
-              name="wpBaseUrl"
-              class="form-input"
-              placeholder="https://example.com"
-              required
-            />
-            <div class="form-help">Zonder trailing slash</div>
+          <div class="grid grid-2">
+            <div class="form-group">
+              <label class="form-label" for="wpBaseUrl">WordPress Base URL</label>
+              <input
+                type="url"
+                id="wpBaseUrl"
+                name="wpBaseUrl"
+                class="form-input"
+                placeholder="https://example.com"
+                required
+              />
+              <div class="form-help">Voer de URL in zonder trailing slash.</div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="wpUsername">WordPress gebruikersnaam</label>
+              <input
+                type="text"
+                id="wpUsername"
+                name="wpUsername"
+                class="form-input"
+                placeholder="botuser"
+                required
+              />
+            </div>
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="wpUsername"
-              >WordPress Username</label
-            >
-            <input
-              type="text"
-              id="wpUsername"
-              name="wpUsername"
-              class="form-input"
-              placeholder="botuser"
-              required
-            />
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="wpApplicationPassword"
-              >Application Password</label
-            >
+            <label class="form-label" for="wpApplicationPassword">Application Password</label>
             <input
               type="password"
               id="wpApplicationPassword"
@@ -102,12 +106,11 @@
               required
             />
             <div class="form-help">
-              WordPress Application Password (Users → Profile → Application
-              Passwords)
+              Te vinden in WordPress: Users -> Profile -> Application Passwords.
             </div>
           </div>
 
-          <button type="submit" class="btn btn-primary">Site Verbinden</button>
+          <button type="submit" class="btn btn-primary">Verbinden opslaan</button>
         </form>
       </div>
     </div>

@@ -1,0 +1,148 @@
+@import url("https://fonts.googleapis.com/css2?family=Lato:wght@400;600&display=swap");
+
+.badge-empty {
+  background: #f1f3f5;
+  color: #6c757d;
+  border: 1px dashed #ced4da;
+}
+
+.sticky-panel {
+  position: sticky;
+  top: 1rem;
+}
+
+.table-sm td,
+.table-sm th {
+  padding: 0.35rem 0.5rem;
+}
+
+html,
+body {
+  height: 100vh;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.login-page-bg {
+  min-height: 100vh;
+  height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #3ecfff 0%, #e2e2e2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.login-card {
+  background: #fff;
+  padding: 2.5rem 2rem;
+  border-radius: 15px;
+  box-shadow: 0 2px 10px rgba(53, 81, 118, 0.12);
+  min-width: 280px;
+  max-width: 400px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.login-card-wide {
+  max-width: 450px;
+}
+
+@media (max-width: 500px) {
+  .login-card {
+    padding: 1.2rem 0.5rem;
+    min-width: 0;
+    max-width: 95vw;
+  }
+}
+
+.login-title {
+  font-family: "Lato", sans-serif;
+  font-weight: 600;
+  color: #355176;
+}
+
+.auth-form-centered {
+  max-width: 400px;
+  margin: auto;
+}
+
+.auth-subtitle {
+  font-size: 0.95rem;
+}
+
+.main-btn {
+  background-color: #3ecfff;
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(53, 81, 118, 0.1);
+  transition: background 0.2s;
+}
+
+.main-btn:hover {
+  background-color: #355176;
+  color: #fff;
+}
+
+.input-field {
+  border-radius: 8px;
+  border: 1px solid #e2e2e2;
+  padding: 0.75rem;
+  font-family: "Lato", sans-serif;
+}
+
+.admin-company-selector {
+  display: none;
+}
+
+.admin-company-selector.is-visible {
+  display: block;
+}
+
+.admin-icon {
+  vertical-align: middle;
+  color: #dc3545;
+  font-size: 18px;
+}
+
+.inline-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #355176;
+  font-size: 14px;
+}
+
+.inline-checkbox input {
+  width: 16px;
+  height: 16px;
+}
+
+.auth-link {
+  color: #355176;
+  font-size: 14px;
+}
+
+.auth-register-row {
+  font-size: 14px;
+  color: #355176;
+}
+
+.auth-register-link {
+  color: #355176;
+  font-weight: 600;
+}
+
+.auth-hint {
+  font-size: 0.85rem;
+}
+
+.email-highlight {
+  color: #355176;
+  font-weight: 600;
+  word-break: break-word;
+}

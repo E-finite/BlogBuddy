@@ -132,7 +132,7 @@ def set_yoast_meta(site: Dict[str, Any], post_id: int, focuskw: str, seo_title: 
     username = site["wp_username"]
     app_password = crypto_utils.decrypt(site["wp_app_password_enc"])
 
-    url = f"{wp_base_url}/wp-json/yoast-api/v1/update-meta"
+    url = f"{wp_base_url}/wp-json/blogbuddy/v1/update-meta"
     auth = HTTPBasicAuth(username, app_password)
 
     payload = {
@@ -159,7 +159,7 @@ def link_polylang_translations(site: Dict[str, Any], translations_map: Dict[str,
     username = site["wp_username"]
     app_password = crypto_utils.decrypt(site["wp_app_password_enc"])
 
-    url = f"{wp_base_url}/wp-json/my-plugin/v1/link-translations"
+    url = f"{wp_base_url}/wp-json/blogbuddy/v1/link-translations"
     auth = HTTPBasicAuth(username, app_password)
 
     payload = {

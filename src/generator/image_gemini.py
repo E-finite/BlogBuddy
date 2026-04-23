@@ -532,3 +532,49 @@ def _extension_for_mime_type(mime_type: str) -> str:
     if mime_type == "image/webp":
         return "webp"
     return "png"
+
+
+# ---------------------------------------------------------------------------
+# Image translation
+# ---------------------------------------------------------------------------
+
+_TRANSLATE_IMAGE_LANGUAGE_NAMES = {
+    "en": "English",
+    "nl": "Dutch",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+}
+
+
+def translate_image(
+    image_bytes: bytes,
+    mime_type: str,
+    target_language: str,
+) -> Tuple[Optional[bytes], str, str, Optional[str]]:
+    """Translate visible text in an image to the target language using Gemini.
+
+    Uses Gemini image editing to keep the exact same design, layout, and colors
+    while replacing any visible text.
+
+    Returns:
+        Tuple of (image_bytes, mime_type, filename, error_message)
+    """
+    lang_name = _TRANSLATE_IMAGE_LANGUAGE_NAMES.get(
+        target_language, target_language)
+
+    prompt = (
+        f"Translate ALL visible text in this image to {lang_name}. "
+        "Keep the exact same design, layout, colors, fonts, and visual style. "
+        "Only change the text content — everything else must remain identical. "
+        "If there is no visible text in the image, return the image unchanged."
+    )
+
+    return _try_gemini_generate(
+        topic=f"translate-to-{target_language}",
+        prompt=prompt,
+        aspect_ratio="16:9",
+        variation_index=0,
+        reference_image_bytes=image_bytes,
+        reference_image_mime_type=mime_type,
+    )

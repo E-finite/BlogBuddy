@@ -106,11 +106,6 @@ def generate_post_content(
         if "focuskw" not in result["yoast"] or "seo_title" not in result["yoast"] or "meta_desc" not in result["yoast"]:
             raise ValueError("Missing required yoast fields")
 
-        # Ensure meta_desc length
-        if len(result["yoast"]["meta_desc"]) > seo.get("metaDescMaxLen", 155):
-            result["yoast"]["meta_desc"] = result["yoast"]["meta_desc"][:seo.get(
-                "metaDescMaxLen", 155)].rstrip()
-
         # Ensure slug is kebab-case
         result["slug"] = result["slug"].lower().replace(
             " ", "-").replace("_", "-")

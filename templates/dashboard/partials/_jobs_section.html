@@ -1,14 +1,49 @@
-<section class="dashboard-panel">
-  <div class="section">
-    <div class="section-heading-row">
-      <h2 class="section-title">Job Queue</h2>
-      <button id="refresh-jobs-btn" class="btn btn-secondary">Verversen</button>
+<section class="dashboard-panel dashboard-activity section section-spaced">
+  <div class="section-heading-row dashboard-activity-header">
+    <div>
+      <h2 class="section-title">Activiteit en Job Queue</h2>
+      <p class="dashboard-activity-subtitle">
+        Realtime overzicht van je generatie- en publicatiejobs.
+      </p>
     </div>
-    <div class="card">
-      <div id="jobs-list">
-        <p class="text-muted">Laden...</p>
+    <button id="refresh-jobs-btn" class="btn btn-secondary">
+      Nu verversen
+    </button>
+  </div>
+
+  <div class="dashboard-activity-layout">
+    <div class="card dashboard-jobs-card">
+      <div class="dashboard-jobs-head">
+        <h3 class="card-title">Laatste jobs</h3>
+        <span class="badge badge-primary">Auto-refresh: 5s</span>
+      </div>
+
+      <div id="jobs-list" class="dashboard-jobs-list">
+        <div class="dashboard-jobs-loading">
+          <span class="material-icons-outlined">hourglass_top</span>
+          <p class="text-muted">Jobs laden...</p>
+        </div>
       </div>
     </div>
-    <div id="job-status" class="mt-lg"></div>
+
+    <aside class="dashboard-activity-side">
+      <div class="card dashboard-status-card">
+        <h3 class="card-title">Live Status</h3>
+        <p class="dashboard-status-copy">
+          Tijdens actieve jobs zie je hier details, foutmeldingen en workflow-stappen.
+        </p>
+        <div id="job-status" class="dashboard-status-placeholder">
+          Nog geen actieve job geselecteerd.
+        </div>
+      </div>
+
+      <div class="card dashboard-tip-card">
+        <h3 class="card-title">Workflow Tip</h3>
+        <p>
+          Gebruik de queue als kwaliteitscheckpoint: herzie concepten in
+          Publiceren zodra een generate-job op <strong>Succesvol</strong> staat.
+        </p>
+      </div>
+    </aside>
   </div>
 </section>

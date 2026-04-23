@@ -1,39 +1,52 @@
 <aside class="sidebar">
   <div class="sidebar-inner">
-    <a class="logo" href="{{ url_for('home_page') }}">E-finite</a>
+    <a class="logo" href="{{ url_for('home_page') }}">
+      <img
+        class="logo-mark"
+        src="{{ url_for('static', filename='bb-logo.png') }}"
+        alt="BlogBuddy logo"
+      />
+    </a>
 
     <nav class="sidebar-nav" aria-label="Hoofdnavigatie">
       <a
         href="{{ url_for('home_page') }}"
         class="nav-link{% if current_page == 'home' %} active{% endif %}"
-        >Home</a
       >
+        <span class="material-icons-outlined nav-icon">dashboard</span>
+        <span>Dashboard</span>
+      </a>
       <a
         href="{{ url_for('generate_page') }}"
         class="nav-link{% if current_page == 'generate' %} active{% endif %}"
-        >Genereren</a
       >
+        <span class="material-icons-outlined nav-icon">edit</span>
+        <span>Genereren</span>
+      </a>
       <a
         href="{{ url_for('publish_page') }}"
         class="nav-link{% if current_page == 'publish' %} active{% endif %}"
-        >Publiceren</a
       >
-      <a
-        href="{{ url_for('archive_page') }}"
-        class="nav-link{% if current_page == 'archive' %} active{% endif %}"
-        >Archief</a
-      >
+        <span class="material-icons-outlined nav-icon">send</span>
+        <span>Publiceren</span>
+      </a>
       <a
         href="{{ url_for('connect_page') }}"
         class="nav-link{% if current_page == 'connect' %} active{% endif %}"
-        >Verbinden</a
       >
-      {% if user.is_admin %}
+        <span class="material-icons-outlined nav-icon">link</span>
+        <span>Verbinden</span>
+      </a>
+      {% if user and user.is_admin %}
       <a
         href="{{ url_for('admin_panel') }}"
         class="nav-link{% if current_page == 'admin' %} active{% endif %}"
-        >Admin</a
       >
+        <span class="material-icons-outlined nav-icon"
+          >admin_panel_settings</span
+        >
+        <span>Admin</span>
+      </a>
       {% endif %}
     </nav>
 

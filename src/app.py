@@ -20,6 +20,7 @@ from src.generator.draft_builder import build_draft, build_multilang_drafts
 from src.generator.text_openai import regenerate_section, REGENERATABLE_SECTIONS, regenerate_inline_selection
 from src.jobs.queue import enqueue_job
 from src.auth import User
+from src import offline_auth
 
 # Configure logging
 import os
@@ -49,6 +50,12 @@ login_manager.login_message = 'Log alsjeblieft in om deze pagina te bekijken.'
 # Initialize Bcrypt
 bcrypt = Bcrypt(app)
 
+# Initialize offline auth fallback store
+if config.OFFLINE_AUTH_REGENERATE_ON_START:
+    offline_auth.regenerate_offline_auth_store(bcrypt)
+else:
+    offline_auth.init_offline_auth_store(bcrypt)
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -58,15 +65,18 @@ def load_user(user_id):
 
 # Initialize database
 if BOOTSTRAP_ON_IMPORT:
-    db.init_db()
-    if config.ADMIN_EMAILS:
+    db_ready = db.init_db()
+    if db_ready and config.ADMIN_EMAILS:
         promoted_count = db.bootstrap_admin_users(config.ADMIN_EMAILS)
         if promoted_count:
             logger.info(
                 f"Promoted {promoted_count} configured admin account(s) from ADMIN_EMAILS")
 
     # Start background worker
-    start_worker()
+    if db_ready:
+        start_worker()
+    else:
+        logger.info("Background worker not started because SQL is unavailable.")
 
 
 # Helper functions
@@ -183,11 +193,16 @@ def build_app_page_context(*, current_page: str) -> dict:
     sites = db.get_user_sites(current_user.id)
     quota = db.get_user_quota(current_user.id)
 
+    if not db.is_database_configured():
+        stats = None
+        sites = None
+        quota = None
+
     context = {
         "user": current_user,
         "stats": stats,
         "sites": sites,
-        "quota": build_dashboard_quota(quota),
+        "quota": build_dashboard_quota(quota) if quota else None,
         "current_page": current_page,
     }
 
@@ -262,8 +277,9 @@ def login():
             flash('Gebruikersnaam en wachtwoord zijn verplicht.', 'error')
             return render_template('login.html')
 
-        # Check user
+        # db helpers fall back to sqlite auth store when MySQL is unavailable.
         user_data = db.get_user_by_username(username)
+
         if not user_data:
             flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
             return render_template('login.html')
@@ -431,8 +447,12 @@ def generate_page():
 @login_required
 def publish_page():
     """Publishing page."""
+    quota = db.get_user_quota(current_user.id)
+    translation_enabled = bool(
+        quota.get("translation_enabled", 0)) if quota else False
     return render_template(
         'publish.html',
+        translation_enabled=translation_enabled,
         **build_app_page_context(current_page='publish'),
     )
 
@@ -502,11 +522,13 @@ def admin_create_user():
 
     password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
     user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    translation_enabled = request.form.get("translation_enabled") == "on"
     db.update_user_quota(
         user_id,
         blogs_monthly_limit=blogs_monthly_limit,
         text_regen_monthly_limit=text_regen_monthly_limit,
         image_regen_limit=image_regen_limit,
+        translation_enabled=translation_enabled,
     )
 
     flash(f"Account {username} succesvol aangemaakt.", "success")
@@ -534,11 +556,14 @@ def admin_update_user_quota(user_id: int):
         flash("Limieten moeten numeriek zijn.", "error")
         return redirect(url_for("admin_panel"))
 
+    translation_enabled = request.form.get("translation_enabled") == "on"
+
     db.update_user_quota(
         user_id,
         blogs_monthly_limit=blogs_monthly_limit,
         text_regen_monthly_limit=text_regen_monthly_limit,
         image_regen_limit=image_regen_limit,
+        translation_enabled=translation_enabled,
     )
 
     flash(f"Limieten bijgewerkt voor {user['username']}.", "success")
@@ -613,11 +638,13 @@ def admin_create_user_api():
 
     password_hash = bcrypt.generate_password_hash(password).decode("utf-8")
     user_id = db.create_user(username, email, password_hash, is_admin=is_admin)
+    translation_enabled = bool(data.get("translationEnabled", False))
     db.update_user_quota(
         user_id,
         blogs_monthly_limit=blogs_monthly_limit,
         text_regen_monthly_limit=text_regen_monthly_limit,
         image_regen_limit=image_regen_limit,
+        translation_enabled=translation_enabled,
     )
 
     return jsonify({"ok": True, "userId": user_id}), 201
@@ -640,11 +667,14 @@ def admin_update_user_quota_api(user_id: int):
     except (ValueError, TypeError):
         return jsonify({"error": "Limieten moeten numeriek zijn"}), 400
 
+    translation_enabled = bool(data.get("translationEnabled", False))
+
     db.update_user_quota(
         user_id,
         blogs_monthly_limit=blogs_monthly_limit,
         text_regen_monthly_limit=text_regen_monthly_limit,
         image_regen_limit=image_regen_limit,
+        translation_enabled=translation_enabled,
     )
     return jsonify({"ok": True}), 200
 
@@ -654,6 +684,9 @@ def admin_update_user_quota_api(user_id: int):
 def get_user_sites_api():
     """Get all WordPress sites for the logged-in user."""
     try:
+        if not db.is_database_configured():
+            return jsonify([]), 200
+
         sites = db.get_user_sites(current_user.id)
         return jsonify(sites), 200
     except Exception as e:
@@ -1195,6 +1228,8 @@ def get_context_site_details(site_id: str):
 
         # Get page and chunk counts
         conn = db.get_db_connection()
+        if conn is None:
+            return jsonify({"error": "MySQL is momenteel niet beschikbaar"}), 503
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -1436,6 +1471,31 @@ def publish_post():
                 validate_publish_draft_scheduling(lang_draft)
             payload["drafts"] = req.drafts
 
+        # Auto-include translations when publishing a single draft
+        if req.draftId and "draft" in payload and "drafts" not in payload:
+            translations = db.get_draft_translations(
+                req.draftId, current_user.id)
+            if translations:
+                # Convert single draft to multilang drafts dict
+                original_lang = payload["draft"].get("language", "nl")
+                drafts_dict = {original_lang: payload["draft"]}
+                for t in translations:
+                    t_draft = dict(t["translated"])
+                    # Copy scheduling/status from original
+                    t_draft["status"] = payload["draft"].get("status", "draft")
+                    if payload["draft"].get("scheduleDateGmt"):
+                        t_draft["scheduleDateGmt"] = payload["draft"]["scheduleDateGmt"]
+                    # Attach translated image if available
+                    if t.get("imageId"):
+                        t_draft["image"] = {"imageId": t["imageId"]}
+                    elif payload["draft"].get("image"):
+                        # Fall back to original image
+                        t_draft["image"] = payload["draft"]["image"]
+                    drafts_dict[t["language"]] = t_draft
+                # Replace single draft with multilang drafts
+                del payload["draft"]
+                payload["drafts"] = drafts_dict
+
         db.create_job(job_id, current_user.id, "publish", payload)
 
         if req.draftId:
@@ -1467,6 +1527,10 @@ def get_jobs():
         limit = max(1, min(limit or 50, 200))
 
         jobs = db.get_user_jobs(current_user.id, limit=limit)
+
+        # Build site name lookup for all referenced sites
+        site_name_cache = {}
+
         response_jobs = []
 
         for row in jobs:
@@ -1477,6 +1541,22 @@ def get_jobs():
             error = json.loads(row["error_json"]) if row.get(
                 "error_json") else None
 
+            # Resolve site name
+            site_id = payload.get("siteId")
+            site_name = None
+            if site_id:
+                if site_id not in site_name_cache:
+                    site = db.get_site(str(site_id), user_id=current_user.id)
+                    site_name_cache[site_id] = site.get(
+                        "wp_base_url", "") if site else None
+                site_name = site_name_cache[site_id]
+
+            # Resolve title from draft payload
+            title = None
+            draft_payload = payload.get("draft")
+            if isinstance(draft_payload, dict):
+                title = draft_payload.get("title")
+
             response_jobs.append({
                 "jobId": row["id"],
                 "type": row["type"],
@@ -1484,6 +1564,8 @@ def get_jobs():
                 "payload": payload,
                 "result": result,
                 "error": error,
+                "title": title,
+                "siteName": site_name,
                 "createdAt": row["created_at"].isoformat() if row.get("created_at") else None,
                 "updatedAt": row["updated_at"].isoformat() if row.get("updated_at") else None,
             })
@@ -1562,6 +1644,155 @@ def get_site_dna_api(site_id):
 def health():
     """Health check endpoint."""
     return jsonify({"status": "ok"}), 200
+
+
+# ============================================
+# TRANSLATION API ENDPOINTS
+# ============================================
+
+@app.route("/api/drafts/<int:draft_id>/translate", methods=["POST"])
+@login_required
+def translate_draft(draft_id: int):
+    """Translate a draft to a target language."""
+    try:
+        # Check translation feature is enabled for this user
+        quota = db.get_user_quota(current_user.id)
+        if not quota.get("translation_enabled"):
+            return jsonify({"error": "Vertaalfunctie is niet ingeschakeld voor dit account."}), 403
+
+        data = request.get_json()
+        language = data.get("language", "").strip().lower()
+        translate_image = data.get("translateImage", True)
+
+        supported_languages = ("en", "de", "fr", "es")
+        if language not in supported_languages:
+            return jsonify({"error": f"Taal '{language}' wordt momenteel niet ondersteund. Beschikbaar: {', '.join(supported_languages)}"}), 400
+
+        # Get the original draft
+        draft_record = db.get_draft(draft_id, current_user.id)
+        if not draft_record:
+            return jsonify({"error": "Concept niet gevonden."}), 404
+
+        draft_data = draft_record.get("draft", {})
+        if not draft_data.get("title"):
+            return jsonify({"error": "Concept bevat geen titel."}), 400
+
+        # Translate the text content
+        from src.generator.translator import translate_blog
+        translated = translate_blog(draft_data, language)
+
+        # Optionally translate the image
+        translated_image_id = None
+        translated_image_base64 = None
+        if translate_image:
+            # Find the selected image from the draft
+            image_data = draft_data.get("image") or draft_data.get("_image")
+            if image_data and image_data.get("imageId"):
+                image_gen = db.get_image_generation(
+                    image_data["imageId"], current_user.id)
+                if image_gen and image_gen.get("image_data"):
+                    from src.generator.image_gemini import translate_image as gemini_translate_image
+                    import base64
+
+                    img_bytes, img_mime, img_filename, img_error = gemini_translate_image(
+                        image_bytes=image_gen["image_data"],
+                        mime_type=image_gen.get("mime_type", "image/jpeg"),
+                        target_language=language,
+                    )
+
+                    if img_bytes and not img_error:
+                        # Save translated image to DB
+                        translated_image_id = db.save_image_generation(
+                            user_id=current_user.id,
+                            topic=f"translation-{language}-{draft_data.get('title', '')[:100]}",
+                            image_settings={
+                                "translation": True, "language": language, "source_image_id": image_data["imageId"]},
+                            prompt_used=f"Translate image text to {language}",
+                            image_data=img_bytes,
+                            mime_type=img_mime,
+                            filename=img_filename or f"translated-{language}.jpg",
+                            parent_id=image_data["imageId"],
+                        )
+                        translated_image_base64 = base64.b64encode(
+                            img_bytes).decode("utf-8")
+                    elif img_error:
+                        logger.warning(
+                            f"Image translation failed: {img_error}")
+
+        # Save translation to DB
+        translation_id = db.create_or_update_draft_translation(
+            user_id=current_user.id,
+            original_draft_id=draft_id,
+            language=language,
+            translated_data=translated,
+            image_id=translated_image_id,
+        )
+
+        response = {
+            "translationId": translation_id,
+            "language": language,
+            "translated": translated,
+        }
+
+        if translated_image_id and translated_image_base64:
+            response["translatedImage"] = {
+                "imageId": translated_image_id,
+                "bytes_base64": translated_image_base64,
+            }
+
+        return jsonify(response), 200
+
+    except Exception as e:
+        logger.error(f"Error translating draft: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/drafts/<int:draft_id>/translations", methods=["GET"])
+@login_required
+def get_draft_translations(draft_id: int):
+    """Get all translations for a draft."""
+    try:
+        translations = db.get_draft_translations(draft_id, current_user.id)
+        return jsonify({"translations": translations}), 200
+    except Exception as e:
+        logger.error(f"Error getting translations: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/drafts/<int:draft_id>/translations/<language>", methods=["GET"])
+@login_required
+def get_draft_translation_api(draft_id: int, language: str):
+    """Get a specific translation for a draft."""
+    try:
+        translation = db.get_draft_translation(
+            draft_id, language, current_user.id)
+        if not translation:
+            return jsonify({"error": "Vertaling niet gevonden."}), 404
+        return jsonify(translation), 200
+    except Exception as e:
+        logger.error(f"Error getting translation: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/drafts/<int:draft_id>/translations/<language>", methods=["PUT"])
+@login_required
+def update_draft_translation_api(draft_id: int, language: str):
+    """Update a translation after user edits."""
+    try:
+        data = request.get_json()
+        translated_data = data.get("translated")
+        if not translated_data:
+            return jsonify({"error": "Geen vertaaldata meegegeven."}), 400
+
+        updated = db.update_draft_translation(
+            draft_id, language, current_user.id, translated_data)
+        if not updated:
+            return jsonify({"error": "Vertaling niet gevonden."}), 404
+
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error updating translation: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 
 if __name__ == "__main__":

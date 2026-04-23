@@ -24,5 +24,5 @@ if __name__ == "__main__":
     app.run(
         host=config.APP_HOST,
         port=config.APP_PORT,
-        debug=False
+        debug=True # Set to False in production and True in dev for auto-reload
     )

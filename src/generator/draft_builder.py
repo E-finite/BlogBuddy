@@ -82,12 +82,6 @@ def build_draft(
             excerpt += "."
         content["excerpt"] = excerpt
 
-    # Ensure meta desc is hard capped
-    meta_desc = content.get("yoast", {}).get("meta_desc", "")
-    max_len = seo.get("metaDescMaxLen", 155)
-    if len(meta_desc) > max_len:
-        content["yoast"]["meta_desc"] = meta_desc[:max_len].rstrip()
-
     # Ensure slug is kebab-case and includes focus keyword if possible
     slug = content.get("slug", "")
     focus_keyword = seo.get("focusKeyword", "").lower().replace(" ", "-")

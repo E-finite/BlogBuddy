@@ -8,7 +8,7 @@ endblock %} {% block content %}
   </p>
 </div>
 
-<section class="section" style="margin-bottom: 2rem">
+<section class="section section-spaced">
   <h2 class="section-title">Nieuw Account Aanmaken</h2>
   <div class="card">
     <form method="post" action="{{ url_for('admin_create_user') }}">
@@ -46,10 +46,9 @@ endblock %} {% block content %}
             required
           />
           <button
-            class="btn btn-ghost"
+            class="btn btn-ghost mt-sm"
             type="button"
             data-generate-password="new-password"
-            style="margin-top: 0.5rem"
           >
             Genereer wachtwoord
           </button>
@@ -108,6 +107,21 @@ endblock %} {% block content %}
         </div>
       </div>
 
+      <div class="form-group">
+        <label class="form-checkbox" for="new-translation-enabled">
+          <input
+            id="new-translation-enabled"
+            name="translation_enabled"
+            type="checkbox"
+          />
+          <span>Vertalingen inschakelen</span>
+        </label>
+        <div class="form-help">
+          Stelt de gebruiker in staat om blogposts te vertalen naar andere
+          talen.
+        </div>
+      </div>
+
       <button class="btn btn-primary" type="submit">Account aanmaken</button>
     </form>
   </div>
@@ -117,33 +131,19 @@ endblock %} {% block content %}
   <h2 class="section-title">Accounts & Limieten</h2>
 
   {% for account in users %}
-  <div class="card" style="margin-bottom: 1rem">
-    <div
-      class="card-header"
-      style="
-        display: flex;
-        justify-content: space-between;
-        gap: 1rem;
-        flex-wrap: wrap;
-      "
-    >
+  <div class="card card-spaced-sm">
+    <div class="card-header card-header-wrap">
       <div>
-        <h3 class="card-title" style="margin-bottom: 0.25rem">
-          {{ account.username }}
-        </h3>
+        <h3 class="card-title">{{ account.username }}</h3>
         <div class="form-help">{{ account.email }}</div>
       </div>
-      <div
-        style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap"
-      >
+      <div class="status-badges">
         {% if account.is_admin %}
         <span class="badge badge-primary">Admin</span>
         {% endif %} {% if account.is_active %}
         <span class="badge badge-primary">Actief</span>
         {% else %}
-        <span class="badge" style="background: #f5d0d0; color: #7f1d1d"
-          >Inactief</span
-        >
+        <span class="badge admin-badge-inactive">Inactief</span>
         {% endif %}
       </div>
     </div>
@@ -208,25 +208,39 @@ endblock %} {% block content %}
           </div>
         </div>
 
+        <div class="form-group">
+          <label
+            class="form-checkbox"
+            for="translation-enabled-{{ account.id }}"
+          >
+            <input
+              id="translation-enabled-{{ account.id }}"
+              name="translation_enabled"
+              type="checkbox"
+              {%
+              if
+              account.translation_enabled
+              %}checked{%
+              endif
+              %}
+            />
+            <span>Vertalingen inschakelen</span>
+          </label>
+        </div>
+
         <button class="btn btn-secondary" type="submit">
           Limieten opslaan
         </button>
       </form>
 
-      <hr
-        style="
-          margin: 1.25rem 0;
-          border: 0;
-          border-top: 1px solid var(--border-color);
-        "
-      />
+      <hr class="rule-divider" />
 
       <form
         method="post"
         action="{{ url_for('admin_update_user_password', user_id=account.id) }}"
       >
         <div class="grid grid-2">
-          <div class="form-group" style="margin-bottom: 0">
+          <div class="form-group mb-0">
             <label class="form-label" for="new-password-{{ account.id }}"
               >Nieuw wachtwoord</label
             >
@@ -240,18 +254,14 @@ endblock %} {% block content %}
               required
             />
             <button
-              class="btn btn-ghost"
+              class="btn btn-ghost mt-sm"
               type="button"
               data-generate-password="new-password-{{ account.id }}"
-              style="margin-top: 0.5rem"
             >
               Genereer wachtwoord
             </button>
           </div>
-          <div
-            class="form-group"
-            style="display: flex; align-items: end; margin-bottom: 0"
-          >
+          <div class="form-group mb-0 row-end">
             <button class="btn btn-secondary" type="submit">
               Wachtwoord aanpassen
             </button>

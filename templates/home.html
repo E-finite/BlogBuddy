@@ -1,13 +1,61 @@
 {% extends 'app_base.html' %} {% block title %}Home - E-finite{% endblock %} {%
-block content %}
-<section class="page-intro-card">
-  <div class="page-intro-copy">
-    <span class="page-kicker">Dashboard</span>
-    <h1 class="page-heading">Welkom, {{ user.username }}!</h1>
-    <p class="page-description">
-      Bekijk je maandelijkse limieten en volg je recente job-activiteit vanuit
-      je persoonlijke home-overzicht.
-    </p>
+block content %} {% set month_label = quota.usage_month if quota and
+quota.usage_month else 'huidige maand' %} {% set connected_sites = sites|length
+if sites is not none else 0 %} {% set jobs_total = stats.jobs if stats else 0
+%} {% set blogs_used = quota.blogs_used if quota else 0 %}
+<section class="dashboard-hero card">
+  <div class="dashboard-hero-grid">
+    <div class="dashboard-hero-copy">
+      <span class="dashboard-pill">Dashboard</span>
+      <h1 class="dashboard-hero-title">Welkom terug, {{ user.username }}.</h1>
+      <p class="dashboard-hero-subtitle">
+        Je cockpit voor contentproductie, publicaties en limietbeheer. Alles is
+        realtime gekoppeld aan je huidige gebruik in {{ month_label }}.
+      </p>
+
+      <div class="dashboard-hero-actions">
+        <a class="btn btn-primary" href="{{ url_for('generate_page') }}"
+          >Nieuwe blog genereren</a
+        >
+        <a class="btn btn-secondary" href="{{ url_for('publish_page') }}"
+          >Publicatie beheren</a
+        >
+        <a class="btn btn-secondary" href="{{ url_for('connect_page') }}"
+          >WordPress verbinden</a
+        >
+      </div>
+    </div>
+
+    <div class="dashboard-hero-aside">
+      <div class="dashboard-snapshot card">
+        <h2 class="dashboard-snapshot-title">Werkruimte Snapshot</h2>
+        <div class="dashboard-snapshot-grid">
+          <div class="dashboard-snapshot-item">
+            <span class="dashboard-snapshot-label">Actieve maand</span>
+            <span class="dashboard-snapshot-value">{{ month_label }}</span>
+          </div>
+          <div class="dashboard-snapshot-item">
+            <span class="dashboard-snapshot-label">WordPress sites</span>
+            <span class="dashboard-snapshot-value">{{ connected_sites }}</span>
+          </div>
+          <div class="dashboard-snapshot-item">
+            <span class="dashboard-snapshot-label">Jobs totaal</span>
+            <span class="dashboard-snapshot-value">{{ jobs_total }}</span>
+          </div>
+          <div class="dashboard-snapshot-item">
+            <span class="dashboard-snapshot-label">Blogs deze maand</span>
+            <span class="dashboard-snapshot-value">{{ blogs_used }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="dashboard-signal-row">
+        <span class="dashboard-signal">Live queue status</span>
+        <a class="dashboard-archive-link" href="{{ url_for('archive_page') }}"
+          >Bekijk volledig archief</a
+        >
+      </div>
+    </div>
   </div>
 </section>
 

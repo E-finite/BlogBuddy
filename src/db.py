@@ -1,4 +1,5 @@
 """Database initialization and utilities."""
+import os
 import time
 import mysql.connector
 from mysql.connector import Error
@@ -7,8 +8,19 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 from src import config
+from src import offline_auth
 
 logger = logging.getLogger(__name__)
+
+# Prevent repeated retry storms: once all retries are exhausted, fail fast
+# for the remainder of this process lifetime.
+_mysql_retry_exhausted = False
+
+
+def is_database_configured() -> bool:
+    """Return True when MySQL is explicitly configured via environment variables."""
+    required_vars = ("MYSQL_HOST", "MYSQL_USER", "MYSQL_DATABASE")
+    return all((os.getenv(var) or "").strip() for var in required_vars)
 
 
 def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, site_id: Optional[str] = None, days_old: Optional[int] = None) -> None:
@@ -46,6 +58,17 @@ def _delete_context_site_related_data(cursor, user_id: Optional[int] = None, sit
 
 def get_db_connection():
     """Get a MySQL database connection."""
+    global _mysql_retry_exhausted
+
+    if not is_database_configured():
+        logger.debug(
+            "MySQL not explicitly configured; running without SQL persistence."
+        )
+        return None
+
+    if _mysql_retry_exhausted:
+        return None
+
     attempts = max(1, int(config.MYSQL_CONNECT_RETRIES))
     delay_seconds = max(0.0, float(config.MYSQL_CONNECT_RETRY_DELAY_SECONDS))
     timeout_seconds = max(1, int(config.MYSQL_CONNECT_TIMEOUT_SECONDS))
@@ -61,6 +84,7 @@ def get_db_connection():
                 database=config.MYSQL_DATABASE,
                 connection_timeout=timeout_seconds,
             )
+            _mysql_retry_exhausted = False
             return conn
         except Error as e:
             last_error = e
@@ -75,13 +99,34 @@ def get_db_connection():
             if attempt < attempts and delay_seconds > 0:
                 time.sleep(delay_seconds)
 
-    print(f"Error connecting to MySQL after {attempts} attempts: {last_error}")
-    raise last_error
+    logger.warning(
+        "MySQL unavailable after %s attempts; running without SQL persistence: %s",
+        attempts,
+        last_error,
+    )
+    _mysql_retry_exhausted = True
+    return None
+
+
+def _require_db_connection(operation: str):
+    """Return a DB connection or raise a user-facing runtime error."""
+    conn = get_db_connection()
+    if conn is None:
+        raise RuntimeError(
+            f"MySQL is momenteel niet bereikbaar tijdens: {operation}. "
+            "Controleer je MYSQL_* instellingen en of de database draait."
+        )
+    return conn
 
 
 def init_db():
     """Initialize the database schema."""
     conn = get_db_connection()
+    if conn is None:
+        logger.info(
+            "Skipping database initialization because SQL is unavailable.")
+        return False
+
     cursor = conn.cursor()
 
     # Users table for authentication (create first for foreign keys)
@@ -535,6 +580,47 @@ def init_db():
     except Exception as e:
         print(f"⚠️ Migration note (drafts publish_sent_at): {e}")
 
+    # Migration: Add translation_enabled column to user_quotas if missing
+    try:
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE table_schema = %s
+            AND table_name = 'user_quotas'
+            AND column_name = 'translation_enabled'
+        """, (config.MYSQL_DATABASE,))
+        has_translation_enabled = cursor.fetchone()[0] > 0
+
+        if not has_translation_enabled:
+            cursor.execute(
+                "ALTER TABLE user_quotas ADD COLUMN translation_enabled TINYINT(1) NOT NULL DEFAULT 0 AFTER image_regen_limit")
+            print("✅ Added translation_enabled column to user_quotas table")
+    except Exception as e:
+        print(f"⚠️ Migration note (user_quotas translation_enabled): {e}")
+
+    # Draft translations table - stores translated versions of drafts
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS draft_translations (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            original_draft_id INT NOT NULL,
+            language VARCHAR(10) NOT NULL,
+            translated_json LONGTEXT NOT NULL,
+            image_id INT NULL,
+            publish_job_id VARCHAR(36) NULL,
+            publish_sent_at DATETIME NULL,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (original_draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
+            FOREIGN KEY (image_id) REFERENCES image_generations(id) ON DELETE SET NULL,
+            UNIQUE KEY uq_draft_language (original_draft_id, language),
+            INDEX idx_user_id (user_id),
+            INDEX idx_original_draft_id (original_draft_id),
+            INDEX idx_language (language)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
     # Backfill quota rows for existing users
     try:
         current_month = datetime.utcnow().strftime("%Y-%m")
@@ -554,11 +640,12 @@ def init_db():
     conn.commit()
     cursor.close()
     conn.close()
+    return True
 
 
 def create_site(site_id: str, user_id: int, wp_base_url: str, wp_username: str, wp_app_password_enc: str, default_author_id: Optional[int] = None) -> None:
     """Create a new site record for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress site opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO sites (id, user_id, wp_base_url, wp_username, wp_app_password_enc, default_author_id, created_at)
@@ -572,6 +659,9 @@ def create_site(site_id: str, user_id: int, wp_base_url: str, wp_username: str, 
 def get_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """Get a site by ID, optionally filtered by user."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     if user_id:
         cursor.execute(
@@ -586,7 +676,7 @@ def get_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, 
 
 def delete_site(site_id: str, user_id: int) -> bool:
     """Delete a site and all its related data for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress site verwijderen")
     cursor = conn.cursor()
     try:
         # Check if site belongs to user
@@ -607,7 +697,7 @@ def delete_site(site_id: str, user_id: int) -> bool:
 
 def delete_user_sites(user_id: int) -> int:
     """Delete all WordPress sites for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("WordPress sites vervangen")
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -623,7 +713,7 @@ def delete_user_sites(user_id: int) -> int:
 # Context Sites functions
 def create_context_site(site_id: str, user_id: int, base_url: str) -> None:
     """Create a new context site record for scraped websites."""
-    conn = get_db_connection()
+    conn = _require_db_connection("context site opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO context_sites (id, user_id, base_url, created_at)
@@ -637,6 +727,9 @@ def create_context_site(site_id: str, user_id: int, base_url: str) -> None:
 def get_context_site(site_id: str, user_id: Optional[int] = None) -> Optional[Dict[str, Any]]:
     """Get a context site by ID, optionally filtered by user."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     if user_id:
         cursor.execute(
@@ -652,6 +745,9 @@ def get_context_site(site_id: str, user_id: Optional[int] = None) -> Optional[Di
 def get_user_context_sites(user_id: int) -> List[Dict[str, Any]]:
     """Get all context sites for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM context_sites WHERE user_id = %s ORDER BY created_at DESC
@@ -664,7 +760,7 @@ def get_user_context_sites(user_id: int) -> List[Dict[str, Any]]:
 
 def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
     """Delete context sites older than specified days for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("oude context sites opschonen")
     cursor = conn.cursor()
     try:
         _delete_context_site_related_data(
@@ -688,7 +784,7 @@ def cleanup_old_context_sites(user_id: int, days_old: int = 7) -> int:
 
 def delete_all_context_sites(user_id: int) -> int:
     """Delete all context sites for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("alle context sites verwijderen")
     cursor = conn.cursor()
     try:
         _delete_context_site_related_data(cursor, user_id=user_id)
@@ -706,7 +802,7 @@ def delete_all_context_sites(user_id: int) -> int:
 
 def delete_context_site(site_id: str, user_id: int) -> bool:
     """Delete a specific context site and its related data."""
-    conn = get_db_connection()
+    conn = _require_db_connection("context site verwijderen")
     cursor = conn.cursor()
     try:
         # Check if site belongs to user
@@ -740,7 +836,7 @@ def delete_context_site(site_id: str, user_id: int) -> bool:
 
 def create_job(job_id: str, user_id: int, job_type: str, payload: Dict[str, Any]) -> None:
     """Create a new job for a specific user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job aanmaken")
     cursor = conn.cursor()
     now = datetime.utcnow()
     cursor.execute("""
@@ -754,7 +850,7 @@ def create_job(job_id: str, user_id: int, job_type: str, payload: Dict[str, Any]
 
 def update_job(job_id: str, status: str, result: Optional[Dict[str, Any]] = None, error: Optional[Dict[str, Any]] = None) -> None:
     """Update a job's status, result, and/or error."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job status bijwerken")
     cursor = conn.cursor()
 
     updates = ["status = %s", "updated_at = %s"]
@@ -779,6 +875,9 @@ def update_job(job_id: str, status: str, result: Optional[Dict[str, Any]] = None
 def get_job(job_id: str) -> Optional[Dict[str, Any]]:
     """Get a job by ID."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM jobs WHERE id = %s", (job_id,))
     row = cursor.fetchone()
@@ -801,6 +900,9 @@ def get_job(job_id: str) -> Optional[Dict[str, Any]]:
 def get_queued_jobs() -> List[Dict[str, Any]]:
     """Get all queued jobs."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         "SELECT * FROM jobs WHERE status = 'queued' ORDER BY created_at ASC")
@@ -812,7 +914,7 @@ def get_queued_jobs() -> List[Dict[str, Any]]:
 
 def add_job_step(job_id: str, step: str, status: str, detail: Optional[Dict[str, Any]] = None) -> None:
     """Add a step to a job."""
-    conn = get_db_connection()
+    conn = _require_db_connection("job stap opslaan")
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO job_steps (job_id, step, status, detail_json, ts)
@@ -826,6 +928,9 @@ def add_job_step(job_id: str, step: str, status: str, detail: Optional[Dict[str,
 def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
     """Get all steps for a job."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         "SELECT * FROM job_steps WHERE job_id = %s ORDER BY ts ASC", (job_id,))
@@ -838,6 +943,9 @@ def get_job_steps(job_id: str) -> List[Dict[str, Any]]:
 def get_scraped_pages(site_id: str, limit: int = 100) -> List[Dict[str, Any]]:
     """Get scraped pages for a site."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT id, url, title, page_type, fetched_at
@@ -855,6 +963,9 @@ def get_scraped_pages(site_id: str, limit: int = 100) -> List[Dict[str, Any]]:
 def get_page_chunks_count(site_id: str) -> int:
     """Get count of chunks for a site."""
     conn = get_db_connection()
+    if conn is None:
+        return 0
+
     cursor = conn.cursor()
     cursor.execute("""
         SELECT COUNT(*) as count
@@ -871,6 +982,9 @@ def get_page_chunks_count(site_id: str) -> int:
 def create_user(username: str, email: str, password_hash: str, is_admin: bool = False) -> int:
     """Create a new user."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.create_offline_user(username, email, password_hash, is_admin)
+
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -896,6 +1010,9 @@ def create_user(username: str, email: str, password_hash: str, is_admin: bool = 
 def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
     """Get a user by username."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.get_offline_user_by_username(username)
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
     row = cursor.fetchone()
@@ -907,6 +1024,9 @@ def get_user_by_username(username: str) -> Optional[Dict[str, Any]]:
 def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
     """Get a user by email."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.get_offline_user_by_email(email)
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE email = %s", (email,))
     row = cursor.fetchone()
@@ -918,6 +1038,9 @@ def get_user_by_email(email: str) -> Optional[Dict[str, Any]]:
 def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
     """Get a user by ID."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.get_offline_user_by_id(user_id)
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
     row = cursor.fetchone()
@@ -929,6 +1052,10 @@ def get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
 def update_user_last_login(user_id: int) -> None:
     """Update user's last login timestamp."""
     conn = get_db_connection()
+    if conn is None:
+        offline_auth.update_offline_last_login(user_id)
+        return
+
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE users SET last_login = %s WHERE id = %s
@@ -941,6 +1068,9 @@ def update_user_last_login(user_id: int) -> None:
 def update_user_password_hash(user_id: int, password_hash: str) -> bool:
     """Update a user's password hash. Returns True when a row was updated."""
     conn = get_db_connection()
+    if conn is None:
+        return offline_auth.update_offline_user_password_hash(user_id, password_hash)
+
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE users
@@ -957,6 +1087,9 @@ def update_user_password_hash(user_id: int, password_hash: str) -> bool:
 def create_password_reset_token(user_id: int, token: str, expires_at: datetime) -> bool:
     """Create or replace a password reset token for a user."""
     conn = get_db_connection()
+    if conn is None:
+        return False
+
     cursor = conn.cursor()
     now = datetime.now(timezone.utc).replace(tzinfo=None)
 
@@ -982,6 +1115,9 @@ def create_password_reset_token(user_id: int, token: str, expires_at: datetime) 
 def get_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
     """Return password reset token data joined with the user record."""
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
         """
@@ -1018,6 +1154,9 @@ def validate_password_reset_token(token: str) -> Optional[Dict[str, Any]]:
 def delete_password_reset_token(token: str) -> bool:
     """Delete a password reset token."""
     conn = get_db_connection()
+    if conn is None:
+        return False
+
     cursor = conn.cursor()
     cursor.execute(
         "DELETE FROM password_reset_tokens WHERE token = %s", (token,))
@@ -1035,7 +1174,7 @@ def bootstrap_admin_users(admin_emails: List[str]) -> int:
     if not normalized_emails:
         return 0
 
-    conn = get_db_connection()
+    conn = _require_db_connection("admin accounts initialiseren")
     cursor = conn.cursor()
     placeholders = ",".join(["%s"] * len(normalized_emails))
 
@@ -1074,10 +1213,22 @@ def _reset_monthly_usage_if_needed(cursor, user_id: int) -> None:
 def get_user_quota(user_id: int) -> Dict[str, Any]:
     """Get user quota settings and monthly usage counters."""
     conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-
     month_key = _current_month_key()
     now = datetime.utcnow()
+    if conn is None:
+        return {
+            "user_id": user_id,
+            "blogs_monthly_limit": 20,
+            "text_regen_monthly_limit": 20,
+            "image_regen_limit": 3,
+            "translation_enabled": 0,
+            "usage_month": month_key,
+            "blogs_used": 0,
+            "text_regen_used": 0,
+            "updated_at": now,
+        }
+
+    cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
         INSERT INTO user_quotas (user_id, usage_month, updated_at)
@@ -1089,7 +1240,8 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
 
     cursor.execute("""
         SELECT user_id, blogs_monthly_limit, text_regen_monthly_limit,
-               image_regen_limit, usage_month, blogs_used, text_regen_used, updated_at
+               image_regen_limit, translation_enabled,
+               usage_month, blogs_used, text_regen_used, updated_at
         FROM user_quotas
         WHERE user_id = %s
     """, (user_id,))
@@ -1105,6 +1257,7 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
             "blogs_monthly_limit": 20,
             "text_regen_monthly_limit": 20,
             "image_regen_limit": 3,
+            "translation_enabled": 0,
             "usage_month": month_key,
             "blogs_used": 0,
             "text_regen_used": 0,
@@ -1116,7 +1269,7 @@ def get_user_quota(user_id: int) -> Dict[str, Any]:
 
 def increment_user_usage(user_id: int, blogs_delta: int = 0, text_regen_delta: int = 0) -> None:
     """Increment monthly usage counters for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("gebruikstellers bijwerken")
     cursor = conn.cursor()
 
     month_key = _current_month_key()
@@ -1167,6 +1320,9 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
     """Return all users with quota settings and monthly usage."""
     try:
         conn = get_db_connection()
+        if conn is None:
+            return []
+
         cursor = conn.cursor(dictionary=True)
         month_key = _current_month_key()
 
@@ -1174,7 +1330,7 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
             SELECT u.id, u.username, u.email, u.created_at, u.last_login,
                    u.is_active, u.is_admin,
                    q.blogs_monthly_limit, q.text_regen_monthly_limit,
-                   q.image_regen_limit,
+                   q.image_regen_limit, q.translation_enabled,
                    CASE
                         WHEN q.usage_month = %s THEN q.blogs_used
                         ELSE 0
@@ -1201,6 +1357,8 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
                 row["text_regen_monthly_limit"] = 20
             if row.get("image_regen_limit") is None:
                 row["image_regen_limit"] = 3
+            if row.get("translation_enabled") is None:
+                row["translation_enabled"] = 0
             if row.get("blogs_used") is None:
                 row["blogs_used"] = 0
             if row.get("text_regen_used") is None:
@@ -1212,9 +1370,9 @@ def get_admin_user_list() -> List[Dict[str, Any]]:
         return []
 
 
-def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int) -> None:
+def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly_limit: int, image_regen_limit: int, translation_enabled: bool = False) -> None:
     """Update quota settings for a user."""
-    conn = get_db_connection()
+    conn = _require_db_connection("quota bijwerken")
     cursor = conn.cursor()
 
     month_key = _current_month_key()
@@ -1226,16 +1384,18 @@ def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly
             blogs_monthly_limit,
             text_regen_monthly_limit,
             image_regen_limit,
+            translation_enabled,
             usage_month,
             updated_at
         )
-        VALUES (%s, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON DUPLICATE KEY UPDATE
             blogs_monthly_limit = VALUES(blogs_monthly_limit),
             text_regen_monthly_limit = VALUES(text_regen_monthly_limit),
             image_regen_limit = VALUES(image_regen_limit),
+            translation_enabled = VALUES(translation_enabled),
             updated_at = VALUES(updated_at)
-    """, (user_id, blogs_monthly_limit, text_regen_monthly_limit, image_regen_limit, month_key, now))
+    """, (user_id, blogs_monthly_limit, text_regen_monthly_limit, image_regen_limit, int(translation_enabled), month_key, now))
 
     conn.commit()
     cursor.close()
@@ -1246,6 +1406,9 @@ def update_user_quota(user_id: int, blogs_monthly_limit: int, text_regen_monthly
 def get_user_sites(user_id: int) -> List[Dict[str, Any]]:
     """Get all sites for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM sites WHERE user_id = %s ORDER BY created_at DESC
@@ -1259,6 +1422,9 @@ def get_user_sites(user_id: int) -> List[Dict[str, Any]]:
 def get_user_jobs(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
     """Get recent jobs for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
     cursor.execute("""
         SELECT * FROM jobs WHERE user_id = %s ORDER BY created_at DESC LIMIT %s
@@ -1272,6 +1438,13 @@ def get_user_jobs(user_id: int, limit: int = 50) -> List[Dict[str, Any]]:
 def get_user_stats(user_id: int) -> Dict[str, int]:
     """Get statistics for a specific user."""
     conn = get_db_connection()
+    if conn is None:
+        return {
+            'sites': 0,
+            'jobs': 0,
+            'completed_jobs': 0
+        }
+
     cursor = conn.cursor(dictionary=True)
 
     # Count sites
@@ -1396,7 +1569,7 @@ def save_image_generation(
         logger.error("CRITICAL: Truncating image as last resort")
         image_data = image_data[:TARGET_SIZE]
 
-    conn = get_db_connection()
+    conn = _require_db_connection("afbeelding opslaan")
     cursor = conn.cursor()
 
     # Determine generation number
@@ -1445,6 +1618,9 @@ def get_image_generation(image_id: int, user_id: int) -> Optional[Dict[str, Any]
     Validates that the image belongs to the user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1465,6 +1641,9 @@ def get_feedback_chain(image_id: int, user_id: int) -> List[str]:
     Returns list of feedback strings in chronological order.
     """
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1487,6 +1666,9 @@ def validate_regeneration_limit(image_id: int, user_id: int, limit: int = 3) -> 
     Returns (is_valid, error_message).
     """
     conn = get_db_connection()
+    if conn is None:
+        return False, "Image generation data unavailable"
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1512,7 +1694,7 @@ def update_image_uploaded(image_id: int, wordpress_media_id: int) -> None:
     """
     Mark an image as uploaded to WordPress with media ID.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("uploadstatus afbeelding bijwerken")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1531,7 +1713,7 @@ def cleanup_job_images(job_id: str) -> int:
     Delete images for a job that have been successfully uploaded to WordPress.
     Returns count of deleted images.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("oude job-afbeeldingen opruimen")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1556,7 +1738,7 @@ def create_draft(user_id: int, site_id: Optional[str], draft_data: dict) -> int:
     Save a generated draft to the database.
     Returns the draft ID.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept opslaan")
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -1589,6 +1771,9 @@ def get_user_drafts(user_id: int) -> List[Dict[str, Any]]:
     Get all drafts for a specific user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return []
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1631,6 +1816,9 @@ def get_draft(draft_id: int, user_id: int) -> Optional[Dict[str, Any]]:
     Get a specific draft by ID, ensuring it belongs to the user.
     """
     conn = get_db_connection()
+    if conn is None:
+        return None
+
     cursor = conn.cursor(dictionary=True)
 
     cursor.execute("""
@@ -1671,7 +1859,7 @@ def update_draft(draft_id: int, user_id: int, draft_data: dict) -> bool:
     Update an existing draft, ensuring it belongs to the user.
     Returns True if updated, False if not found.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept bijwerken")
     cursor = conn.cursor()
 
     now = datetime.utcnow()
@@ -1696,7 +1884,7 @@ def delete_draft(draft_id: int, user_id: int) -> bool:
     Delete a draft, ensuring it belongs to the user.
     Returns True if deleted, False if not found.
     """
-    conn = get_db_connection()
+    conn = _require_db_connection("concept verwijderen")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1714,7 +1902,7 @@ def delete_draft(draft_id: int, user_id: int) -> bool:
 
 def mark_draft_sent_for_publish(draft_id: int, user_id: int, job_id: str, publish_site_id: str) -> bool:
     """Mark a draft as sent to WordPress by storing publish job reference and timestamp."""
-    conn = get_db_connection()
+    conn = _require_db_connection("publicatiestatus concept opslaan")
     cursor = conn.cursor()
 
     cursor.execute("""
@@ -1722,6 +1910,150 @@ def mark_draft_sent_for_publish(draft_id: int, user_id: int, job_id: str, publis
         SET publish_job_id = %s, publish_site_id = %s, publish_sent_at = %s, updated_at = %s
         WHERE id = %s AND user_id = %s
     """, (job_id, publish_site_id, datetime.utcnow(), datetime.utcnow(), draft_id, user_id))
+
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return updated
+
+
+# ============================================
+# DRAFT TRANSLATIONS
+# ============================================
+
+def create_or_update_draft_translation(
+    user_id: int,
+    original_draft_id: int,
+    language: str,
+    translated_data: dict,
+    image_id: Optional[int] = None
+) -> int:
+    """Create or update a draft translation. Returns the translation ID."""
+    conn = _require_db_connection("vertaling opslaan")
+    cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    translated_json = json.dumps(translated_data)
+
+    # Check if translation already exists
+    cursor.execute("""
+        SELECT id FROM draft_translations
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (original_draft_id, language, user_id))
+    existing = cursor.fetchone()
+
+    if existing:
+        cursor.execute("""
+            UPDATE draft_translations
+            SET translated_json = %s, image_id = %s, updated_at = %s
+            WHERE id = %s
+        """, (translated_json, image_id, now, existing[0]))
+        translation_id = existing[0]
+    else:
+        cursor.execute("""
+            INSERT INTO draft_translations
+                (user_id, original_draft_id, language, translated_json, image_id, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+        """, (user_id, original_draft_id, language, translated_json, image_id, now, now))
+        translation_id = cursor.lastrowid
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return translation_id
+
+
+def get_draft_translations(draft_id: int, user_id: int) -> List[Dict[str, Any]]:
+    """Get all translations for a draft."""
+    conn = get_db_connection()
+    if conn is None:
+        return []
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, original_draft_id, language, translated_json, image_id,
+               publish_job_id, publish_sent_at, created_at, updated_at
+        FROM draft_translations
+        WHERE original_draft_id = %s AND user_id = %s
+        ORDER BY language ASC
+    """, (draft_id, user_id))
+
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    translations = []
+    for row in rows:
+        translations.append({
+            'id': row['id'],
+            'originalDraftId': row['original_draft_id'],
+            'language': row['language'],
+            'translated': json.loads(row['translated_json']) if row['translated_json'] else {},
+            'imageId': row['image_id'],
+            'publishJobId': row.get('publish_job_id'),
+            'publishSentAt': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
+            'createdAt': row['created_at'].isoformat() if row['created_at'] else None,
+            'updatedAt': row['updated_at'].isoformat() if row['updated_at'] else None,
+        })
+
+    return translations
+
+
+def get_draft_translation(draft_id: int, language: str, user_id: int) -> Optional[Dict[str, Any]]:
+    """Get a specific translation for a draft."""
+    conn = get_db_connection()
+    if conn is None:
+        return None
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, original_draft_id, language, translated_json, image_id,
+               publish_job_id, publish_sent_at, created_at, updated_at
+        FROM draft_translations
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (draft_id, language, user_id))
+
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not row:
+        return None
+
+    return {
+        'id': row['id'],
+        'originalDraftId': row['original_draft_id'],
+        'language': row['language'],
+        'translated': json.loads(row['translated_json']) if row['translated_json'] else {},
+        'imageId': row['image_id'],
+        'publishJobId': row.get('publish_job_id'),
+        'publishSentAt': row['publish_sent_at'].isoformat() if row.get('publish_sent_at') else None,
+        'createdAt': row['created_at'].isoformat() if row['created_at'] else None,
+        'updatedAt': row['updated_at'].isoformat() if row['updated_at'] else None,
+    }
+
+
+def update_draft_translation(
+    draft_id: int,
+    language: str,
+    user_id: int,
+    translated_data: dict
+) -> bool:
+    """Update translated content for an existing translation. Returns True if updated."""
+    conn = _require_db_connection("vertaling bijwerken")
+    cursor = conn.cursor()
+
+    now = datetime.utcnow()
+    translated_json = json.dumps(translated_data)
+
+    cursor.execute("""
+        UPDATE draft_translations
+        SET translated_json = %s, updated_at = %s
+        WHERE original_draft_id = %s AND language = %s AND user_id = %s
+    """, (translated_json, now, draft_id, language, user_id))
 
     updated = cursor.rowcount > 0
     conn.commit()
