@@ -91,7 +91,86 @@ ADMIN_EMAILS=admin@jouwdomein.nl
 python run.py
 ```
 
-De applicatie is nu beschikbaar op `http://localhost:5000`
+De applicatie is nu beschikbaar op:
+
+- `${APP_PUBLIC_URL}` als die env var is gezet
+- anders `http://localhost:${APP_PORT}`
+
+## Server Setup Guide (Environment Variables First)
+
+Gebruik in productie altijd een `.env` bestand als single source of truth voor configuratie.
+Alle hostnamen, poorten, credentials en secrets worden via env variabelen gezet.
+
+### 1. Maak een productie env-bestand
+
+Gebruik bijvoorbeeld `.env-prod` (of een andere naam die je zelf kiest):
+
+```env
+# AI keys
+OPENAI_API_KEY=...
+GEMINI_API_KEY=...
+
+# Security
+MASTER_KEY=generate-a-strong-random-key-min-32-chars
+APP_PUBLIC_URL=https://jouwdomein.nl
+
+# App runtime
+APP_HOST=0.0.0.0
+APP_PORT=8000
+
+# MySQL
+MYSQL_HOST=mysql
+MYSQL_PORT=3306
+MYSQL_USER=blogbot
+MYSQL_PASSWORD=vervang-dit-wachtwoord
+MYSQL_DATABASE=blogbot
+
+# Mail (vereist voor password reset e-mails)
+MAIL_SERVER=smtp.example.com
+MAIL_PORT=587
+MAIL_USERNAME=mailer@example.com
+MAIL_PASSWORD=vervang-dit-smtp-wachtwoord
+MAIL_DEFAULT_SENDER=mailer@example.com
+MAIL_USE_TLS=true
+MAIL_USE_SSL=false
+
+# Optioneel
+ADMIN_EMAILS=admin@example.com
+OFFLINE_AUTH_ENABLED=false
+```
+
+### 2. Start met Docker Compose
+
+De meegeleverde `docker-compose.yml` gebruikt alleen env variabelen.
+
+```bash
+# Linux/macOS
+docker compose --env-file .env-prod up -d --build
+
+# Windows PowerShell
+docker compose --env-file .env-prod up -d --build
+```
+
+### 3. Controleer of de services draaien
+
+```bash
+docker compose ps
+docker compose logs -f app
+```
+
+### 4. Stoppen / opnieuw starten
+
+```bash
+docker compose down
+docker compose up -d
+```
+
+### 5. Belangrijk voor productie
+
+- Zet `APP_PUBLIC_URL` op je echte domein (https)
+- Gebruik sterke waarden voor `MASTER_KEY`, `MYSQL_PASSWORD`, `MAIL_PASSWORD`
+- Bewaar `.env-prod` buiten versiebeheer
+- Zet een reverse proxy (Nginx/Caddy) voor TLS terminatie
 
 ### 4. WordPress Setup
 
@@ -118,7 +197,7 @@ Zorg dat WordPress permalinks zijn ingeschakeld (Settings → Permalinks). De RE
 
 ## 📖 Gebruik
 
-Bezoek `http://localhost:5000` en log in met je account. De web interface biedt:
+Bezoek `${APP_PUBLIC_URL}` (of lokaal `http://localhost:${APP_PORT}`) en log in met je account. De web interface biedt:
 
 - WordPress site beheer en connectie
 - Blog post generatie met AI
@@ -130,7 +209,7 @@ Bezoek `http://localhost:5000` en log in met je account. De web interface biedt:
 #### 1. Connect WordPress Site
 
 ```bash
-curl -X POST http://localhost:8000/api/sites/connect \
+curl -X POST ${APP_PUBLIC_URL}/api/sites/connect \
   -H "Content-Type: application/json" \
   -d '{
     "wpBaseUrl": "https://example.com",
@@ -154,7 +233,7 @@ Response:
 #### 2. Generate Blog Post
 
 ```bash
-curl -X POST http://localhost:8000/api/posts/generate \
+curl -X POST ${APP_PUBLIC_URL}/api/posts/generate \
   -H "Content-Type: application/json" \
   -d '{
     "siteId": "uuid",
@@ -216,7 +295,7 @@ Response:
 #### 3. Publish Blog Post
 
 ```bash
-curl -X POST http://localhost:8000/api/posts/publish \
+curl -X POST ${APP_PUBLIC_URL}/api/posts/publish \
   -H "Content-Type: application/json" \
   -d '{
     "siteId": "uuid",
@@ -235,7 +314,7 @@ Response:
 #### 4. Get Job Status
 
 ```bash
-curl http://localhost:8000/api/jobs/{jobId}
+curl ${APP_PUBLIC_URL}/api/jobs/{jobId}
 ```
 
 Response:
@@ -269,7 +348,7 @@ python scripts/publish_demo.py \
 
 ## Database Schema
 
-De service gebruikt SQLite voor persistent storage:
+De service gebruikt MySQL voor persistent storage:
 
 - **sites**: Opgeslagen WordPress sites met encrypted credentials
 - **jobs**: Job queue met status tracking
@@ -308,7 +387,7 @@ De service gebruikt SQLite voor persistent storage:
 ```
 app.py                    # Flask API server
 ├── config.py            # Environment config
-├── db.py                # SQLite database utilities
+├── db.py                # MySQL database utilities
 ├── crypto_utils.py      # Encryption (Fernet)
 ├── models.py            # Pydantic schemas
 ├── wp_client.py         # WordPress REST API client
