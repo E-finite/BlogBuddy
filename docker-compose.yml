@@ -1,43 +1,13 @@
 services:
-  mysql:
-    image: mysql:8.0
-    container_name: ${COMPOSE_MYSQL_CONTAINER:-blogproject-mysql}
-    restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE}
-      MYSQL_USER: ${MYSQL_USER}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-me-root-password}
-    ports:
-      - "${MYSQL_EXPOSE_PORT:-3306}:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "mysqladmin",
-          "ping",
-          "-h",
-          "127.0.0.1",
-          "-u",
-          "${MYSQL_USER}",
-          "-p${MYSQL_PASSWORD}",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 20s
-
   app:
     image: python:3.11-slim
-    container_name: ${COMPOSE_APP_CONTAINER:-blogproject-app}
+    container_name: blogproject-app
     restart: unless-stopped
     working_dir: /app
     volumes:
       - ./:/app
     env_file:
-      - ${COMPOSE_ENV_FILE:-.env}
+      - .env
     environment:
       APP_HOST: ${APP_HOST}
       APP_PORT: ${APP_PORT}
@@ -63,10 +33,4 @@ services:
       sh -c "pip install --no-cache-dir -r requirements.txt &&
              python run.py"
     ports:
-      - "${APP_PORT}:${APP_PORT}"
-    depends_on:
-      mysql:
-        condition: service_healthy
-
-volumes:
-  mysql_data:
+      - "127.0.0.1:5001:${APP_PORT}"
