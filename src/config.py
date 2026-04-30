@@ -70,7 +70,7 @@ OFFLINE_AUTH_REGENERATE_ON_START = _to_bool(os.getenv("OFFLINE_AUTH_REGENERATE_O
 # App/security
 APP_HOST = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT = _to_int(os.getenv("APP_PORT"), 8000)
-APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "http://localhost:8000")
+APP_PUBLIC_URL = os.getenv("APP_PUBLIC_URL", "").strip().rstrip("/") or None
 MASTER_KEY = os.getenv(
     "MASTER_KEY", "replace-with-strong-random-key-min-32-chars")
 PASSWORD_RESET_TOKEN_TTL_SECONDS = _to_int(

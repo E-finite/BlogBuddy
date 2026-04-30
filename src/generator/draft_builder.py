@@ -40,7 +40,8 @@ def build_draft(
     for target in seo.get("internalLinkTargets", []):
         internal_link_targets.append({
             "title": target.get("title", ""),
-            "url": target.get("url", "")
+            "url": target.get("url", ""),
+            "description": target.get("description", ""),
         })
 
     # Build website context bundle if site_id provided

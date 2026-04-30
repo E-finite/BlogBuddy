@@ -760,6 +760,89 @@ def connect_site():
         return jsonify({"ok": False, "error": str(e)}), 400
 
 
+# ── Link Library ─────────────────────────────────────────────────────────
+
+@app.route("/api/links", methods=["GET"])
+@login_required
+def get_links_api():
+    """Return all links for the current user."""
+    try:
+        links = db.get_user_links(current_user.id)
+        for link in links:
+            if link.get("created_at"):
+                link["created_at"] = link["created_at"].isoformat()
+        return jsonify({"links": links}), 200
+    except Exception as e:
+        logger.error(f"Error fetching links: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/links", methods=["POST"])
+@login_required
+def create_link_api():
+    """Add a new link to the library."""
+    data = request.get_json() or {}
+    url = (data.get("url") or "").strip()
+    label = (data.get("label") or "").strip()
+    description = (data.get("description") or "").strip() or None
+
+    if not url or not label:
+        return jsonify({"error": "URL en label zijn verplicht."}), 400
+
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return jsonify({"error": "URL moet beginnen met http:// of https://"}), 400
+
+    if len(url) > 500 or len(label) > 255:
+        return jsonify({"error": "URL of label te lang."}), 400
+
+    try:
+        link_id = db.create_link(current_user.id, url, label, description)
+        return jsonify({"ok": True, "linkId": link_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating link: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/links/<int:link_id>", methods=["PUT"])
+@login_required
+def update_link_api(link_id: int):
+    """Update a link."""
+    data = request.get_json() or {}
+    url = (data.get("url") or "").strip()
+    label = (data.get("label") or "").strip()
+    description = (data.get("description") or "").strip() or None
+
+    if not url or not label:
+        return jsonify({"error": "URL en label zijn verplicht."}), 400
+
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return jsonify({"error": "URL moet beginnen met http:// of https://"}), 400
+
+    try:
+        updated = db.update_link(
+            link_id, current_user.id, url, label, description)
+        if not updated:
+            return jsonify({"error": "Link niet gevonden."}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error updating link: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/links/<int:link_id>", methods=["DELETE"])
+@login_required
+def delete_link_api(link_id: int):
+    """Remove a link from the library."""
+    try:
+        deleted = db.delete_link(link_id, current_user.id)
+        if not deleted:
+            return jsonify({"error": "Link niet gevonden."}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting link: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
 @app.route("/api/posts/generate", methods=["POST"])
 @login_required
 def generate_post():
@@ -1263,6 +1346,20 @@ def get_context_site_details(site_id: str):
 
     except Exception as e:
         logger.error(f"Error getting context site details: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/context-sites/<site_id>", methods=["DELETE"])
+@login_required
+def delete_context_site_route(site_id: str):
+    """Delete a context site and all related data - MULTI-TENANT."""
+    try:
+        deleted = db.delete_context_site(site_id, current_user.id)
+        if not deleted:
+            return jsonify({"error": "Site niet gevonden of geen toegang"}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting context site: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 
@@ -1792,6 +1889,219 @@ def update_draft_translation_api(draft_id: int, language: str):
         return jsonify({"ok": True}), 200
     except Exception as e:
         logger.error(f"Error updating translation: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Bug Reports ──────────────────────────────────────────────────────────
+
+@app.route("/api/bug-reports", methods=["POST"])
+@login_required
+def create_bug_report_api():
+    """Submit a new bug report."""
+    data = request.get_json() or {}
+    category = (data.get("category") or "").strip()
+    title = (data.get("title") or "").strip()
+    description = (data.get("description") or "").strip()
+    page_url = (data.get("pageUrl") or "").strip() or None
+
+    if not category or not title or not description:
+        return jsonify({"error": "Categorie, titel en beschrijving zijn verplicht."}), 400
+
+    if category not in ("bug", "feature", "ui", "performance", "other"):
+        return jsonify({"error": "Ongeldige categorie."}), 400
+
+    if len(title) > 255:
+        return jsonify({"error": "Titel mag maximaal 255 tekens zijn."}), 400
+
+    if len(description) > 5000:
+        return jsonify({"error": "Beschrijving mag maximaal 5000 tekens zijn."}), 400
+
+    try:
+        report_id = db.create_bug_report(
+            user_id=current_user.id,
+            category=category,
+            title=title,
+            description=description,
+            page_url=page_url,
+        )
+        return jsonify({"ok": True, "reportId": report_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating bug report: {e}", exc_info=True)
+        return jsonify({"error": "Bug report kon niet worden aangemaakt."}), 500
+
+
+@app.route("/api/admin/bug-reports", methods=["GET"])
+@login_required
+@admin_required
+def admin_get_bug_reports_api():
+    """Return all bug reports for admin panel."""
+    status_filter = request.args.get("status")
+    try:
+        reports = db.get_all_bug_reports(status_filter)
+        # Serialize datetimes
+        for r in reports:
+            for key in ("created_at", "updated_at"):
+                if r.get(key):
+                    r[key] = r[key].isoformat()
+        return jsonify({"reports": reports}), 200
+    except Exception as e:
+        logger.error(f"Error fetching bug reports: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/bug-reports/<int:report_id>", methods=["PUT"])
+@login_required
+@admin_required
+def admin_update_bug_report_api(report_id: int):
+    """Update status / admin notes for a bug report."""
+    data = request.get_json() or {}
+    status = (data.get("status") or "").strip()
+    admin_notes = data.get("adminNotes")
+
+    if status and status not in ("open", "in_progress", "resolved", "closed"):
+        return jsonify({"error": "Ongeldige status."}), 400
+
+    try:
+        if not db.get_bug_report(report_id):
+            return jsonify({"error": "Bug report niet gevonden."}), 404
+
+        db.update_bug_report_status(
+            report_id,
+            status=status or "open",
+            admin_notes=admin_notes,
+        )
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error updating bug report: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/bug-reports/counts", methods=["GET"])
+@login_required
+@admin_required
+def admin_get_bug_report_counts_api():
+    """Return bug report counts per status."""
+    try:
+        counts = db.get_bug_report_counts()
+        return jsonify(counts), 200
+    except Exception as e:
+        logger.error(f"Error fetching bug report counts: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+# ── Changelogs ───────────────────────────────────────────────────────────
+
+@app.route("/api/changelogs/unseen", methods=["GET"])
+@login_required
+def get_unseen_changelogs_api():
+    """Return changelogs the current user hasn't dismissed yet."""
+    try:
+        entries = db.get_unseen_changelogs(current_user.id)
+        for e in entries:
+            if e.get("created_at"):
+                e["created_at"] = e["created_at"].isoformat()
+        return jsonify({"changelogs": entries}), 200
+    except Exception as e:
+        logger.error(f"Error fetching unseen changelogs: {e}", exc_info=True)
+        return jsonify({"changelogs": []}), 200
+
+
+@app.route("/api/changelogs/<int:changelog_id>/dismiss", methods=["POST"])
+@login_required
+def dismiss_changelog_api(changelog_id: int):
+    """Mark a changelog as seen by the current user."""
+    try:
+        db.dismiss_changelog(current_user.id, changelog_id)
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error dismissing changelog: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/changelogs", methods=["GET"])
+@login_required
+@admin_required
+def admin_get_changelogs_api():
+    """Return all changelogs for admin management."""
+    try:
+        entries = db.get_all_changelogs()
+        for e in entries:
+            if e.get("created_at"):
+                e["created_at"] = e["created_at"].isoformat()
+        return jsonify({"changelogs": entries}), 200
+    except Exception as e:
+        logger.error(f"Error fetching changelogs: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/changelogs", methods=["POST"])
+@login_required
+@admin_required
+def admin_create_changelog_api():
+    """Create a new changelog entry."""
+    data = request.get_json() or {}
+    version = (data.get("version") or "").strip()
+    title = (data.get("title") or "").strip()
+    content_html = (data.get("contentHtml") or "").strip()
+    published = data.get("published", True)
+
+    if not version or not title or not content_html:
+        return jsonify({"error": "Versie, titel en inhoud zijn verplicht."}), 400
+
+    if len(version) > 50:
+        return jsonify({"error": "Versie mag maximaal 50 tekens zijn."}), 400
+
+    try:
+        changelog_id = db.create_changelog(
+            created_by=current_user.id,
+            version=version,
+            title=title,
+            content_html=content_html,
+            published=bool(published),
+        )
+        return jsonify({"ok": True, "changelogId": changelog_id}), 201
+    except Exception as e:
+        logger.error(f"Error creating changelog: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/changelogs/<int:changelog_id>", methods=["PUT"])
+@login_required
+@admin_required
+def admin_update_changelog_api(changelog_id: int):
+    """Update a changelog entry."""
+    data = request.get_json() or {}
+    version = (data.get("version") or "").strip()
+    title = (data.get("title") or "").strip()
+    content_html = (data.get("contentHtml") or "").strip()
+    published = data.get("published", True)
+
+    if not version or not title or not content_html:
+        return jsonify({"error": "Versie, titel en inhoud zijn verplicht."}), 400
+
+    try:
+        updated = db.update_changelog(
+            changelog_id, version, title, content_html, bool(published))
+        if not updated:
+            return jsonify({"error": "Changelog niet gevonden."}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error updating changelog: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/admin/changelogs/<int:changelog_id>", methods=["DELETE"])
+@login_required
+@admin_required
+def admin_delete_changelog_api(changelog_id: int):
+    """Delete a changelog entry."""
+    try:
+        deleted = db.delete_changelog(changelog_id)
+        if not deleted:
+            return jsonify({"error": "Changelog niet gevonden."}), 404
+        return jsonify({"ok": True}), 200
+    except Exception as e:
+        logger.error(f"Error deleting changelog: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 

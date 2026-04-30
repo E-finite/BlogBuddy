@@ -168,6 +168,90 @@ export const api = {
       body: { translated },
     });
   },
+
+  // Bug Reports
+  async submitBugReport(category, title, description, pageUrl) {
+    return apiRequest('/api/bug-reports', {
+      method: 'POST',
+      body: { category, title, description, pageUrl },
+    });
+  },
+
+  async getAdminBugReports(status) {
+    const qs = status ? `?status=${encodeURIComponent(status)}` : '';
+    return apiRequest(`/api/admin/bug-reports${qs}`);
+  },
+
+  async updateBugReport(reportId, status, adminNotes) {
+    return apiRequest(`/api/admin/bug-reports/${reportId}`, {
+      method: 'PUT',
+      body: { status, adminNotes },
+    });
+  },
+
+  async getBugReportCounts() {
+    return apiRequest('/api/admin/bug-reports/counts');
+  },
+
+  // Link Library
+  async getLinks() {
+    return apiRequest('/api/links');
+  },
+
+  async createLink(url, label, description) {
+    return apiRequest('/api/links', {
+      method: 'POST',
+      body: { url, label, description },
+    });
+  },
+
+  async updateLink(linkId, url, label, description) {
+    return apiRequest(`/api/links/${linkId}`, {
+      method: 'PUT',
+      body: { url, label, description },
+    });
+  },
+
+  async deleteLink(linkId) {
+    return apiRequest(`/api/links/${linkId}`, {
+      method: 'DELETE',
+    });
+  },
+
+  // Changelogs
+  async getUnseenChangelogs() {
+    return apiRequest('/api/changelogs/unseen');
+  },
+
+  async dismissChangelog(changelogId) {
+    return apiRequest(`/api/changelogs/${changelogId}/dismiss`, {
+      method: 'POST',
+    });
+  },
+
+  async getAdminChangelogs() {
+    return apiRequest('/api/admin/changelogs');
+  },
+
+  async createChangelog(version, title, contentHtml, published) {
+    return apiRequest('/api/admin/changelogs', {
+      method: 'POST',
+      body: { version, title, contentHtml, published },
+    });
+  },
+
+  async updateChangelog(changelogId, version, title, contentHtml, published) {
+    return apiRequest(`/api/admin/changelogs/${changelogId}`, {
+      method: 'PUT',
+      body: { version, title, contentHtml, published },
+    });
+  },
+
+  async deleteChangelog(changelogId) {
+    return apiRequest(`/api/admin/changelogs/${changelogId}`, {
+      method: 'DELETE',
+    });
+  },
 };
 
 // Polling utility

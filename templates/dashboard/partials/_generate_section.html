@@ -17,7 +17,9 @@
         </div>
         <div>
           <small>Tekst-regeneraties</small>
-          <strong>{{ quota.text_regen_used }}/{{ quota.text_regen_limit }}</strong>
+          <strong
+            >{{ quota.text_regen_used }}/{{ quota.text_regen_limit }}</strong
+          >
         </div>
         <div>
           <small>Image-regens per afbeelding</small>
@@ -31,8 +33,8 @@
         <section class="workspace-form-section">
           <h3 class="workspace-form-title">1. Website context (optioneel)</h3>
           <p class="workspace-form-copy">
-            Gebruik een eerder gecrawlde website of crawl een nieuwe URL om
-            tone of voice en merkcontext mee te nemen.
+            Gebruik een eerder gecrawlde website of crawl een nieuwe URL om tone
+            of voice en merkcontext mee te nemen.
           </p>
 
           <div class="form-group context-card">
@@ -43,13 +45,23 @@
               <select id="existingSiteSelect" class="form-select">
                 <option value="">-- Kies een website --</option>
               </select>
-              <button
-                type="button"
-                id="confirm-site-btn"
-                class="btn btn-primary mt-md hidden"
-              >
-                Gebruik deze website
-              </button>
+              <div class="context-site-actions mt-md">
+                <button
+                  type="button"
+                  id="confirm-site-btn"
+                  class="btn btn-primary hidden"
+                >
+                  Gebruik deze website
+                </button>
+                <button
+                  type="button"
+                  id="delete-context-site-btn"
+                  class="btn btn-ghost hidden"
+                >
+                  <span class="material-icons-outlined" style="font-size:1.1rem;vertical-align:-2px">delete_outline</span>
+                  Verwijderen
+                </button>
+              </div>
             </div>
 
             <div
@@ -133,7 +145,9 @@
           </div>
 
           <div class="form-group">
-            <label class="form-label" for="painPoints">Pijnpunten (komma-gescheiden)</label>
+            <label class="form-label" for="painPoints"
+              >Pijnpunten (komma-gescheiden)</label
+            >
             <input
               type="text"
               id="painPoints"
@@ -157,7 +171,9 @@
             </div>
 
             <div class="form-group">
-              <label class="form-label" for="toneStyle">Tone of voice (komma-gescheiden)</label>
+              <label class="form-label" for="toneStyle"
+                >Tone of voice (komma-gescheiden)</label
+              >
               <input
                 type="text"
                 id="toneStyle"
@@ -172,7 +188,12 @@
           <div class="grid grid-2">
             <div class="form-group">
               <label class="form-label" for="formality">Aanspreekvorm</label>
-              <select id="formality" name="formality" class="form-select" required>
+              <select
+                id="formality"
+                name="formality"
+                class="form-select"
+                required
+              >
                 <option value="je" selected>Je</option>
                 <option value="u">U</option>
               </select>
@@ -188,11 +209,85 @@
           </div>
         </section>
 
-        <section class="workspace-form-section workspace-image-section">
-          <h3 class="workspace-form-title">3. Afbeelding instellingen</h3>
+        <section class="workspace-form-section workspace-link-library-section">
+          <h3 class="workspace-form-title">3. Link library</h3>
           <p class="workspace-form-copy">
-            Stel hier de visuele stijl in. Alle velden blijven beschikbaar,
-            maar de structuur is opgedeeld in duidelijke blokken.
+            Voeg links toe die het AI-model kan gebruiken als referenties in de
+            blogpost. Denk aan productpagina's, relevante artikelen of
+            landingspagina's op je eigen site.
+          </p>
+
+          <div id="link-library-list" class="link-library-list">
+            <!-- Links worden hier dynamisch geladen -->
+          </div>
+
+          <div class="link-library-add-block" id="link-library-add-block">
+            <h4>
+              <span class="material-icons-outlined">add_link</span>
+              Nieuwe link
+            </h4>
+            <div class="workspace-image-grid">
+              <div class="form-group form-group-no-margin">
+                <label class="form-label field-sm" for="linkUrl">URL</label>
+                <input
+                  type="url"
+                  id="linkUrl"
+                  class="form-input"
+                  placeholder="https://jouwsite.nl/pagina"
+                />
+              </div>
+              <div class="form-group form-group-no-margin">
+                <label class="form-label field-sm" for="linkLabel">Label</label>
+                <input
+                  type="text"
+                  id="linkLabel"
+                  class="form-input"
+                  placeholder="Ankertekst of paginanaam"
+                />
+              </div>
+            </div>
+            <div
+              class="form-group form-group-no-margin"
+              style="margin-top: var(--spacing-md)"
+            >
+              <label class="form-label field-sm" for="linkDescription"
+                >Beschrijving
+                <span style="font-weight: 400; color: var(--text-tertiary)"
+                  >(optioneel)</span
+                ></label
+              >
+              <input
+                type="text"
+                id="linkDescription"
+                class="form-input"
+                placeholder="Context voor het model, bijv. 'Onze hoofdpagina over webdesign'"
+              />
+            </div>
+            <div class="link-library-add-actions">
+              <button
+                type="button"
+                id="add-link-btn"
+                class="btn btn-secondary btn-sm"
+              >
+                <span class="material-icons-outlined">add_link</span>
+                Toevoegen
+              </button>
+              <button
+                type="button"
+                id="cancel-edit-link-btn"
+                class="btn btn-ghost btn-sm hidden"
+              >
+                Annuleren
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="workspace-form-section workspace-image-section">
+          <h3 class="workspace-form-title">4. Afbeelding instellingen</h3>
+          <p class="workspace-form-copy">
+            Stel hier de visuele stijl in. Alle velden blijven beschikbaar, maar
+            de structuur is opgedeeld in duidelijke blokken.
           </p>
 
           <div class="workspace-image-toggle form-group">
@@ -214,7 +309,10 @@
             </div>
           </div>
 
-          <div id="image-settings-panel" class="form-group workspace-image-config">
+          <div
+            id="image-settings-panel"
+            class="form-group workspace-image-config"
+          >
             <div class="workspace-image-block">
               <h4>
                 Basis instellingen
@@ -223,8 +321,14 @@
 
               <div class="workspace-image-grid">
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="imagePreset">Stijl preset</label>
-                  <select id="imagePreset" name="imagePreset" class="form-select">
+                  <label class="form-label" for="imagePreset"
+                    >Stijl preset</label
+                  >
+                  <select
+                    id="imagePreset"
+                    name="imagePreset"
+                    class="form-select"
+                  >
                     <option value="minimal-tech" selected>Minimal Tech</option>
                     <option value="bold-creative">Bold Creative</option>
                     <option value="professional">Professional</option>
@@ -234,8 +338,14 @@
                 </div>
 
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="aspectRatio">Aspect ratio</label>
-                  <select id="aspectRatio" name="aspectRatio" class="form-select">
+                  <label class="form-label" for="aspectRatio"
+                    >Aspect ratio</label
+                  >
+                  <select
+                    id="aspectRatio"
+                    name="aspectRatio"
+                    class="form-select"
+                  >
                     <option value="16:9" selected>16:9 Blog</option>
                     <option value="1:1">1:1 Square</option>
                     <option value="4:5">4:5 Portrait</option>
@@ -243,8 +353,14 @@
                 </div>
 
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="styleStrength">Stijlsterkte</label>
-                  <select id="styleStrength" name="styleStrength" class="form-select">
+                  <label class="form-label" for="styleStrength"
+                    >Stijlsterkte</label
+                  >
+                  <select
+                    id="styleStrength"
+                    name="styleStrength"
+                    class="form-select"
+                  >
                     <option value="low">Low</option>
                     <option value="medium" selected>Medium</option>
                     <option value="high">High</option>
@@ -283,11 +399,7 @@
 
                 <div class="form-group form-group-no-margin">
                   <label class="form-label" for="lighting">Belichting</label>
-                  <select
-                    id="lighting"
-                    name="lighting"
-                    class="form-select"
-                  >
+                  <select id="lighting" name="lighting" class="form-select">
                     <option value="soft-studio" selected>Soft Studio</option>
                     <option value="natural">Natural</option>
                     <option value="dramatic">Dramatic</option>
@@ -296,7 +408,9 @@
                 </div>
 
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="colorStrictness">Kleur strictheid</label>
+                  <label class="form-label" for="colorStrictness"
+                    >Kleur strictheid</label
+                  >
                   <select
                     id="colorStrictness"
                     name="colorStrictness"
@@ -309,7 +423,9 @@
                 </div>
 
                 <div class="form-group form-group-no-margin">
-                  <label class="form-label" for="brandColors">Merkkleuren (HEX)</label>
+                  <label class="form-label" for="brandColors"
+                    >Merkkleuren (HEX)</label
+                  >
                   <input
                     type="text"
                     id="brandColors"
@@ -321,7 +437,10 @@
               </div>
 
               <div class="workspace-image-switch-grid">
-                <label class="workspace-image-check-card workspace-image-check-card-compact" for="useBrandColors">
+                <label
+                  class="workspace-image-check-card workspace-image-check-card-compact"
+                  for="useBrandColors"
+                >
                   <input
                     type="checkbox"
                     id="useBrandColors"
@@ -335,7 +454,10 @@
                   </span>
                 </label>
 
-                <label class="workspace-image-check-card workspace-image-check-card-compact" for="lockSeed">
+                <label
+                  class="workspace-image-check-card workspace-image-check-card-compact"
+                  for="lockSeed"
+                >
                   <input
                     type="checkbox"
                     id="lockSeed"
@@ -350,7 +472,9 @@
               </div>
 
               <div class="form-group form-group-top workspace-seed-input">
-                <label class="form-label" for="seedValue">Seed (optioneel)</label>
+                <label class="form-label" for="seedValue"
+                  >Seed (optioneel)</label
+                >
                 <input
                   type="number"
                   id="seedValue"
@@ -364,7 +488,9 @@
             <div class="workspace-image-block">
               <h4>Kwaliteitscontrole</h4>
               <div class="form-group form-group-no-margin">
-                <label class="form-label" for="negativePrompt">Negatieve prompt</label>
+                <label class="form-label" for="negativePrompt"
+                  >Negatieve prompt</label
+                >
                 <textarea
                   id="negativePrompt"
                   name="negativePrompt"
@@ -382,7 +508,9 @@ blurry, low quality, watermark, jpeg artifacts, deformed, pixelated</textarea
           </div>
         </section>
 
-        <button type="submit" class="btn btn-primary">Blogpost genereren</button>
+        <button type="submit" class="btn btn-primary">
+          Blogpost genereren
+        </button>
       </form>
     </div>
   </div>

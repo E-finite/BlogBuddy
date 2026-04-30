@@ -4,278 +4,513 @@ endblock %} {% block content %}
   <span class="page-kicker">Administratie</span>
   <h1 class="page-title">Admin Paneel</h1>
   <p class="page-subtitle">
-    Beheer accounts en limieten voor blogs en regeneraties.
+    Beheer accounts, limieten, bug reports en changelogs.
   </p>
 </div>
 
-<section class="section section-spaced">
-  <h2 class="section-title">Nieuw Account Aanmaken</h2>
-  <div class="card">
-    <form method="post" action="{{ url_for('admin_create_user') }}">
-      <div class="grid grid-2">
-        <div class="form-group">
-          <label class="form-label" for="new-username">Gebruikersnaam</label>
-          <input
-            class="form-input"
-            id="new-username"
-            name="username"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="new-email">E-mail</label>
-          <input
-            class="form-input"
-            id="new-email"
-            name="email"
-            type="email"
-            required
-          />
-        </div>
-      </div>
+<!-- Admin Tabs -->
+<div class="admin-tabs" id="admin-tabs">
+  <button class="admin-tab active" data-admin-tab="accounts">
+    <span class="material-icons-outlined" style="font-size: 18px">people</span>
+    Accounts
+  </button>
+  <button class="admin-tab" data-admin-tab="bugs">
+    <span class="material-icons-outlined" style="font-size: 18px"
+      >bug_report</span
+    >
+    Bug Reports
+    <span
+      class="admin-tab-badge"
+      id="bug-report-tab-badge"
+      style="display: none"
+      >0</span
+    >
+  </button>
+  <button class="admin-tab" data-admin-tab="changelogs">
+    <span class="material-icons-outlined" style="font-size: 18px"
+      >campaign</span
+    >
+    Changelogs
+  </button>
+</div>
 
-      <div class="grid grid-2">
-        <div class="form-group">
-          <label class="form-label" for="new-password">Wachtwoord</label>
-          <input
-            class="form-input"
-            id="new-password"
-            name="password"
-            type="password"
-            minlength="8"
-            required
-          />
-          <button
-            class="btn btn-ghost mt-sm"
-            type="button"
-            data-generate-password="new-password"
-          >
-            Genereer wachtwoord
-          </button>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="new-is-admin">Rol</label>
-          <label class="form-checkbox" for="new-is-admin">
-            <input id="new-is-admin" name="is_admin" type="checkbox" />
-            <span>Maak dit account ook admin</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="grid grid-3">
-        <div class="form-group">
-          <label class="form-label" for="new-blogs-limit"
-            >Blogs per maand</label
-          >
-          <input
-            class="form-input"
-            id="new-blogs-limit"
-            name="blogs_monthly_limit"
-            type="number"
-            min="1"
-            value="20"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="new-text-regens-limit"
-            >Tekst regeneraties per maand</label
-          >
-          <input
-            class="form-input"
-            id="new-text-regens-limit"
-            name="text_regen_monthly_limit"
-            type="number"
-            min="0"
-            value="20"
-            required
-          />
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="new-image-regens-limit"
-            >Afbeelding regeneraties per afbeelding</label
-          >
-          <input
-            class="form-input"
-            id="new-image-regens-limit"
-            name="image_regen_limit"
-            type="number"
-            min="1"
-            value="3"
-            required
-          />
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-checkbox" for="new-translation-enabled">
-          <input
-            id="new-translation-enabled"
-            name="translation_enabled"
-            type="checkbox"
-          />
-          <span>Vertalingen inschakelen</span>
-        </label>
-        <div class="form-help">
-          Stelt de gebruiker in staat om blogposts te vertalen naar andere
-          talen.
-        </div>
-      </div>
-
-      <button class="btn btn-primary" type="submit">Account aanmaken</button>
-    </form>
-  </div>
-</section>
-
-<section class="section">
-  <h2 class="section-title">Accounts & Limieten</h2>
-
-  {% for account in users %}
-  <div class="card card-spaced-sm">
-    <div class="card-header card-header-wrap">
-      <div>
-        <h3 class="card-title">{{ account.username }}</h3>
-        <div class="form-help">{{ account.email }}</div>
-      </div>
-      <div class="status-badges">
-        {% if account.is_admin %}
-        <span class="badge badge-primary">Admin</span>
-        {% endif %} {% if account.is_active %}
-        <span class="badge badge-primary">Actief</span>
-        {% else %}
-        <span class="badge admin-badge-inactive">Inactief</span>
-        {% endif %}
-      </div>
-    </div>
-
-    <div class="card-body">
-      <form
-        method="post"
-        action="{{ url_for('admin_update_user_quota', user_id=account.id) }}"
-      >
-        <div class="grid grid-3">
-          <div class="form-group">
-            <label class="form-label" for="blogs-limit-{{ account.id }}"
-              >Blogs per maand</label
-            >
-            <input
-              class="form-input"
-              id="blogs-limit-{{ account.id }}"
-              name="blogs_monthly_limit"
-              type="number"
-              min="1"
-              value="{{ account.blogs_monthly_limit }}"
-              required
-            />
-            <div class="form-help">
-              Gebruikt: {{ account.blogs_used }} in {{ account.usage_month or
-              '-' }}
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="text-regens-limit-{{ account.id }}"
-              >Tekst regeneraties per maand</label
-            >
-            <input
-              class="form-input"
-              id="text-regens-limit-{{ account.id }}"
-              name="text_regen_monthly_limit"
-              type="number"
-              min="0"
-              value="{{ account.text_regen_monthly_limit }}"
-              required
-            />
-            <div class="form-help">
-              Gebruikt: {{ account.text_regen_used }} in {{ account.usage_month
-              or '-' }}
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="image-regens-limit-{{ account.id }}"
-              >Afbeelding regeneraties per afbeelding</label
-            >
-            <input
-              class="form-input"
-              id="image-regens-limit-{{ account.id }}"
-              name="image_regen_limit"
-              type="number"
-              min="1"
-              value="{{ account.image_regen_limit }}"
-              required
-            />
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label
-            class="form-checkbox"
-            for="translation-enabled-{{ account.id }}"
-          >
-            <input
-              id="translation-enabled-{{ account.id }}"
-              name="translation_enabled"
-              type="checkbox"
-              {%
-              if
-              account.translation_enabled
-              %}checked{%
-              endif
-              %}
-            />
-            <span>Vertalingen inschakelen</span>
-          </label>
-        </div>
-
-        <button class="btn btn-secondary" type="submit">
-          Limieten opslaan
-        </button>
-      </form>
-
-      <hr class="rule-divider" />
-
-      <form
-        method="post"
-        action="{{ url_for('admin_update_user_password', user_id=account.id) }}"
-      >
+<!-- Accounts Tab -->
+<div class="admin-tab-content active" data-admin-content="accounts">
+  <section class="section section-spaced">
+    <h2 class="section-title">Nieuw Account Aanmaken</h2>
+    <div class="card">
+      <form method="post" action="{{ url_for('admin_create_user') }}">
         <div class="grid grid-2">
-          <div class="form-group mb-0">
-            <label class="form-label" for="new-password-{{ account.id }}"
-              >Nieuw wachtwoord</label
-            >
+          <div class="form-group">
+            <label class="form-label" for="new-username">Gebruikersnaam</label>
             <input
               class="form-input"
-              id="new-password-{{ account.id }}"
-              name="new_password"
+              id="new-username"
+              name="username"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-email">E-mail</label>
+            <input
+              class="form-input"
+              id="new-email"
+              name="email"
+              type="email"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="grid grid-2">
+          <div class="form-group">
+            <label class="form-label" for="new-password">Wachtwoord</label>
+            <input
+              class="form-input"
+              id="new-password"
+              name="password"
               type="password"
               minlength="8"
-              placeholder="Minimaal 8 karakters"
               required
             />
             <button
               class="btn btn-ghost mt-sm"
               type="button"
-              data-generate-password="new-password-{{ account.id }}"
+              data-generate-password="new-password"
             >
               Genereer wachtwoord
             </button>
           </div>
-          <div class="form-group mb-0 row-end">
-            <button class="btn btn-secondary" type="submit">
-              Wachtwoord aanpassen
-            </button>
+          <div class="form-group">
+            <label class="form-label" for="new-is-admin">Rol</label>
+            <label class="form-checkbox" for="new-is-admin">
+              <input id="new-is-admin" name="is_admin" type="checkbox" />
+              <span>Maak dit account ook admin</span>
+            </label>
           </div>
         </div>
+
+        <div class="grid grid-3">
+          <div class="form-group">
+            <label class="form-label" for="new-blogs-limit"
+              >Blogs per maand</label
+            >
+            <input
+              class="form-input"
+              id="new-blogs-limit"
+              name="blogs_monthly_limit"
+              type="number"
+              min="1"
+              value="20"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-text-regens-limit"
+              >Tekst regeneraties per maand</label
+            >
+            <input
+              class="form-input"
+              id="new-text-regens-limit"
+              name="text_regen_monthly_limit"
+              type="number"
+              min="0"
+              value="20"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="new-image-regens-limit"
+              >Afbeelding regeneraties per afbeelding</label
+            >
+            <input
+              class="form-input"
+              id="new-image-regens-limit"
+              name="image_regen_limit"
+              type="number"
+              min="1"
+              value="3"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-checkbox" for="new-translation-enabled">
+            <input
+              id="new-translation-enabled"
+              name="translation_enabled"
+              type="checkbox"
+            />
+            <span>Vertalingen inschakelen</span>
+          </label>
+          <div class="form-help">
+            Stelt de gebruiker in staat om blogposts te vertalen naar andere
+            talen.
+          </div>
+        </div>
+
+        <button class="btn btn-primary" type="submit">Account aanmaken</button>
       </form>
     </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Accounts & Limieten</h2>
+
+    {% for account in users %}
+    <div class="card card-spaced-sm">
+      <div class="card-header card-header-wrap">
+        <div>
+          <h3 class="card-title">{{ account.username }}</h3>
+          <div class="form-help">{{ account.email }}</div>
+        </div>
+        <div class="status-badges">
+          {% if account.is_admin %}
+          <span class="badge badge-primary">Admin</span>
+          {% endif %} {% if account.is_active %}
+          <span class="badge badge-primary">Actief</span>
+          {% else %}
+          <span class="badge admin-badge-inactive">Inactief</span>
+          {% endif %}
+        </div>
+      </div>
+
+      <div class="card-body">
+        <form
+          method="post"
+          action="{{ url_for('admin_update_user_quota', user_id=account.id) }}"
+        >
+          <div class="grid grid-3">
+            <div class="form-group">
+              <label class="form-label" for="blogs-limit-{{ account.id }}"
+                >Blogs per maand</label
+              >
+              <input
+                class="form-input"
+                id="blogs-limit-{{ account.id }}"
+                name="blogs_monthly_limit"
+                type="number"
+                min="1"
+                value="{{ account.blogs_monthly_limit }}"
+                required
+              />
+              <div class="form-help">
+                Gebruikt: {{ account.blogs_used }} in {{ account.usage_month or
+                '-' }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="text-regens-limit-{{ account.id }}"
+                >Tekst regeneraties per maand</label
+              >
+              <input
+                class="form-input"
+                id="text-regens-limit-{{ account.id }}"
+                name="text_regen_monthly_limit"
+                type="number"
+                min="0"
+                value="{{ account.text_regen_monthly_limit }}"
+                required
+              />
+              <div class="form-help">
+                Gebruikt: {{ account.text_regen_used }} in {{
+                account.usage_month or '-' }}
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label
+                class="form-label"
+                for="image-regens-limit-{{ account.id }}"
+                >Afbeelding regeneraties per afbeelding</label
+              >
+              <input
+                class="form-input"
+                id="image-regens-limit-{{ account.id }}"
+                name="image_regen_limit"
+                type="number"
+                min="1"
+                value="{{ account.image_regen_limit }}"
+                required
+              />
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label
+              class="form-checkbox"
+              for="translation-enabled-{{ account.id }}"
+            >
+              <input
+                id="translation-enabled-{{ account.id }}"
+                name="translation_enabled"
+                type="checkbox"
+                {%
+                if
+                account.translation_enabled
+                %}checked{%
+                endif
+                %}
+              />
+              <span>Vertalingen inschakelen</span>
+            </label>
+          </div>
+
+          <button class="btn btn-secondary" type="submit">
+            Limieten opslaan
+          </button>
+        </form>
+
+        <hr class="rule-divider" />
+
+        <form
+          method="post"
+          action="{{ url_for('admin_update_user_password', user_id=account.id) }}"
+        >
+          <div class="grid grid-2">
+            <div class="form-group mb-0">
+              <label class="form-label" for="new-password-{{ account.id }}"
+                >Nieuw wachtwoord</label
+              >
+              <input
+                class="form-input"
+                id="new-password-{{ account.id }}"
+                name="new_password"
+                type="password"
+                minlength="8"
+                placeholder="Minimaal 8 karakters"
+                required
+              />
+              <button
+                class="btn btn-ghost mt-sm"
+                type="button"
+                data-generate-password="new-password-{{ account.id }}"
+              >
+                Genereer wachtwoord
+              </button>
+            </div>
+            <div class="form-group mb-0 row-end">
+              <button class="btn btn-secondary" type="submit">
+                Wachtwoord aanpassen
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+    {% else %}
+    <div class="card">
+      <p>Geen accounts gevonden.</p>
+    </div>
+    {% endfor %}
+  </section>
+</div>
+<!-- end accounts tab -->
+
+<!-- Bug Reports Tab -->
+<div class="admin-tab-content" data-admin-content="bugs">
+  <section class="section section-spaced">
+    <div class="bug-reports-toolbar">
+      <h2 class="section-title" style="margin-bottom: 0">Bug Reports</h2>
+      <div class="bug-reports-filters">
+        <select
+          class="form-input bug-reports-status-filter"
+          id="bug-reports-status-filter"
+        >
+          <option value="">Alle statussen</option>
+          <option value="open" selected>Open</option>
+          <option value="in_progress">In behandeling</option>
+          <option value="resolved">Opgelost</option>
+          <option value="closed">Gesloten</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="bug-reports-list" class="bug-reports-list">
+      <div class="card">
+        <p class="text-secondary text-center">Bug reports worden geladen...</p>
+      </div>
+    </div>
+  </section>
+</div>
+<!-- end bugs tab -->
+
+<!-- Changelogs Tab -->
+<div class="admin-tab-content" data-admin-content="changelogs">
+  <section class="section section-spaced">
+    <h2 class="section-title">Nieuwe Changelog Aanmaken</h2>
+    <div class="card">
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label class="form-label" for="cl-version">Versie</label>
+          <input
+            class="form-input"
+            id="cl-version"
+            placeholder="bijv. v2.4.0"
+            maxlength="50"
+          />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cl-title">Titel</label>
+          <input
+            class="form-input"
+            id="cl-title"
+            placeholder="Wat is er nieuw?"
+            maxlength="255"
+          />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cl-content">Inhoud (HTML)</label>
+        <textarea
+          class="form-input"
+          id="cl-content"
+          rows="8"
+          placeholder="<h3>Nieuwe features</h3><ul><li>Feature 1</li><li>Feature 2</li></ul>"
+        ></textarea>
+        <div class="form-help">
+          Je kunt HTML gebruiken: &lt;h3&gt;, &lt;ul&gt;, &lt;li&gt;, &lt;p&gt;,
+          &lt;strong&gt;, &lt;em&gt;, etc.
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-checkbox" for="cl-published">
+          <input id="cl-published" type="checkbox" checked />
+          <span
+            >Direct publiceren (gebruikers zien dit bij volgende bezoek)</span
+          >
+        </label>
+      </div>
+      <div class="changelog-form-actions">
+        <button class="btn btn-primary" id="cl-create-btn">
+          <span class="material-icons-outlined" style="font-size: 18px"
+            >add</span
+          >
+          Changelog aanmaken
+        </button>
+        <button class="btn btn-secondary" id="cl-preview-btn">
+          <span class="material-icons-outlined" style="font-size: 18px"
+            >visibility</span
+          >
+          Preview
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2 class="section-title">Bestaande Changelogs</h2>
+    <div id="changelogs-list">
+      <div class="card">
+        <p class="text-secondary text-center">Changelogs worden geladen...</p>
+      </div>
+    </div>
+  </section>
+</div>
+<!-- end changelogs tab -->
+
+<!-- Changelog Preview Modal (admin) -->
+<div class="bug-report-overlay" id="cl-preview-overlay">
+  <div class="changelog-modal">
+    <div class="changelog-modal-header">
+      <div class="changelog-modal-badge" id="cl-preview-version">v0.0</div>
+      <button class="modal-close" id="cl-preview-close">&times;</button>
+    </div>
+    <h2 class="changelog-modal-title" id="cl-preview-title">Preview</h2>
+    <div class="changelog-modal-body" id="cl-preview-body"></div>
+    <div class="changelog-modal-footer">
+      <button class="btn btn-primary" id="cl-preview-dismiss">Sluiten</button>
+    </div>
   </div>
-  {% else %}
-  <div class="card">
-    <p>Geen accounts gevonden.</p>
+</div>
+
+<!-- Changelog Edit Modal -->
+<div class="bug-report-overlay" id="cl-edit-overlay">
+  <div class="bug-report-modal" style="max-width: 580px">
+    <div class="bug-report-modal-header">
+      <div class="bug-report-modal-title-row">
+        <span class="material-icons-outlined bug-report-modal-icon">edit</span>
+        <h3 class="bug-report-modal-title">Changelog Bewerken</h3>
+      </div>
+      <button class="modal-close" id="cl-edit-close">&times;</button>
+    </div>
+    <div style="padding: 0 var(--spacing-xl) var(--spacing-xl)">
+      <input type="hidden" id="cl-edit-id" />
+      <div class="grid grid-2">
+        <div class="form-group">
+          <label class="form-label" for="cl-edit-version">Versie</label>
+          <input class="form-input" id="cl-edit-version" maxlength="50" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="cl-edit-title">Titel</label>
+          <input class="form-input" id="cl-edit-title" maxlength="255" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="cl-edit-content">Inhoud (HTML)</label>
+        <textarea class="form-input" id="cl-edit-content" rows="8"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-checkbox" for="cl-edit-published">
+          <input id="cl-edit-published" type="checkbox" />
+          <span>Gepubliceerd</span>
+        </label>
+      </div>
+      <div class="bug-report-modal-footer">
+        <button class="btn btn-secondary" id="cl-edit-cancel">Annuleren</button>
+        <button class="btn btn-primary" id="cl-edit-save">Opslaan</button>
+      </div>
+    </div>
   </div>
-  {% endfor %}
-</section>
+</div>
+
+<!-- Bug Report Detail Modal -->
+<div class="bug-report-overlay" id="bug-detail-overlay">
+  <div class="bug-report-modal bug-detail-modal">
+    <div class="bug-report-modal-header">
+      <div class="bug-report-modal-title-row">
+        <span class="material-icons-outlined bug-report-modal-icon"
+          >bug_report</span
+        >
+        <h3 class="bug-report-modal-title" id="bug-detail-title">Bug Report</h3>
+      </div>
+      <button class="modal-close" id="bug-detail-close">&times;</button>
+    </div>
+    <div class="bug-detail-body" id="bug-detail-body"></div>
+    <div class="bug-report-modal-footer">
+      <div class="bug-detail-actions">
+        <select
+          class="form-input"
+          id="bug-detail-status"
+          style="max-width: 200px"
+        >
+          <option value="open">Open</option>
+          <option value="in_progress">In behandeling</option>
+          <option value="resolved">Opgelost</option>
+          <option value="closed">Gesloten</option>
+        </select>
+        <textarea
+          class="form-input"
+          id="bug-detail-admin-notes"
+          placeholder="Admin notities (optioneel)..."
+          rows="2"
+          style="flex: 1"
+        ></textarea>
+      </div>
+      <div class="bug-detail-buttons">
+        <button type="button" class="btn btn-secondary" id="bug-detail-cancel">
+          Annuleren
+        </button>
+        <button type="button" class="btn btn-primary" id="bug-detail-save">
+          Opslaan
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   (function () {
     function generateStrongPassword(length) {
@@ -332,6 +567,356 @@ endblock %} {% block content %}
         }, 2000);
       });
     });
+
+    // ── Admin Tabs ──
+    const tabs = document.querySelectorAll("[data-admin-tab]");
+    const contents = document.querySelectorAll("[data-admin-content]");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabs.forEach((t) => t.classList.remove("active"));
+        contents.forEach((c) => c.classList.remove("active"));
+        tab.classList.add("active");
+        const target = document.querySelector(
+          `[data-admin-content="${tab.dataset.adminTab}"]`,
+        );
+        if (target) target.classList.add("active");
+        if (tab.dataset.adminTab === "bugs") loadBugReports();
+        if (tab.dataset.adminTab === "changelogs") loadChangelogs();
+      });
+    });
+
+    // ── Bug Reports Admin ──
+    const statusLabels = {
+      open: "Open",
+      in_progress: "In behandeling",
+      resolved: "Opgelost",
+      closed: "Gesloten",
+    };
+    const statusClasses = {
+      open: "badge-error",
+      in_progress: "badge-warning",
+      resolved: "badge-success",
+      closed: "badge-primary",
+    };
+    const categoryIcons = {
+      bug: "error_outline",
+      feature: "lightbulb",
+      ui: "palette",
+      performance: "speed",
+      other: "more_horiz",
+    };
+
+    async function loadBugReports() {
+      const list = document.getElementById("bug-reports-list");
+      const filter = document.getElementById("bug-reports-status-filter").value;
+      try {
+        const qs = filter ? `?status=${filter}` : "";
+        const resp = await fetch(`/api/admin/bug-reports${qs}`);
+        const data = await resp.json();
+        const reports = data.reports || [];
+        if (!reports.length) {
+          list.innerHTML =
+            '<div class="card"><p class="text-secondary text-center">Geen bug reports gevonden.</p></div>';
+          return;
+        }
+        list.innerHTML = reports
+          .map(
+            (r) => `
+          <div class="bug-report-card card card-spaced-sm" data-report-id="${r.id}">
+            <div class="card-header card-header-wrap" style="cursor: pointer;">
+              <div class="bug-report-card-left">
+                <span class="material-icons-outlined bug-report-card-icon">${categoryIcons[r.category] || "bug_report"}</span>
+                <div>
+                  <h3 class="card-title" style="margin-bottom: 2px;">${escapeH(r.title)}</h3>
+                  <div class="form-help">${escapeH(r.username)} &middot; ${formatDt(r.created_at)}</div>
+                </div>
+              </div>
+              <span class="badge ${statusClasses[r.status] || "badge-primary"}">${statusLabels[r.status] || r.status}</span>
+            </div>
+          </div>
+        `,
+          )
+          .join("");
+        list.querySelectorAll(".bug-report-card").forEach((card) => {
+          card.addEventListener("click", () =>
+            openBugDetail(reports.find((r) => r.id === +card.dataset.reportId)),
+          );
+        });
+      } catch (e) {
+        list.innerHTML =
+          '<div class="card"><p class="text-secondary text-center">Fout bij laden.</p></div>';
+      }
+    }
+
+    function escapeH(str) {
+      const d = document.createElement("div");
+      d.textContent = str || "";
+      return d.innerHTML;
+    }
+
+    function formatDt(iso) {
+      if (!iso) return "-";
+      const d = new Date(iso);
+      return d.toLocaleString("nl-NL", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    }
+
+    function openBugDetail(report) {
+      if (!report) return;
+      const overlay = document.getElementById("bug-detail-overlay");
+      document.getElementById("bug-detail-title").textContent = report.title;
+      document.getElementById("bug-detail-status").value = report.status;
+      document.getElementById("bug-detail-admin-notes").value =
+        report.admin_notes || "";
+
+      const body = document.getElementById("bug-detail-body");
+      body.innerHTML = `
+        <div class="bug-detail-meta">
+          <div><strong>Categorie:</strong> <span class="badge badge-primary">${escapeH(report.category)}</span></div>
+          <div><strong>Gemeld door:</strong> ${escapeH(report.username)} (${escapeH(report.email)})</div>
+          <div><strong>Pagina:</strong> ${escapeH(report.page_url || "-")}</div>
+          <div><strong>Datum:</strong> ${formatDt(report.created_at)}</div>
+        </div>
+        <div class="bug-detail-description">
+          <strong>Beschrijving:</strong>
+          <p>${escapeH(report.description)}</p>
+        </div>
+      `;
+      overlay.classList.add("active");
+      document.body.style.overflow = "hidden";
+
+      const closeModal = () => {
+        overlay.classList.remove("active");
+        document.body.style.overflow = "";
+      };
+
+      document.getElementById("bug-detail-close").onclick = closeModal;
+      document.getElementById("bug-detail-cancel").onclick = closeModal;
+      overlay.onclick = (e) => {
+        if (e.target === overlay) closeModal();
+      };
+
+      document.getElementById("bug-detail-save").onclick = async () => {
+        const newStatus = document.getElementById("bug-detail-status").value;
+        const notes = document.getElementById("bug-detail-admin-notes").value;
+        try {
+          await fetch(`/api/admin/bug-reports/${report.id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ status: newStatus, adminNotes: notes }),
+          });
+          closeModal();
+          loadBugReports();
+          loadBugBadge();
+        } catch (e) {
+          /* ignore */
+        }
+      };
+    }
+
+    async function loadBugBadge() {
+      try {
+        const resp = await fetch("/api/admin/bug-reports/counts");
+        const data = await resp.json();
+        const badge = document.getElementById("bug-report-tab-badge");
+        const openCount = data.open || 0;
+        if (badge) {
+          badge.textContent = openCount;
+          badge.style.display = openCount > 0 ? "" : "none";
+        }
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    document
+      .getElementById("bug-reports-status-filter")
+      .addEventListener("change", loadBugReports);
+    loadBugBadge();
+
+    // ── Changelogs Admin ──
+
+    async function loadChangelogs() {
+      const list = document.getElementById("changelogs-list");
+      try {
+        const resp = await fetch("/api/admin/changelogs");
+        const data = await resp.json();
+        const entries = data.changelogs || [];
+        if (!entries.length) {
+          list.innerHTML =
+            '<div class="card"><p class="text-secondary text-center">Nog geen changelogs aangemaakt.</p></div>';
+          return;
+        }
+        list.innerHTML = entries
+          .map(
+            (e) => `
+          <div class="card card-spaced-sm changelog-admin-card">
+            <div class="card-header card-header-wrap">
+              <div style="display:flex;align-items:center;gap:var(--spacing-sm);">
+                <span class="changelog-version-badge">${escapeH(e.version)}</span>
+                <div>
+                  <h3 class="card-title" style="margin-bottom:2px;">${escapeH(e.title)}</h3>
+                  <div class="form-help">${escapeH(e.author || "")} &middot; ${formatDt(e.created_at)}</div>
+                </div>
+              </div>
+              <div class="status-badges" style="display:flex;gap:var(--spacing-sm);align-items:center;">
+                ${e.published ? '<span class="badge badge-success">Live</span>' : '<span class="badge badge-primary">Concept</span>'}
+                <button class="btn btn-ghost btn-sm changelog-edit-btn" data-id="${e.id}" title="Bewerken">
+                  <span class="material-icons-outlined" style="font-size:18px;">edit</span>
+                </button>
+                <button class="btn btn-ghost btn-sm changelog-delete-btn" data-id="${e.id}" title="Verwijderen">
+                  <span class="material-icons-outlined" style="font-size:18px;color:var(--color-error);">delete</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        `,
+          )
+          .join("");
+
+        list.querySelectorAll(".changelog-edit-btn").forEach((btn) => {
+          btn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            const entry = entries.find((e) => e.id === +btn.dataset.id);
+            if (entry) openEditChangelog(entry);
+          });
+        });
+
+        list.querySelectorAll(".changelog-delete-btn").forEach((btn) => {
+          btn.addEventListener("click", async (ev) => {
+            ev.stopPropagation();
+            if (
+              !confirm("Weet je zeker dat je deze changelog wilt verwijderen?")
+            )
+              return;
+            try {
+              await fetch(`/api/admin/changelogs/${btn.dataset.id}`, {
+                method: "DELETE",
+              });
+              loadChangelogs();
+            } catch (e) {
+              /* ignore */
+            }
+          });
+        });
+      } catch (e) {
+        list.innerHTML =
+          '<div class="card"><p class="text-secondary text-center">Fout bij laden.</p></div>';
+      }
+    }
+
+    // Create changelog
+    document
+      .getElementById("cl-create-btn")
+      .addEventListener("click", async () => {
+        const version = document.getElementById("cl-version").value.trim();
+        const title = document.getElementById("cl-title").value.trim();
+        const contentHtml = document.getElementById("cl-content").value.trim();
+        const published = document.getElementById("cl-published").checked;
+
+        if (!version || !title || !contentHtml) {
+          alert("Vul versie, titel en inhoud in.");
+          return;
+        }
+
+        const btn = document.getElementById("cl-create-btn");
+        btn.disabled = true;
+        try {
+          await fetch("/api/admin/changelogs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ version, title, contentHtml, published }),
+          });
+          document.getElementById("cl-version").value = "";
+          document.getElementById("cl-title").value = "";
+          document.getElementById("cl-content").value = "";
+          loadChangelogs();
+        } catch (e) {
+          /* ignore */
+        }
+        btn.disabled = false;
+      });
+
+    // Preview changelog
+    document.getElementById("cl-preview-btn").addEventListener("click", () => {
+      const version =
+        document.getElementById("cl-version").value.trim() || "v0.0";
+      const title =
+        document.getElementById("cl-title").value.trim() || "Preview";
+      const contentHtml =
+        document.getElementById("cl-content").value.trim() ||
+        "<p>Geen inhoud</p>";
+      showChangelogPreview(version, title, contentHtml);
+    });
+
+    function showChangelogPreview(version, title, contentHtml) {
+      document.getElementById("cl-preview-version").textContent = version;
+      document.getElementById("cl-preview-title").textContent = title;
+      document.getElementById("cl-preview-body").innerHTML = contentHtml;
+      const overlay = document.getElementById("cl-preview-overlay");
+      overlay.classList.add("active");
+      document.body.style.overflow = "hidden";
+      const close = () => {
+        overlay.classList.remove("active");
+        document.body.style.overflow = "";
+      };
+      document.getElementById("cl-preview-close").onclick = close;
+      document.getElementById("cl-preview-dismiss").onclick = close;
+      overlay.onclick = (e) => {
+        if (e.target === overlay) close();
+      };
+    }
+
+    // Edit changelog modal
+    function openEditChangelog(entry) {
+      document.getElementById("cl-edit-id").value = entry.id;
+      document.getElementById("cl-edit-version").value = entry.version;
+      document.getElementById("cl-edit-title").value = entry.title;
+      document.getElementById("cl-edit-content").value = entry.content_html;
+      document.getElementById("cl-edit-published").checked = !!entry.published;
+      const overlay = document.getElementById("cl-edit-overlay");
+      overlay.classList.add("active");
+      document.body.style.overflow = "hidden";
+      const close = () => {
+        overlay.classList.remove("active");
+        document.body.style.overflow = "";
+      };
+      document.getElementById("cl-edit-close").onclick = close;
+      document.getElementById("cl-edit-cancel").onclick = close;
+      overlay.onclick = (e) => {
+        if (e.target === overlay) close();
+      };
+
+      document.getElementById("cl-edit-save").onclick = async () => {
+        const id = document.getElementById("cl-edit-id").value;
+        const version = document.getElementById("cl-edit-version").value.trim();
+        const title = document.getElementById("cl-edit-title").value.trim();
+        const contentHtml = document
+          .getElementById("cl-edit-content")
+          .value.trim();
+        const published = document.getElementById("cl-edit-published").checked;
+        if (!version || !title || !contentHtml) {
+          alert("Vul alle velden in.");
+          return;
+        }
+        try {
+          await fetch(`/api/admin/changelogs/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ version, title, contentHtml, published }),
+          });
+          close();
+          loadChangelogs();
+        } catch (e) {
+          /* ignore */
+        }
+      };
+    }
   })();
 </script>
 {% endblock %}

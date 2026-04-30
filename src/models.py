@@ -56,7 +56,7 @@ class ConnectSiteRequest(BaseModel):
 
 
 class GeneratePostRequest(BaseModel):
-    siteId: str
+    siteId: Optional[str] = None
     topic: str
     audience: Audience
     toneOfVoice: ToneOfVoice

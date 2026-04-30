@@ -55,6 +55,27 @@ def generate_post_content(
             },
         )
 
+    # Build internal links section if links exist
+    internal_links_section = ""
+    if internal_link_targets:
+        link_lines = []
+        for lt in internal_link_targets:
+            title = lt.get("title", lt.get("label", ""))
+            url = lt.get("url", "")
+            desc = lt.get("description", "")
+            entry = f"- [{title}]({url})"
+            if desc:
+                entry += f" — {desc}"
+            link_lines.append(entry)
+        internal_links_section = (
+            "### INTERNE LINKS\n"
+            "Verwerk de volgende links op een natuurlijke manier in de tekst. "
+            "Gebruik ze als inline hyperlinks (<a href=\"...\">ankertekst</a>) waar ze thematisch passen. "
+            "Je hoeft niet alle links te gebruiken — kies de meest relevante. "
+            "Forceer geen links; ze moeten de lezer echte meerwaarde bieden.\n\n"
+            + "\n".join(link_lines)
+        )
+
     # Build system prompt from template
     system_prompt_template = load_prompt_template(
         "text_openai_system_prompt.txt")
@@ -69,6 +90,7 @@ def generate_post_content(
             "secondary_keywords": ", ".join(seo.get("secondaryKeywords", [])),
             "tone_style": ", ".join(tone_of_voice.get("style", [])),
             "audience_level": audience.get("level", "intermediate"),
+            "internal_links_section": internal_links_section,
         },
     )
 

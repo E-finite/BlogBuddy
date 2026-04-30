@@ -1,5 +1,150 @@
 <footer class="footer">
-  <div class="container">
-
-  </div>
+  <div class="container"></div>
 </footer>
+
+<!-- Bug Report Floating Button -->
+<button
+  class="bug-report-fab"
+  id="bug-report-fab"
+  title="Bug melden"
+  aria-label="Bug melden"
+>
+  <span class="material-icons-outlined">bug_report</span>
+</button>
+
+<!-- Bug Report Modal -->
+<div class="bug-report-overlay" id="bug-report-overlay">
+  <div class="bug-report-modal">
+    <div class="bug-report-modal-header">
+      <div class="bug-report-modal-title-row">
+        <span class="material-icons-outlined bug-report-modal-icon"
+          >bug_report</span
+        >
+        <h3 class="bug-report-modal-title">Feedback & Bug Report</h3>
+      </div>
+      <button class="modal-close" id="bug-report-close">&times;</button>
+    </div>
+
+    <form id="bug-report-form" class="bug-report-form">
+      <div class="bug-report-category-grid">
+        <label class="bug-report-category-option">
+          <input type="radio" name="bug-category" value="bug" checked />
+          <div class="bug-report-category-card">
+            <span class="material-icons-outlined">error_outline</span>
+            <span>Bug</span>
+          </div>
+        </label>
+        <label class="bug-report-category-option">
+          <input type="radio" name="bug-category" value="feature" />
+          <div class="bug-report-category-card">
+            <span class="material-icons-outlined">lightbulb</span>
+            <span>Feature</span>
+          </div>
+        </label>
+        <label class="bug-report-category-option">
+          <input type="radio" name="bug-category" value="ui" />
+          <div class="bug-report-category-card">
+            <span class="material-icons-outlined">palette</span>
+            <span>UI/Design</span>
+          </div>
+        </label>
+        <label class="bug-report-category-option">
+          <input type="radio" name="bug-category" value="performance" />
+          <div class="bug-report-category-card">
+            <span class="material-icons-outlined">speed</span>
+            <span>Snelheid</span>
+          </div>
+        </label>
+        <label class="bug-report-category-option">
+          <input type="radio" name="bug-category" value="other" />
+          <div class="bug-report-category-card">
+            <span class="material-icons-outlined">more_horiz</span>
+            <span>Anders</span>
+          </div>
+        </label>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bug-report-title">Titel</label>
+        <input
+          class="form-input"
+          id="bug-report-title"
+          name="title"
+          required
+          placeholder="Korte beschrijving van het probleem"
+          maxlength="255"
+        />
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="bug-report-description"
+          >Beschrijving</label
+        >
+        <textarea
+          class="form-input bug-report-textarea"
+          id="bug-report-description"
+          name="description"
+          required
+          placeholder="Beschrijf wat er gebeurde, wat je verwachtte, en eventuele stappen om het te reproduceren..."
+          maxlength="5000"
+          rows="5"
+        ></textarea>
+        <div class="form-help bug-report-char-count">
+          <span id="bug-report-char-count">0</span> / 5000
+        </div>
+      </div>
+
+      <input type="hidden" id="bug-report-page-url" name="pageUrl" />
+
+      <div class="bug-report-modal-footer">
+        <button type="button" class="btn btn-secondary" id="bug-report-cancel">
+          Annuleren
+        </button>
+        <button type="submit" class="btn btn-primary" id="bug-report-submit">
+          <span class="material-icons-outlined" style="font-size: 18px"
+            >send</span
+          >
+          Versturen
+        </button>
+      </div>
+    </form>
+
+    <div
+      class="bug-report-success"
+      id="bug-report-success"
+      style="display: none"
+    >
+      <div class="bug-report-success-icon">
+        <span class="material-icons-outlined">check_circle</span>
+      </div>
+      <h3>Bedankt voor je feedback!</h3>
+      <p>Je melding is ontvangen en wordt zo snel mogelijk bekeken.</p>
+      <button type="button" class="btn btn-primary" id="bug-report-done">
+        Sluiten
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Changelog Popup Modal (shown to users) -->
+<div class="bug-report-overlay" id="changelog-overlay">
+  <div class="changelog-modal">
+    <div class="changelog-modal-header">
+      <div class="changelog-modal-badge" id="changelog-version"></div>
+      <button class="modal-close" id="changelog-close">&times;</button>
+    </div>
+    <div class="changelog-modal-sparkle">
+      <span class="material-icons-outlined">auto_awesome</span>
+    </div>
+    <h2 class="changelog-modal-title" id="changelog-title"></h2>
+    <div class="changelog-modal-body" id="changelog-body"></div>
+    <div class="changelog-modal-footer">
+      <button class="btn btn-primary" id="changelog-dismiss">
+        <span class="material-icons-outlined" style="font-size: 18px"
+          >check</span
+        >
+        Begrepen!
+      </button>
+    </div>
+  </div>
+</div>

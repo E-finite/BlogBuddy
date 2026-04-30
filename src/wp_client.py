@@ -153,6 +153,27 @@ def set_yoast_meta(site: Dict[str, Any], post_id: int, focuskw: str, seo_title: 
     return response.json()
 
 
+def check_translation_plugin(site: Dict[str, Any]) -> Dict[str, Any]:
+    """Check if a translation plugin (Polylang/WPML/TranslatePress) is active on the WordPress site."""
+    wp_base_url = site["wp_base_url"]
+    username = site["wp_username"]
+    app_password = crypto_utils.decrypt(site["wp_app_password_enc"])
+
+    url = f"{wp_base_url}/wp-json/blogbuddy/v1/link-translations"
+    auth = HTTPBasicAuth(username, app_password)
+
+    try:
+        # OPTIONS/GET to check if the endpoint exists without side-effects
+        response = _retry_request(lambda: requests.get(
+            url, auth=auth, timeout=15))
+        if response.status_code == 404:
+            return {"available": False}
+        return {"available": True}
+    except Exception as e:
+        logger.warning(f"Could not check translation plugin: {e}")
+        return {"available": False}
+
+
 def link_polylang_translations(site: Dict[str, Any], translations_map: Dict[str, int]) -> Dict[str, Any]:
     """Link Polylang translations via custom endpoint."""
     wp_base_url = site["wp_base_url"]

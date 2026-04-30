@@ -38,9 +38,42 @@ def execute_publish_job(job_id: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         else:
             result["errors"].append("Failed to publish single draft")
     elif "drafts" in payload:
-        # Multi-language drafts
+        drafts = payload["drafts"]
+        original_lang = next(iter(drafts))  # First language is the original
+
+        # If there are translations, check if the translation plugin is active
+        if len(drafts) > 1:
+            db.add_job_step(job_id, "check_translation_plugin", "running")
+            plugin_check = wp_client.check_translation_plugin(site)
+
+            if not plugin_check.get("available"):
+                # No translation plugin — only publish the original
+                logger.warning(
+                    "No translation plugin detected on WordPress. "
+                    "Publishing only the original language.")
+                db.add_job_step(
+                    job_id, "check_translation_plugin", "skipped",
+                    {"reason": "no_translation_plugin"})
+
+                skipped_langs = [l for l in drafts if l != original_lang]
+                result["warnings"] = result.get("warnings", [])
+                result["warnings"].append(
+                    f"Er is geen vertaal-plugin (Polylang, WPML of TranslatePress) "
+                    f"gedetecteerd op je WordPress site. "
+                    f"Alleen de originele versie ({original_lang}) is gepubliceerd. "
+                    f"De vertalingen ({', '.join(skipped_langs)}) zijn overgeslagen. "
+                    f"Installeer en activeer een vertaal-plugin om vertalingen te publiceren."
+                )
+
+                # Publish only original
+                drafts = {original_lang: drafts[original_lang]}
+            else:
+                db.add_job_step(
+                    job_id, "check_translation_plugin", "success")
+
+        # Publish each language draft
         translations_map = {}
-        for lang, draft in payload["drafts"].items():
+        for lang, draft in drafts.items():
             try:
                 post_id = _publish_single_draft(site, draft, job_id, lang)
                 if post_id:

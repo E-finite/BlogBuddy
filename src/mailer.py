@@ -10,12 +10,17 @@ logger = logging.getLogger(__name__)
 
 
 def build_reset_password_url(token: str, request_base_url: str | None = None) -> str:
-    """Build an absolute reset-password URL."""
+    """Build an absolute reset-password URL.
+
+    Uses APP_PUBLIC_URL (env) when set, falls back to the request base URL.
+    """
     base_url = config.APP_PUBLIC_URL or (
         request_base_url or "").strip().rstrip("/")
     if not base_url:
         raise ValueError(
-            "APP_PUBLIC_URL of request base URL is vereist voor reset-links")
+            "APP_PUBLIC_URL of request base URL is vereist voor reset-links. "
+            "Stel APP_PUBLIC_URL in als environment variabele, bijv. https://blogbuddy.cloud"
+        )
     return f"{base_url}/reset-password/{token}"
 
 

@@ -621,6 +621,68 @@ def init_db():
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     """)
 
+    # Changelogs table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS changelogs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            version VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            content_html LONGTEXT NOT NULL,
+            created_by INT NOT NULL,
+            published TINYINT(1) NOT NULL DEFAULT 1,
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_created (created_at),
+            INDEX idx_published (published)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+    # Changelog dismissals – tracks which user has seen which changelog
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS changelog_dismissals (
+            user_id INT NOT NULL,
+            changelog_id INT NOT NULL,
+            dismissed_at DATETIME NOT NULL,
+            PRIMARY KEY (user_id, changelog_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY (changelog_id) REFERENCES changelogs(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+    # Bug reports table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS bug_reports (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            category VARCHAR(50) NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            description TEXT NOT NULL,
+            page_url VARCHAR(500),
+            status ENUM('open', 'in_progress', 'resolved', 'closed') DEFAULT 'open',
+            admin_notes TEXT,
+            created_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id),
+            INDEX idx_status (status),
+            INDEX idx_created (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
+    # Link library table – user’s internal links for AI blog generation
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS link_library (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            user_id INT NOT NULL,
+            url VARCHAR(500) NOT NULL,
+            label VARCHAR(255) NOT NULL,
+            description VARCHAR(500),
+            created_at DATETIME NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+            INDEX idx_user_id (user_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    """)
+
     # Backfill quota rows for existing users
     try:
         current_month = datetime.utcnow().strftime("%Y-%m")
@@ -2061,3 +2123,253 @@ def update_draft_translation(
     conn.close()
 
     return updated
+
+
+# ── Bug Reports ──────────────────────────────────────────────────────────
+
+def create_bug_report(user_id: int, category: str, title: str, description: str, page_url: Optional[str] = None) -> int:
+    """Create a new bug report and return its id."""
+    conn = _require_db_connection("create_bug_report")
+    cursor = conn.cursor()
+    now = datetime.utcnow()
+    cursor.execute("""
+        INSERT INTO bug_reports (user_id, category, title, description, page_url, status, created_at, updated_at)
+        VALUES (%s, %s, %s, %s, %s, 'open', %s, %s)
+    """, (user_id, category, title, description, page_url, now, now))
+    report_id = cursor.lastrowid
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return report_id
+
+
+def get_all_bug_reports(status_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return all bug reports (admin view), optionally filtered by status."""
+    conn = _require_db_connection("get_all_bug_reports")
+    cursor = conn.cursor(dictionary=True)
+    if status_filter and status_filter in ('open', 'in_progress', 'resolved', 'closed'):
+        cursor.execute("""
+            SELECT br.*, u.username, u.email
+            FROM bug_reports br
+            JOIN users u ON u.id = br.user_id
+            WHERE br.status = %s
+            ORDER BY br.created_at DESC
+        """, (status_filter,))
+    else:
+        cursor.execute("""
+            SELECT br.*, u.username, u.email
+            FROM bug_reports br
+            JOIN users u ON u.id = br.user_id
+            ORDER BY br.created_at DESC
+        """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_bug_report(report_id: int) -> Optional[Dict[str, Any]]:
+    """Return a single bug report by id."""
+    conn = _require_db_connection("get_bug_report")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT br.*, u.username, u.email
+        FROM bug_reports br
+        JOIN users u ON u.id = br.user_id
+        WHERE br.id = %s
+    """, (report_id,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row
+
+
+def update_bug_report_status(report_id: int, status: str, admin_notes: Optional[str] = None) -> bool:
+    """Update the status (and optional admin notes) of a bug report."""
+    if status not in ('open', 'in_progress', 'resolved', 'closed'):
+        raise ValueError(f"Invalid bug report status: {status}")
+    conn = _require_db_connection("update_bug_report_status")
+    cursor = conn.cursor()
+    now = datetime.utcnow()
+    if admin_notes is not None:
+        cursor.execute("""
+            UPDATE bug_reports SET status = %s, admin_notes = %s, updated_at = %s WHERE id = %s
+        """, (status, admin_notes, now, report_id))
+    else:
+        cursor.execute("""
+            UPDATE bug_reports SET status = %s, updated_at = %s WHERE id = %s
+        """, (status, now, report_id))
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return updated
+
+
+def get_bug_report_counts() -> Dict[str, int]:
+    """Return counts per status for the admin badge."""
+    conn = _require_db_connection("get_bug_report_counts")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT status, COUNT(*) as cnt FROM bug_reports GROUP BY status
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    counts = {r['status']: r['cnt'] for r in rows}
+    counts['total'] = sum(counts.values())
+    return counts
+
+
+# ── Changelogs ────────────────────────────────────────────────────────────
+
+def create_changelog(created_by: int, version: str, title: str, content_html: str, published: bool = True) -> int:
+    """Create a new changelog entry and return its id."""
+    conn = _require_db_connection("create_changelog")
+    cursor = conn.cursor()
+    now = datetime.utcnow()
+    cursor.execute("""
+        INSERT INTO changelogs (version, title, content_html, created_by, published, created_at)
+        VALUES (%s, %s, %s, %s, %s, %s)
+    """, (version, title, content_html, created_by, int(published), now))
+    changelog_id = cursor.lastrowid
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return changelog_id
+
+
+def update_changelog(changelog_id: int, version: str, title: str, content_html: str, published: bool = True) -> bool:
+    """Update an existing changelog entry."""
+    conn = _require_db_connection("update_changelog")
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE changelogs SET version = %s, title = %s, content_html = %s, published = %s
+        WHERE id = %s
+    """, (version, title, content_html, int(published), changelog_id))
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return updated
+
+
+def delete_changelog(changelog_id: int) -> bool:
+    """Delete a changelog entry."""
+    conn = _require_db_connection("delete_changelog")
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM changelogs WHERE id = %s", (changelog_id,))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return deleted
+
+
+def get_all_changelogs() -> List[Dict[str, Any]]:
+    """Return all changelogs ordered newest first (admin view)."""
+    conn = _require_db_connection("get_all_changelogs")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT c.*, u.username as author
+        FROM changelogs c
+        JOIN users u ON u.id = c.created_by
+        ORDER BY c.created_at DESC
+    """)
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def get_unseen_changelogs(user_id: int) -> List[Dict[str, Any]]:
+    """Return published changelogs the user has not dismissed yet."""
+    conn = _require_db_connection("get_unseen_changelogs")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT c.*
+        FROM changelogs c
+        LEFT JOIN changelog_dismissals cd ON cd.changelog_id = c.id AND cd.user_id = %s
+        WHERE c.published = 1 AND cd.user_id IS NULL
+        ORDER BY c.created_at DESC
+    """, (user_id,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def dismiss_changelog(user_id: int, changelog_id: int) -> None:
+    """Mark a changelog as seen/dismissed for a user."""
+    conn = _require_db_connection("dismiss_changelog")
+    cursor = conn.cursor()
+    now = datetime.utcnow()
+    cursor.execute("""
+        INSERT IGNORE INTO changelog_dismissals (user_id, changelog_id, dismissed_at)
+        VALUES (%s, %s, %s)
+    """, (user_id, changelog_id, now))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+
+# ── Link Library ──────────────────────────────────────────────────────────
+
+def create_link(user_id: int, url: str, label: str, description: Optional[str] = None) -> int:
+    """Add a link to the user’s link library."""
+    conn = _require_db_connection("create_link")
+    cursor = conn.cursor()
+    now = datetime.utcnow()
+    cursor.execute("""
+        INSERT INTO link_library (user_id, url, label, description, created_at)
+        VALUES (%s, %s, %s, %s, %s)
+    """, (user_id, url, label, description, now))
+    link_id = cursor.lastrowid
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return link_id
+
+
+def get_user_links(user_id: int) -> List[Dict[str, Any]]:
+    """Return all links for a user."""
+    conn = _require_db_connection("get_user_links")
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT id, url, label, description, created_at
+        FROM link_library
+        WHERE user_id = %s
+        ORDER BY created_at DESC
+    """, (user_id,))
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return rows
+
+
+def update_link(link_id: int, user_id: int, url: str, label: str, description: Optional[str] = None) -> bool:
+    """Update a link in the user’s library."""
+    conn = _require_db_connection("update_link")
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE link_library SET url = %s, label = %s, description = %s
+        WHERE id = %s AND user_id = %s
+    """, (url, label, description, link_id, user_id))
+    updated = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return updated
+
+
+def delete_link(link_id: int, user_id: int) -> bool:
+    """Remove a link from the user’s library."""
+    conn = _require_db_connection("delete_link")
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM link_library WHERE id = %s AND user_id = %s", (link_id, user_id))
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return deleted

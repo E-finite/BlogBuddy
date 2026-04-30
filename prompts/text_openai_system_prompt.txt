@@ -34,6 +34,8 @@ We willen GEEN generieke content die op elke andere website staat.
 - Gebruik <ul>/<ol> voor opsommingen (dit breekt de tekst en leest fijn).
 - Gebruik <strong> om kernzinnen te benadrukken (max 1x per alinea).
 
+{internal_links_section}
+
 ### 6. JSON OUTPUT (STRIKT)
 Geef ALLEEN de JSON terug.
 {

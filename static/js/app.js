@@ -32,6 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
   safeInit('initGeneratePost', initGeneratePost);
   safeInit('initPublishPost', initPublishPost);
   safeInit('initJobsView', initJobsView);
+  safeInit('initBugReportModal', initBugReportModal);
+  safeInit('checkUnseenChangelogs', checkUnseenChangelogs);
+  safeInit('initLinkLibrary', initLinkLibrary);
   
   // Check API health
   safeInit('checkHealth', checkHealth);
@@ -736,25 +739,32 @@ function initGeneratePost() {
   
   // Handle existing site selection
   const confirmSiteBtn = document.getElementById('confirm-site-btn');
+  const deleteContextSiteBtn = document.getElementById('delete-context-site-btn');
   
   if (existingSiteSelect) {
     existingSiteSelect.addEventListener('change', () => {
       const selectedSiteId = existingSiteSelect.value;
       if (selectedSiteId) {
-        // Show confirmation button
+        // Show action buttons
         if (confirmSiteBtn) {
-          confirmSiteBtn.style.display = 'block';
+          confirmSiteBtn.classList.remove('hidden');
           confirmSiteBtn.disabled = false;
           confirmSiteBtn.textContent = 'Gebruik deze website';
+        }
+        if (deleteContextSiteBtn) {
+          deleteContextSiteBtn.classList.remove('hidden');
         }
         contextUrlInput.value = ''; // Clear URL input
         crawlBtn.style.display = 'none';
         contextStatusDiv.style.display = 'none';
         contextSiteId = null; // Don't set yet, wait for confirmation
       } else {
-        // Hide confirmation button if no selection
+        // Hide action buttons if no selection
         if (confirmSiteBtn) {
-          confirmSiteBtn.style.display = 'none';
+          confirmSiteBtn.classList.add('hidden');
+        }
+        if (deleteContextSiteBtn) {
+          deleteContextSiteBtn.classList.add('hidden');
         }
         contextStatusDiv.style.display = 'none';
         contextSiteId = null;
@@ -776,9 +786,10 @@ function initGeneratePost() {
     }
 
     if (selectedSiteId && confirmSiteBtn) {
-      confirmSiteBtn.style.display = 'block';
+      confirmSiteBtn.classList.remove('hidden');
       confirmSiteBtn.disabled = false;
       confirmSiteBtn.textContent = 'Gebruik deze website';
+      if (deleteContextSiteBtn) deleteContextSiteBtn.classList.remove('hidden');
       crawlBtn.style.display = 'none';
     }
   }
@@ -830,6 +841,42 @@ function initGeneratePost() {
         // Re-enable button
         confirmSiteBtn.textContent = 'Gebruik deze website';
         confirmSiteBtn.disabled = false;
+      }
+    });
+  }
+  
+  // Handle context site deletion
+  if (deleteContextSiteBtn) {
+    deleteContextSiteBtn.addEventListener('click', async () => {
+      const selectedSiteId = existingSiteSelect.value;
+      if (!selectedSiteId) return;
+
+      const selectedOption = existingSiteSelect.options[existingSiteSelect.selectedIndex];
+      if (!confirm(`Weet je zeker dat je "${selectedOption.textContent}" wilt verwijderen? Alle gecrawlde pagina's en Site DNA worden ook verwijderd.`)) return;
+
+      deleteContextSiteBtn.disabled = true;
+      try {
+        const response = await fetch(`/api/context-sites/${selectedSiteId}`, { method: 'DELETE' });
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Verwijderen mislukt');
+        }
+
+        // Reset state if this was the active context site
+        if (contextSiteId === selectedSiteId) {
+          contextSiteId = null;
+          sessionStorage.removeItem('contextSiteId');
+          contextStatusDiv.style.display = 'none';
+        }
+
+        showAlert('Website en bijbehorende data verwijderd.', 'success');
+        confirmSiteBtn.classList.add('hidden');
+        deleteContextSiteBtn.classList.add('hidden');
+        await loadContextSites();
+      } catch (error) {
+        showAlert(error.message || 'Fout bij verwijderen', 'error');
+      } finally {
+        deleteContextSiteBtn.disabled = false;
       }
     });
   }
@@ -916,9 +963,12 @@ function initGeneratePost() {
         }
         // Hide and reset confirmation button
         if (confirmSiteBtn) {
-          confirmSiteBtn.style.display = 'none';
+          confirmSiteBtn.classList.add('hidden');
           confirmSiteBtn.disabled = false;
           confirmSiteBtn.textContent = 'Gebruik deze website';
+        }
+        if (deleteContextSiteBtn) {
+          deleteContextSiteBtn.classList.add('hidden');
         }
       } else {
         crawlBtn.style.display = 'none';
@@ -995,6 +1045,17 @@ function initGeneratePost() {
           
           // Refresh the dropdown with newly crawled site
           await loadContextSites();
+
+          // Auto-select the newly crawled site in dropdown
+          if (existingSiteSelect && contextSiteId) {
+            existingSiteSelect.value = contextSiteId;
+            if (confirmSiteBtn) {
+              confirmSiteBtn.classList.add('hidden');
+            }
+            if (deleteContextSiteBtn) {
+              deleteContextSiteBtn.classList.remove('hidden');
+            }
+          }
           
           // Auto-fill form with Site DNA
           if (data.site_dna_generated) {
@@ -1023,12 +1084,7 @@ function initGeneratePost() {
     const formData = new FormData(form);
     
     // Use context site ID if available, otherwise use session
-    let siteId = contextSiteId || sessionStorage.getItem('currentSiteId');
-    
-    if (!siteId) {
-      showAlert('Geen site geselecteerd. Verbind eerst een WordPress site of vul een website URL in voor context.', 'error');
-      return;
-    }
+    let siteId = contextSiteId || sessionStorage.getItem('currentSiteId') || null;
     
     // Build payload
     const payload = {
@@ -1049,7 +1105,7 @@ function initGeneratePost() {
       seo: {
         focusKeyword: formData.get('focusKeyword'),
         secondaryKeywords: formData.get('secondaryKeywords')?.split(',').map(s => s.trim()).filter(Boolean) || [],
-        internalLinkTargets: [],
+        internalLinkTargets: userLinks.map(l => ({ title: l.label, url: l.url, description: l.description || '' })),
         metaTitlePattern: formData.get('metaTitlePattern') || '{topic} | {brand}',
         metaDescMaxLen: parseInt(formData.get('metaDescMaxLen')) || 155,
       },
@@ -1297,7 +1353,7 @@ function initPublishPost() {
           } else if (job) {
             showAlert('Blog post gepubliceerd!', 'success');
             if (job.result?.wpPostIds) {
-              showPublishSuccess(job.result.wpPostIds);
+              showPublishSuccess(job.result.wpPostIds, job.result.warnings);
             }
           }
         }
@@ -1777,6 +1833,16 @@ function updateJobStatus(job) {
   const errorJson = job.error
     ? `<pre class="dashboard-status-pre">${escapeHtml(JSON.stringify(job.error, null, 2))}</pre>`
     : '';
+  const warnings = job.result?.warnings || [];
+  const warningsHtml = warnings.length > 0
+    ? `<div style="padding:var(--spacing-md);border-radius:var(--radius-md);background:rgba(255,152,0,0.1);border:1px solid rgba(255,152,0,0.3);margin-bottom:var(--spacing-md)">
+        <strong style="display:flex;align-items:center;gap:4px;margin-bottom:4px;color:var(--text-primary)">
+          <span class="material-icons-outlined" style="font-size:1.1rem;color:#ff9800">warning</span>
+          Waarschuwingen
+        </strong>
+        ${warnings.map(w => `<p style="margin:0;font-size:0.9rem;color:var(--text-secondary)">${escapeHtml(w)}</p>`).join('')}
+      </div>`
+    : '';
   const steps = Array.isArray(job.steps) ? job.steps : [];
   const stepsHtml = steps.length > 0
     ? `
@@ -1802,6 +1868,8 @@ function updateJobStatus(job) {
           <span>${safe(job.type || '-')}</span>
         </div>
       </div>
+
+      ${warningsHtml}
 
       ${resultJson ? `
         <div>
@@ -2204,12 +2272,23 @@ function selectImageVariation(index) {
 // Make function globally available
 window.selectImageVariation = selectImageVariation;
 
-function showPublishSuccess(wpPostIds) {
+function showPublishSuccess(wpPostIds, warnings) {
+  const warningsHtml = warnings && warnings.length
+    ? `<div class="alert alert-warning" style="margin-top:var(--spacing-md);padding:var(--spacing-md);border-radius:var(--radius-md);background:rgba(255,152,0,0.1);border:1px solid rgba(255,152,0,0.3);color:var(--text-primary);font-size:0.9rem">
+        <strong style="display:flex;align-items:center;gap:4px;margin-bottom:4px">
+          <span class="material-icons-outlined" style="font-size:1.1rem;color:#ff9800">warning</span>
+          Let op
+        </strong>
+        ${warnings.map(w => `<p style="margin:0">${escapeHtml(w)}</p>`).join('')}
+      </div>`
+    : '';
+
   const content = `
     <p>Blog post(s) succesvol gepubliceerd!</p>
     <ul>
       ${Object.entries(wpPostIds).map(([lang, id]) => `<li><strong>${lang}:</strong> Post ID ${id}</li>`).join('')}
     </ul>
+    ${warningsHtml}
   `;
   
   showModal('Publicatie Succesvol', content, '<button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">Sluiten</button>');
@@ -2772,3 +2851,260 @@ async function updateTranslationBadges() {
 
 // Make translation functions globally available
 window.openTranslateModal = openTranslateModal;
+
+
+// ── Link Library ────────────────────────────────────────────────────────
+
+let userLinks = [];
+let editingLinkId = null;
+
+async function initLinkLibrary() {
+  const addBtn = document.getElementById('add-link-btn');
+  const cancelBtn = document.getElementById('cancel-edit-link-btn');
+  if (!addBtn) return;
+
+  addBtn.addEventListener('click', handleAddOrUpdateLink);
+  cancelBtn.addEventListener('click', cancelEditLink);
+
+  await loadLinks();
+}
+
+async function loadLinks() {
+  try {
+    const data = await api.getLinks();
+    userLinks = data.links || [];
+    renderLinkList();
+  } catch (e) {
+    console.error('Error loading links:', e);
+  }
+}
+
+function renderLinkList() {
+  const container = document.getElementById('link-library-list');
+  if (!container) return;
+
+  if (userLinks.length === 0) {
+    container.innerHTML = '<div class="link-library-empty"><span class="material-icons-outlined" style="vertical-align:-3px;margin-right:4px;font-size:1.1rem">link_off</span>Nog geen links toegevoegd</div>';
+    return;
+  }
+
+  container.innerHTML = userLinks.map(link => `
+    <div class="link-library-item" data-id="${link.id}">
+      <div class="link-library-item-info">
+        <span class="link-library-item-label">
+          <span class="material-icons-outlined">link</span>
+          ${escapeHtml(link.label)}
+        </span>
+        <a href="${escapeHtml(link.url)}" target="_blank" rel="noopener noreferrer" class="link-library-item-url">
+          ${escapeHtml(link.url)}
+        </a>
+        ${link.description ? `<span class="link-library-item-desc">${escapeHtml(link.description)}</span>` : ''}
+      </div>
+      <div class="link-library-item-actions">
+        <button type="button" class="btn-icon" title="Bewerken" data-edit-link="${link.id}">
+          <span class="material-icons-outlined">edit</span>
+        </button>
+        <button type="button" class="btn-icon btn-icon-danger" title="Verwijderen" data-delete-link="${link.id}">
+          <span class="material-icons-outlined">delete_outline</span>
+        </button>
+      </div>
+    </div>
+  `).join('');
+
+  container.querySelectorAll('[data-edit-link]').forEach(btn => {
+    btn.addEventListener('click', () => startEditLink(parseInt(btn.dataset.editLink)));
+  });
+  container.querySelectorAll('[data-delete-link]').forEach(btn => {
+    btn.addEventListener('click', () => handleDeleteLink(parseInt(btn.dataset.deleteLink)));
+  });
+}
+
+async function handleAddOrUpdateLink() {
+  const urlInput = document.getElementById('linkUrl');
+  const labelInput = document.getElementById('linkLabel');
+  const descInput = document.getElementById('linkDescription');
+  const url = urlInput.value.trim();
+  const label = labelInput.value.trim();
+  const description = descInput.value.trim();
+
+  if (!url || !label) {
+    showAlert('URL en label zijn verplicht.', 'error');
+    return;
+  }
+
+  try {
+    if (editingLinkId) {
+      await api.updateLink(editingLinkId, url, label, description);
+      showAlert('Link bijgewerkt.', 'success');
+      cancelEditLink();
+    } else {
+      await api.createLink(url, label, description);
+      showAlert('Link toegevoegd.', 'success');
+    }
+    urlInput.value = '';
+    labelInput.value = '';
+    descInput.value = '';
+    await loadLinks();
+  } catch (e) {
+    showAlert(e.message || 'Fout bij opslaan van link.', 'error');
+  }
+}
+
+function startEditLink(linkId) {
+  const link = userLinks.find(l => l.id === linkId);
+  if (!link) return;
+
+  editingLinkId = linkId;
+  document.getElementById('linkUrl').value = link.url;
+  document.getElementById('linkLabel').value = link.label;
+  document.getElementById('linkDescription').value = link.description || '';
+  document.getElementById('add-link-btn').innerHTML =
+    '<span class="material-icons-outlined">save</span> Opslaan';
+  document.getElementById('cancel-edit-link-btn').classList.remove('hidden');
+  document.getElementById('link-library-add-block').style.borderColor = 'var(--color-primary-300)';
+}
+
+function cancelEditLink() {
+  editingLinkId = null;
+  document.getElementById('linkUrl').value = '';
+  document.getElementById('linkLabel').value = '';
+  document.getElementById('linkDescription').value = '';
+  document.getElementById('add-link-btn').innerHTML =
+    '<span class="material-icons-outlined">add_link</span> Toevoegen';
+  document.getElementById('cancel-edit-link-btn').classList.add('hidden');
+  document.getElementById('link-library-add-block').style.borderColor = '';
+}
+
+async function handleDeleteLink(linkId) {
+  if (!confirm('Weet je zeker dat je deze link wilt verwijderen?')) return;
+  try {
+    await api.deleteLink(linkId);
+    showAlert('Link verwijderd.', 'success');
+    await loadLinks();
+  } catch (e) {
+    showAlert(e.message || 'Fout bij verwijderen.', 'error');
+  }
+}
+
+
+// ── Bug Report Modal ────────────────────────────────────────────────────
+
+function initBugReportModal() {
+  const fab = document.getElementById('bug-report-fab');
+  const overlay = document.getElementById('bug-report-overlay');
+  if (!fab || !overlay) return;
+
+  const form = document.getElementById('bug-report-form');
+  const closeBtn = document.getElementById('bug-report-close');
+  const cancelBtn = document.getElementById('bug-report-cancel');
+  const doneBtn = document.getElementById('bug-report-done');
+  const successPanel = document.getElementById('bug-report-success');
+  const descriptionField = document.getElementById('bug-report-description');
+  const charCount = document.getElementById('bug-report-char-count');
+  const pageUrlField = document.getElementById('bug-report-page-url');
+
+  function openModal() {
+    pageUrlField.value = window.location.pathname;
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+    // Reset after animation
+    setTimeout(() => {
+      form.reset();
+      form.style.display = '';
+      successPanel.style.display = 'none';
+      if (charCount) charCount.textContent = '0';
+    }, 300);
+  }
+
+  fab.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  cancelBtn.addEventListener('click', closeModal);
+  if (doneBtn) doneBtn.addEventListener('click', closeModal);
+
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) closeModal();
+  });
+
+  // Character counter
+  if (descriptionField && charCount) {
+    descriptionField.addEventListener('input', () => {
+      charCount.textContent = descriptionField.value.length;
+    });
+  }
+
+  // Submit
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const submitBtn = document.getElementById('bug-report-submit');
+    const category = form.querySelector('input[name="bug-category"]:checked')?.value || 'bug';
+    const title = form.querySelector('#bug-report-title').value.trim();
+    const description = descriptionField.value.trim();
+    const pageUrl = pageUrlField.value;
+
+    if (!title || !description) {
+      showAlert('Vul titel en beschrijving in.', 'error');
+      return;
+    }
+
+    setButtonLoading(submitBtn, true);
+    try {
+      await api.submitBugReport(category, title, description, pageUrl);
+      form.style.display = 'none';
+      successPanel.style.display = '';
+    } catch (err) {
+      showAlert('Fout bij versturen: ' + err.message, 'error');
+    } finally {
+      setButtonLoading(submitBtn, false);
+    }
+  });
+}
+
+
+// ── Changelog Popup ─────────────────────────────────────────────────────
+
+async function checkUnseenChangelogs() {
+  const overlay = document.getElementById('changelog-overlay');
+  if (!overlay) return;
+
+  let changelogs;
+  try {
+    const data = await api.getUnseenChangelogs();
+    changelogs = data.changelogs || [];
+  } catch {
+    return; // silent fail — not critical
+  }
+
+  if (!changelogs.length) return;
+
+  // Show the newest unseen changelog
+  const latest = changelogs[0];
+  const allIds = changelogs.map(c => c.id);
+
+  document.getElementById('changelog-version').textContent = latest.version;
+  document.getElementById('changelog-title').textContent = latest.title;
+  document.getElementById('changelog-body').innerHTML = latest.content_html;
+
+  // Small delay so the page finishes rendering first
+  setTimeout(() => {
+    overlay.classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }, 600);
+
+  const closeAndDismiss = async () => {
+    overlay.classList.remove('active');
+    document.body.style.overflow = '';
+    // Dismiss all unseen changelogs (not just latest) so user doesn't get spammed
+    for (const id of allIds) {
+      try { await api.dismissChangelog(id); } catch { /* ignore */ }
+    }
+  };
+
+  document.getElementById('changelog-close').onclick = closeAndDismiss;
+  document.getElementById('changelog-dismiss').onclick = closeAndDismiss;
+  overlay.onclick = (e) => { if (e.target === overlay) closeAndDismiss(); };
+}
