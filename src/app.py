@@ -233,24 +233,24 @@ def register():
         # Validation
         if not username or not email or not password:
             flash('Alle velden zijn verplicht.', 'error')
-            return render_template('register.html')
+            return render_template('auth/register.html')
 
         if password != confirm_password:
             flash('Wachtwoorden komen niet overeen.', 'error')
-            return render_template('register.html')
+            return render_template('auth/register.html')
 
         if len(password) < 8:
             flash('Wachtwoord moet minimaal 8 karakters lang zijn.', 'error')
-            return render_template('register.html')
+            return render_template('auth/register.html')
 
         # Check if user already exists
         if db.get_user_by_username(username):
             flash('Gebruikersnaam is al in gebruik.', 'error')
-            return render_template('register.html')
+            return render_template('auth/register.html')
 
         if db.get_user_by_email(email):
             flash('Email is al geregistreerd.', 'error')
-            return render_template('register.html')
+            return render_template('auth/register.html')
 
         # Create user
         password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
@@ -259,7 +259,7 @@ def register():
         flash('Account succesvol aangemaakt! Je kunt nu inloggen.', 'success')
         return redirect(url_for('login'))
 
-    return render_template('register.html')
+    return render_template('auth/register.html')
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -275,24 +275,24 @@ def login():
 
         if not username or not password:
             flash('Gebruikersnaam en wachtwoord zijn verplicht.', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
 
         # db helpers fall back to sqlite auth store when MySQL is unavailable.
         user_data = db.get_user_by_username(username)
 
         if not user_data:
             flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
 
         # Verify password
         if not bcrypt.check_password_hash(user_data['password_hash'], password):
             flash('Ongeldige gebruikersnaam of wachtwoord.', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
 
         # Check if active
         if not user_data.get('is_active', 1):
             flash('Account is gedeactiveerd.', 'error')
-            return render_template('login.html')
+            return render_template('auth/login.html')
 
         # Login user
         user = User(
@@ -311,7 +311,7 @@ def login():
         next_page = request.args.get('next')
         return redirect(next_page) if next_page else redirect(url_for('home_page'))
 
-    return render_template('login.html')
+    return render_template('auth/login.html')
 
 
 @app.route("/forgot-password", methods=["GET", "POST"])
@@ -325,7 +325,7 @@ def forgot_password():
 
         if not email:
             flash("Vul je e-mailadres in om een resetlink aan te vragen.", "error")
-            return render_template("forgot_password.html", email=email)
+            return render_template("auth/forgot_password.html", email=email)
 
         user = db.get_user_by_email(email)
         if user and user.get("is_active", 1):
@@ -358,7 +358,7 @@ def forgot_password():
         )
         return redirect(url_for("login"))
 
-    return render_template("forgot_password.html", email="")
+    return render_template("auth/forgot_password.html", email="")
 
 
 @app.route("/reset-password/<token>", methods=["GET", "POST"])
@@ -378,15 +378,15 @@ def reset_password(token: str):
 
         if not new_password or not confirm_password:
             flash("Vul beide wachtwoordvelden in.", "error")
-            return render_template("reset_password.html", token=token)
+            return render_template("auth/reset_password.html", token=token)
 
         if new_password != confirm_password:
             flash("Wachtwoorden komen niet overeen.", "error")
-            return render_template("reset_password.html", token=token)
+            return render_template("auth/reset_password.html", token=token)
 
         if len(new_password) < 8:
             flash("Wachtwoord moet minimaal 8 karakters lang zijn.", "error")
-            return render_template("reset_password.html", token=token)
+            return render_template("auth/reset_password.html", token=token)
 
         password_hash = bcrypt.generate_password_hash(
             new_password).decode("utf-8")
@@ -395,13 +395,13 @@ def reset_password(token: str):
 
         if not updated:
             flash("Wachtwoord kon niet worden aangepast.", "error")
-            return render_template("reset_password.html", token=token)
+            return render_template("auth/reset_password.html", token=token)
 
         db.delete_password_reset_token(token)
         flash("Je wachtwoord is aangepast. Je kunt nu inloggen.", "success")
         return redirect(url_for("login"))
 
-    return render_template("reset_password.html", token=token)
+    return render_template("auth/reset_password.html", token=token)
 
 
 @app.route("/logout")
@@ -418,7 +418,7 @@ def logout():
 def home_page():
     """Home page for authenticated users."""
     return render_template(
-        'home.html',
+        'pages/home.html',
         **build_app_page_context(current_page='home'),
     )
 
@@ -428,7 +428,7 @@ def home_page():
 def connect_page():
     """WordPress connection page."""
     return render_template(
-        'connect.html',
+        'pages/connect.html',
         **build_app_page_context(current_page='connect'),
     )
 
@@ -438,7 +438,7 @@ def connect_page():
 def generate_page():
     """Content generation page."""
     return render_template(
-        'generate.html',
+        'pages/generate.html',
         **build_app_page_context(current_page='generate'),
     )
 
@@ -451,7 +451,7 @@ def publish_page():
     translation_enabled = bool(
         quota.get("translation_enabled", 0)) if quota else False
     return render_template(
-        'publish.html',
+        'pages/publish.html',
         translation_enabled=translation_enabled,
         **build_app_page_context(current_page='publish'),
     )
@@ -462,7 +462,7 @@ def publish_page():
 def archive_page():
     """Jobs archive page."""
     return render_template(
-        'archive.html',
+        'pages/archive.html',
         **build_app_page_context(current_page='archive'),
     )
 
@@ -478,7 +478,7 @@ def admin_panel():
     except Exception as e:
         logger.error(f"Error loading admin user list: {e}", exc_info=True)
         users = []
-    return render_template("admin.html", user=current_user, users=users, current_page="admin")
+    return render_template("pages/admin.html", user=current_user, users=users, current_page="admin")
 
 
 @app.route("/admin/users/create", methods=["POST"])

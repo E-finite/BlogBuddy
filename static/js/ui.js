@@ -119,25 +119,3 @@ export function formatJobStatus(status) {
   const statusInfo = statusMap[status] || { text: status, class: 'badge-primary' };
   return `<span class="badge ${statusInfo.class}">${statusInfo.text}</span>`;
 }
-
-// Tabs
-export function initTabs(container) {
-  const tabs = container.querySelectorAll('.tab');
-  const contents = container.querySelectorAll('.tab-content');
-  
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      const targetId = tab.dataset.tab;
-      
-      // Update active states
-      tabs.forEach(t => t.classList.remove('active'));
-      contents.forEach(c => c.classList.remove('active'));
-      
-      tab.classList.add('active');
-      const targetContent = container.querySelector(`[data-content="${targetId}"]`);
-      if (targetContent) {
-        targetContent.classList.add('active');
-      }
-    });
-  });
-}
