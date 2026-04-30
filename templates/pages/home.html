@@ -1,8 +1,8 @@
 {% extends 'app_base.html' %} {% block title %}Home - E-finite{% endblock %} {%
 block content %} {% set month_label = quota.usage_month if quota and
 quota.usage_month else 'huidige maand' %} {% set connected_sites = sites|length
-if sites is not none else 0 %} {% set jobs_total = stats.jobs if stats else 0
-%} {% set blogs_used = quota.blogs_used if quota else 0 %}
+if sites is not none else 0 %} {% set jobs_total = stats.jobs if stats else 0 %}
+{% set blogs_used = quota.blogs_used if quota else 0 %}
 <section class="dashboard-hero card">
   <div class="dashboard-hero-grid">
     <div class="dashboard-hero-copy">
